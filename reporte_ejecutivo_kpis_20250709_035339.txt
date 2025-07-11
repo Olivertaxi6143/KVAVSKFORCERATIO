@@ -1,0 +1,12 @@
+REPORTE EJECUTIVO - TEST KPIs POR ESTILO DE TRADING
+============================================================
+
+Fecha: 2025-07-09 03:53:35
+Archivo de datos: test_kpis_por_estilo_20250709_035339.json
+
+RESUMEN GENERAL:
+--------------------
+• Estilos probados: 5
+• Análisis exitosos: 5
+• Análisis fallidos: 0
+• Tasa de éxito: 100.0%

@@ -1,0 +1,31 @@
+# Feedback y dudas para Grok: Mejora de la pestaña Asesor Financiero
+
+Queremos rediseñar la pestaña del Asesor Financiero para que sea mucho más amigable, visual y fácil de entender para cualquier usuario, tanto en la presentación de resultados como en el resumen ejecutivo. A continuación, planteamos dudas y preguntas para orientar el rediseño:
+
+1. ¿Qué estructura visual recomendarías para mostrar los resultados del análisis del asesor financiero para que sean más comprensibles y atractivos para el usuario?
+   - ¿Listas, tarjetas, tablas, bloques de colores, iconografía, etc.?
+
+2. ¿Cómo destacarías visualmente los mensajes clave, advertencias y recomendaciones principales del asesor?
+   - ¿Colores, iconos, banners, resúmenes destacados, tooltips?
+
+3. ¿Qué información debe aparecer primero y cuál puede ir en un segundo plano o en secciones colapsables?
+   - ¿Qué es lo más importante para el usuario al tomar decisiones?
+
+4. ¿Cómo harías que el resumen ejecutivo sea más visual y menos "texto plano"?
+   - ¿Gráficos, barras de progreso, badges, etiquetas, tablas-resumen?
+
+5. ¿Qué elementos interactivos o de ayuda rápida añadirías para que el usuario entienda cada resultado sin tener que leer documentación externa?
+   - ¿Tooltips, popups, glosario, enlaces rápidos, ejemplos visuales?
+
+6. ¿Cómo organizarías la pestaña para que el flujo de análisis y exportación sea intuitivo y no abrume al usuario?
+   - ¿Separar en pasos, pestañas internas, wizard, botones grandes y claros?
+
+7. ¿Qué errores de usabilidad ves en la disposición actual (según la imagen) y cómo los solucionarías?
+
+8. ¿Qué tipo de feedback visual (colores, iconos, alertas) ayuda más a que el usuario entienda si sus estrategias son robustas o necesitan revisión?
+
+9. ¿Cómo harías que el usuario pueda comparar fácilmente varias estrategias o ver "de un vistazo" cuáles son las mejores y por qué?
+
+10. ¿Qué ejemplos de otras herramientas de análisis financiero o dashboards te parecen inspiradores para este tipo de interfaz?
+
+¡Gracias por cualquier sugerencia o mockup visual que puedas aportar! 

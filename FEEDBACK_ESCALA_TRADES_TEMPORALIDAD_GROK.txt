@@ -1,0 +1,135 @@
+# FEEDBACK PARA GROK: ESCALA DE TRADES MENSUALES SEGÚN TEMPORALIDAD
+
+## CONTEXTO
+
+Estamos implementando un sistema de configuración automática para diferentes estilos de trading que ajusta los trades mensuales según la temporalidad detectada en los datos de StrategyQuant.
+
+## ESCALA IMPLEMENTADA
+
+### Escala de Temporalidades (de más frecuente a menos frecuente):
+```python
+timeframe_scale = {
+    'M1': 1.0,    # Base - más frecuente
+    'M5': 0.8,    # 20% menos frecuente
+    'M15': 0.6,   # 40% menos frecuente
+    'M30': 0.4,   # 60% menos frecuente
+    'H1': 0.3,    # 70% menos frecuente
+    'H4': 0.2,    # 80% menos frecuente
+    'D1': 0.1,    # 90% menos frecuente
+}
+```
+
+### Configuración Base por Estilo de Trading:
+```python
+config_auto = {
+    'Intradía': {
+        'min_trades_monthly': 2,  # Base para alta frecuencia
+        'desc': "2+ trades/mes mínimo, alta frecuencia"
+    },
+    'Swing': {
+        'min_trades_monthly': 1,  # Base para frecuencia media
+        'desc': "1+ trades/mes mínimo, balance riesgo/rendimiento"
+    },
+    'Tendencial': {
+        'min_trades_monthly': 1,  # Base para frecuencia baja
+        'desc': "1+ trades/mes mínimo, mayor tolerancia al riesgo"
+    },
+    'Reversión a la media': {
+        'min_trades_monthly': 2,  # Base para alta frecuencia
+        'desc': "2+ trades/mes mínimo, alta consistencia requerida"
+    },
+    'Breakout': {
+        'min_trades_monthly': 1,  # Base para frecuencia muy baja
+        'desc': "1+ trades/mes mínimo, mayor tolerancia al riesgo"
+    }
+}
+```
+
+## LÓGICA DE AJUSTE
+
+### Fórmula de Ajuste:
+```python
+adjusted_trades = max(1, min(2, int(base_trades * adjustment_factor)))
+```
+
+### Ejemplos de Ajuste:
+
+**Intradía (base: 2 trades/mes):**
+- M1: 2 trades/mes (100%)
+- M5: 2 trades/mes (80% de 2 = 1.6 → 2)
+- M15: 1 trade/mes (60% de 2 = 1.2 → 1)
+- H1: 1 trade/mes (30% de 2 = 0.6 → 1)
+
+**Swing (base: 1 trade/mes):**
+- M1: 1 trade/mes (100%)
+- M5: 1 trade/mes (80% de 1 = 0.8 → 1)
+- M15: 1 trade/mes (60% de 1 = 0.6 → 1)
+- H1: 1 trade/mes (30% de 1 = 0.3 → 1)
+
+## PREGUNTAS PARA GROK
+
+### 1. **Escala de Temporalidades**
+- ¿La escala de factores (1.0, 0.8, 0.6, 0.4, 0.3, 0.2, 0.1) es apropiada para representar la reducción de frecuencia entre temporalidades?
+- ¿Deberíamos usar una escala logarítmica en lugar de lineal?
+- ¿Faltan temporalidades importantes (M3, M10, H2, etc.)?
+
+### 2. **Configuración Base por Estilo**
+- ¿Los valores base (1-2 trades/mes) son apropiados para cada estilo?
+- ¿Deberíamos diferenciar más entre estilos (ej: Intradía 3, Swing 2, Tendencial 1)?
+- ¿Es correcto que Reversión a la media tenga base 2 siendo que puede ser menos frecuente?
+
+### 3. **Límites de Ajuste**
+- ¿El límite mínimo de 1 trade/mes es apropiado?
+- ¿El límite máximo de 2 trades/mes es suficiente?
+- ¿Deberíamos permitir 0 trades/mes para temporalidades muy largas?
+
+### 4. **Detección Automática**
+- ¿Es correcto usar el timeframe más común en los datos?
+- ¿Deberíamos considerar múltiples timeframes si están presentes?
+- ¿Qué hacer si no se detecta temporalidad?
+
+### 5. **Requerimientos de Minería**
+- ¿El mínimo de 2 trades/mes que se pide en la minería es absoluto o flexible?
+- ¿Deberíamos ajustar según el estilo de trading?
+- ¿Qué hacer con estrategias que no cumplen el mínimo?
+
+## ESCENARIOS ESPECÍFICOS
+
+### Escenario 1: Intradía en M5
+- Base: 2 trades/mes
+- Ajuste: 2 * 0.8 = 1.6 → 2 trades/mes
+- **¿Es realista esperar 2 trades/mes en M5 para intradía?**
+
+### Escenario 2: Swing en H1
+- Base: 1 trade/mes
+- Ajuste: 1 * 0.3 = 0.3 → 1 trade/mes
+- **¿Es suficiente 1 trade/mes para swing en H1?**
+
+### Escenario 3: Breakout en D1
+- Base: 1 trade/mes
+- Ajuste: 1 * 0.1 = 0.1 → 1 trade/mes
+- **¿Es realista esperar 1 trade/mes en D1 para breakout?**
+
+## ALTERNATIVAS CONSIDERADAS
+
+### Opción A: Escala Lineal (actual)
+- Ventaja: Simple y predecible
+- Desventaja: Puede no reflejar la realidad del mercado
+
+### Opción B: Escala Logarítmica
+- Ventaja: Más realista para diferencias grandes
+- Desventaja: Más compleja
+
+### Opción C: Escala Personalizada por Estilo
+- Ventaja: Más precisa
+- Desventaja: Más compleja de mantener
+
+## OBJETIVO
+
+Queremos crear una escala que:
+1. **Respete el mínimo de 2 trades/mes** requerido por la minería
+2. **Se ajuste automáticamente** según la temporalidad detectada
+3. **Sea realista** para cada estilo de trading
+4. **Sea flexible** para diferentes mercados y condiciones
+
+¿Qué opinas sobre esta implementación? ¿Qué ajustes recomiendas? 

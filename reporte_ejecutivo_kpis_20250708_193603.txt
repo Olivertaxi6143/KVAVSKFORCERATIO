@@ -1,0 +1,46 @@
+REPORTE EJECUTIVO - TEST KPIs POR ESTILO DE TRADING
+============================================================
+
+Fecha: 2025-07-08 19:35:44
+Archivo de datos: test_kpis_por_estilo_20250708_193603.json
+
+RESUMEN GENERAL:
+--------------------
+• Estilos probados: 5
+• Análisis exitosos: 5
+• Análisis fallidos: 0
+• Tasa de éxito: 100.0%
+• Total KPIs usados: 35
+• Promedio KPIs por estilo: 7.0
+
+DETALLES POR ESTILO:
+--------------------
+✅ Intradía:
+   • KPIs seleccionados: 8
+   • Estrategias analizadas: 50
+   • KPIs: Winning Percent, Drawdown, Max Consec. Losses, SQN, RecoveryFactor, Sortino Ratio, Exposure, Avg. Bars in Trade
+
+✅ Swing:
+   • KPIs seleccionados: 8
+   • Estrategias analizadas: 50
+   • KPIs: Profit factor, CalmarRatio, Ulcer Index %, VaR (95%), RecoveryFactor, CVaR (95%), Exposure, Max Drawdown Duration
+
+✅ Tendencial:
+   • KPIs seleccionados: 6
+   • Estrategias analizadas: 50
+   • KPIs: CAGR, Profit factor, Sharpe Ratio, RecoveryFactor, Sortino Ratio, Max Drawdown Duration
+
+✅ Reversión a la media:
+   • KPIs seleccionados: 7
+   • Estrategias analizadas: 50
+   • KPIs: Winning Percent, Drawdown, Ulcer Index %, Sortino Ratio, Avg. Bars in Trade, Max Drawdown Duration, Payout ratio
+
+✅ Breakout:
+   • KPIs seleccionados: 6
+   • Estrategias analizadas: 50
+   • KPIs: Drawdown, VaR (95%), RINAIndex, RecoveryFactor, Sortino Ratio, Exposure
+
+RECOMENDACIONES:
+--------------------
+✅ Todos los estilos funcionan correctamente
+✅ Número de KPIs por estilo es óptimo

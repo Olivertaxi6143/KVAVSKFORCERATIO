@@ -1,0 +1,52 @@
+FÓRMULA DE PREDICTIVIDAD IS/OOS EN LA GUI
+========================================
+
+La predictividad IS/OOS se calcula comparando todos los pares de KPIs que tienen versión In-Sample (IS) y Out-of-Sample (OOS) para cada estrategia.
+
+PASOS DEL CÁLCULO:
+------------------
+1. Identificación de pares de KPIs:
+   - Se buscan todas las columnas que contienen (IS) y (OOS) en su nombre.
+   - Se emparejan por el nombre base del KPI (por ejemplo, 'CAGR (IS)' con 'CAGR (OOS)').
+
+2. Cálculo de la diferencia relativa para cada KPI:
+   Para cada par, se calcula:
+      Δ_relativo = ((OOS - IS) / |IS|) * 100
+   También se calcula la diferencia absoluta:
+      Δ_absoluto = OOS - IS
+
+3. Resumen global de predictividad:
+   - Se calcula la media y mediana de todas las diferencias relativas de los KPIs.
+   - Se cuenta cuántos KPIs mejoran (OOS > IS), empeoran (OOS < IS) o se mantienen.
+   - Se muestra el porcentaje de KPIs que mejoran.
+
+4. Clasificación de la predictividad:
+   - Según la media de las diferencias relativas y el porcentaje de KPIs que empeoran, se clasifica la predictividad como:
+     🔬 Excelente, 🟢 Buena, 🟡 Aceptable, 🔴 Pobre
+   - Se añaden alertas si algún KPI clave (como Profit Factor o CAGR) cae por debajo de un umbral crítico en OOS.
+
+5. Visualización en la GUI:
+   - El resumen se muestra así:
+     Pobre (Δ=-28.1%, 9 KPIs, 22% mejoran)
+   - Donde:
+     Δ es la media de las diferencias relativas (%)
+     9 KPIs es el número de pares IS/OOS comparados
+     22% mejoran es el porcentaje de KPIs que mejoran en OOS
+
+EJEMPLO DE CÁLCULO PARA UNA ESTRATEGIA:
+---------------------------------------
+Supón que tienes estos valores:
+- CAGR (IS) = 2.0, CAGR (OOS) = 1.5
+- Profit factor (IS) = 1.8, Profit factor (OOS) = 1.2
+
+Entonces:
+- Para CAGR:
+  Δ_relativo = ((1.5 - 2.0) / 2.0) * 100 = -25%
+- Para Profit factor:
+  Δ_relativo = ((1.2 - 1.8) / 1.8) * 100 ≈ -33.3%
+
+Si tienes 9 KPIs, se hace la media de todos esos valores para el resumen.
+
+NOTA:
+-----
+Esta lógica es la que implementa la función analyze_is_oos_predictivity en la GUI del proyecto KVAVSKFORCERATIO. 

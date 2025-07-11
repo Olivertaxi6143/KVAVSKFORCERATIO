@@ -149,7 +149,11 @@ backups/
 *.xls
 *.sqx
 *.json
-*.txt
+# Allow important text files
+!requirements.txt
+!README.txt
+!LICENSE.txt
+!CHANGELOG.txt
 
 # Temporary files
 *.tmp
