@@ -109,4 +109,4 @@ Para soporte técnico o consultas sobre el proyecto, contactar al desarrollador 
 - GUI profesional con múltiples pestañas
 - CLI avanzado con asesoramiento IA
 - Tests automatizados completos
-- Documentación exhaustiva 
+- Documentación exhaustiva
