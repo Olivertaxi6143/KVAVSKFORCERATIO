@@ -110,3 +110,4 @@ Para soporte técnico o consultas sobre el proyecto, contactar al desarrollador 
 - CLI avanzado con asesoramiento IA
 - Tests automatizados completos
 - Documentación exhaustiva
+ 

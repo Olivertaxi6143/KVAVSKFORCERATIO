@@ -320,7 +320,7 @@ class ProgressCallback:
         """Obtiene el progreso actual."""
         try:
             return self.progress_queue.get_nowait()
-        except:
+        except Exception:
             return None
 
 class ConfigManagerEnhanced:
@@ -1117,7 +1117,7 @@ class DataLoaderEnhanced:
                     try:
                         is_val = float(is_val)
                         oos_val = float(oos_val)
-                    except:
+                    except Exception:
                         continue
                     
                     diff_abs = oos_val - is_val
@@ -1445,6 +1445,22 @@ class FactorKElite96Enhanced:
             # Aplicar penalizaciones dinámicas
             df = self._apply_dynamic_penalties(df)
             
+            # --- FASE 2.3: CREAR UNIFIED_SCORE BASE PARA MÉTRICAS CIENTÍFICAS ---
+            # Crear Unified_Score base usando FK96_Elite_Enhanced
+            df['Unified_Score'] = df['FK96_Elite_Enhanced']
+            self.logger.info("✅ Unified_Score base creado para métricas científicas")
+            
+            # Crear métricas científicas adicionales si no existen
+            if 'Sharpe_Ratio' in df.columns and 'CAGR' in df.columns:
+                # Score basado en Sharpe y CAGR
+                sharpe_normalized = (df['Sharpe_Ratio'] + 3) / 6  # Normalizar a [0,1]
+                cagr_normalized = (df['CAGR'] - df['CAGR'].min()) / (df['CAGR'].max() - df['CAGR'].min())
+                df['Unified_Score_Enhanced'] = 0.6 * df['Unified_Score'] + 0.4 * (sharpe_normalized + cagr_normalized) / 2
+                self.logger.info("✅ Unified_Score_Enhanced creado con Sharpe y CAGR")
+            else:
+                df['Unified_Score_Enhanced'] = df['Unified_Score']
+                self.logger.info("⚠️ Unified_Score_Enhanced igual a Unified_Score (sin métricas adicionales)")
+            
             return df
             
         except Exception as e:
@@ -1752,46 +1768,82 @@ class FactorKElite96Enhanced:
     def _apply_scientific_score_enhancement(self, df: pd.DataFrame) -> pd.DataFrame:
         """Aplica mejoras científicas al Unified_Score."""
         try:
+            # --- FASE 2.3: GARANTIZAR CREACIÓN DE MÉTRICAS CIENTÍFICAS ---
             if 'Unified_Score' not in df.columns:
                 self.logger.warning("Unified_Score no encontrado para mejora científica")
                 return df
             
-            # Crear Unified_Score_Scientific combinando scores
+            # SIEMPRE crear Unified_Score_Scientific y Unified_Score_Enhanced
             if 'Regime_Score' in df.columns and 'HMM_Score' in df.columns:
-                # Combinar Unified_Score con scores científicos
                 df['Unified_Score_Scientific'] = (
                     0.5 * df['Unified_Score'] + 
                     0.3 * df['Regime_Score'] + 
                     0.2 * df['HMM_Score']
                 )
-                self.logger.info("Unified_Score_Scientific creado con régimen y HMM")
-                
+                self.logger.info("✅ Unified_Score_Scientific creado con régimen y HMM")
             elif 'Regime_Score' in df.columns:
-                # Solo régimen de mercado
                 df['Unified_Score_Scientific'] = (
                     0.7 * df['Unified_Score'] + 
                     0.3 * df['Regime_Score']
                 )
-                self.logger.info("Unified_Score_Scientific creado con régimen")
-                
+                self.logger.info("✅ Unified_Score_Scientific creado con régimen")
             else:
-                # Sin mejoras científicas disponibles
-                df['Unified_Score_Scientific'] = df['Unified_Score']
-                self.logger.info("Unified_Score_Scientific igual a Unified_Score")
+                # Crear Unified_Score_Scientific con métricas disponibles
+                scientific_components = []
+                weights = []
+                
+                if 'Sharpe_Ratio' in df.columns:
+                    sharpe_norm = (df['Sharpe_Ratio'] + 3) / 6
+                    scientific_components.append(sharpe_norm)
+                    weights.append(0.3)
+                
+                if 'CAGR' in df.columns:
+                    cagr_norm = (df['CAGR'] - df['CAGR'].min()) / (df['CAGR'].max() - df['CAGR'].min())
+                    scientific_components.append(cagr_norm)
+                    weights.append(0.3)
+                
+                if 'Profit_factor' in df.columns:
+                    pf_norm = (df['Profit_factor'] - 1) / (df['Profit_factor'].max() - 1)
+                    scientific_components.append(pf_norm)
+                    weights.append(0.2)
+                
+                if scientific_components:
+                    # Normalizar pesos
+                    total_weight = sum(weights)
+                    weights = [w/total_weight for w in weights]
+                    
+                    # Calcular score científico
+                    scientific_score = sum(comp * weight for comp, weight in zip(scientific_components, weights))
+                    df['Unified_Score_Scientific'] = 0.6 * df['Unified_Score'] + 0.4 * scientific_score
+                    self.logger.info(f"✅ Unified_Score_Scientific creado con {len(scientific_components)} métricas científicas")
+                else:
+                    df['Unified_Score_Scientific'] = df['Unified_Score']
+                    self.logger.info("⚠️ Unified_Score_Scientific igual a Unified_Score (sin métricas adicionales)")
             
             # Crear Unified_Score_Enhanced con ajuste dinámico
             if 'Regime_Score' in df.columns:
                 regime_adjustment = df['Regime_Score'] / df['Regime_Score'].max()
                 df['Unified_Score_Enhanced'] = df['Unified_Score'] * (1 + 0.2 * regime_adjustment)
-                self.logger.info("Unified_Score_Enhanced creado con ajuste de régimen")
+                self.logger.info("✅ Unified_Score_Enhanced creado con ajuste de régimen")
             else:
+                # Usar el Unified_Score_Enhanced ya creado o crear uno básico
+                if 'Unified_Score_Enhanced' not in df.columns:
+                    df['Unified_Score_Enhanced'] = df['Unified_Score']
+                self.logger.info("✅ Unified_Score_Enhanced verificado/creado")
+            
+            # Verificar que las columnas se crearon correctamente
+            if 'Unified_Score_Scientific' not in df.columns:
+                df['Unified_Score_Scientific'] = df['Unified_Score']
+            if 'Unified_Score_Enhanced' not in df.columns:
                 df['Unified_Score_Enhanced'] = df['Unified_Score']
-                self.logger.info("Unified_Score_Enhanced igual a Unified_Score")
             
+            self.logger.info(f"📊 Métricas científicas creadas: Unified_Score_Scientific={df['Unified_Score_Scientific'].mean():.4f}, Unified_Score_Enhanced={df['Unified_Score_Enhanced'].mean():.4f}")
             return df
-            
         except Exception as e:
             self.logger.warning(f"Error aplicando mejora científica al score: {e}")
+            if 'Unified_Score' in df.columns:
+                df['Unified_Score_Scientific'] = df['Unified_Score']
+                df['Unified_Score_Enhanced'] = df['Unified_Score']
             return df
     
     def _apply_final_normalization(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -2121,7 +2173,7 @@ def cleanup_after_analysis():
             for cache_file in cache_dir.glob("*.pkl"):
                 try:
                     cache_file.unlink()
-                except:
+                except Exception:
                     pass
         
         logger.info("Limpieza completada")
@@ -3428,7 +3480,7 @@ class MarketRegimeDetector:
             rs = gain / loss
             rsi = 100 - (100 / (1 + rs))
             return pd.Series(rsi)  # Asegurar retorno de Series
-        except:
+        except Exception:
             return pd.Series([np.nan] * len(prices))
     
     def detect_regimes(self, features_df: pd.DataFrame) -> Tuple[np.ndarray, Dict]:

@@ -164,7 +164,7 @@ class AdvancedAnalysisEnhanced:
                     pd.to_numeric(self.filtered_strategies[col], errors='coerce')
                     if self.filtered_strategies[col].notna().sum() > 0:
                         numeric_columns.append(col)
-                except:
+                except Exception:
                     continue
             
             self.numeric_columns = numeric_columns
@@ -302,15 +302,15 @@ class AdvancedAnalysisEnhanced:
             correlation_range = np.max(valid_correlations) - np.min(valid_correlations)
             
             return {
-                "mean_correlation_variance": mean_correlation_variance,
-                "correlation_range": correlation_range,
-                "num_windows": len(dynamic_correlations),
-                "mean_correlation": np.mean(valid_correlations)
+                "mean_correlation_variance": float(mean_correlation_variance),
+                "correlation_range": float(correlation_range),
+                "num_windows": int(len(dynamic_correlations)),
+                "mean_correlation": float(np.mean(valid_correlations))
             }
             
         except Exception as e:
             logger.error(f"❌ Error calculando estabilidad de correlaciones: {e}")
-            return {"error": str(e)}
+            return {"error": float(0.0)}
     
     def regime_analysis(self, n_regimes: int = 3) -> AnalysisResult:
         """
@@ -434,7 +434,11 @@ class AdvancedAnalysisEnhanced:
             scaler = StandardScaler()
             features_scaled = scaler.fit_transform(features_df)
             
-            return pd.DataFrame(features_scaled, columns=available_columns, index=features_df.index)
+            # Crear DataFrame con tipos explícitos
+            result_df = pd.DataFrame(features_scaled)
+            result_df.columns = available_columns
+            result_df.index = features_df.index
+            return result_df
             
         except Exception as e:
             logger.error(f"❌ Error extrayendo características de regímenes: {e}")
@@ -663,7 +667,14 @@ class AdvancedAnalysisEnhanced:
             
         except Exception as e:
             logger.error(f"❌ Error en análisis avanzado completo: {e}")
-            return {"error": str(e)}
+            return {"error": AnalysisResult(
+                analysis_type=AnalysisType.CORRELATION,
+                data={},
+                metrics={"error": str(e)},
+                visualizations=[],
+                insights=["Error en análisis avanzado"],
+                recommendations=["Revisar configuración"]
+            )}
     
     # Métodos stub para compatibilidad
     def clustering_analysis(self, n_clusters: int = 5) -> AnalysisResult:
