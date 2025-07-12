@@ -151,6 +151,7 @@ def create_sample_data():
         if not os.path.exists('DatabankExport_M1.csv'):
             logger.info("Creando datos de ejemplo...")
             
+            # Importar pandas y numpy aquí para evitar errores
             import pandas as pd
             import numpy as np
             
@@ -175,6 +176,10 @@ def create_sample_data():
         if not os.path.exists('DATOSMQL5.csv'):
             logger.info("Creando datos de mercado de ejemplo...")
             
+            # Importar pandas y numpy aquí también
+            import pandas as pd
+            import numpy as np
+            
             # Crear datos de mercado de ejemplo
             dates = pd.date_range(start='2020-01-01', end='2023-12-31', freq='D')
             market_data = pd.DataFrame({
@@ -198,10 +203,10 @@ def create_sample_data():
 def test_imports():
     """Prueba que se pueden importar todos los módulos."""
     modules = [
-        'src.core_engine_enhanced',
-        'src.data_utils',
-        'src.gui_enhanced',
-        'src.research_docs'
+        'src.core.core_engine_enhanced',
+        'src.data.data_utils',
+        'src.gui.gui_enhanced_rank',
+        'src.analysis.research_docs'
     ]
     
     failed_imports = []
@@ -226,7 +231,7 @@ def run_basic_tests():
         logger.info("Ejecutando pruebas básicas...")
         
         # Importar módulos principales
-        from core_engine_enhanced import ConfigManagerEnhanced
+        from src.core.core_engine_enhanced import ConfigManagerEnhanced
         
         # Probar ConfigManager
         config_manager = ConfigManagerEnhanced()
