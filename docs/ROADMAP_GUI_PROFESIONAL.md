@@ -530,3 +530,88 @@ Desarrollar una interfaz gráfica (GUI) para QVA Strategy Studio que sea intuiti
 **Nota:** La explicación personalizada debe generarse dinámicamente según los valores de cada métrica, resaltando siempre fortalezas y debilidades objetivas.
 
 --- 
+
+## Plan de Tareas Técnicas y Responsables (Implementación)
+
+1. **Explicatividad y Transparencia**
+   - Implementar tooltips y glosario en todas las métricas y columnas.  
+     Responsable: Frontend Developer (GUI)
+   - Añadir panel de detalles avanzado al seleccionar estrategia (mini-dashboard, explicación personalizada, badges, archivos fuente).  
+     Responsable: Frontend Developer (GUI) + Data Scientist (lógica de explicación)
+   - Mostrar leyenda visual y exportable en todos los gráficos y tablas.  
+     Responsable: Frontend Developer (GUI)
+
+2. **Identificación Visual de la Mejor Estrategia**
+   - Sticky row para la mejor estrategia en la tabla principal.  
+     Responsable: Frontend Developer (GUI)
+   - Badges visuales (oro, plata, bronce, Top 10) y explicación textual dinámica.  
+     Responsable: Frontend Developer (GUI) + Data Scientist (lógica de badges)
+   - Comparador visual de estrategias (selección múltiple y radar/barra).  
+     Responsable: Frontend Developer (GUI) + Data Scientist (visualización)
+
+3. **Feedback Inmediato y Ayuda Contextual**
+   - Toasts/mensajes claros al completar cada acción.  
+     Responsable: Frontend Developer (GUI)
+   - Panel de ayuda dinámica y tour guiado para nuevos usuarios.  
+     Responsable: UX/UI Designer + Frontend Developer (GUI)
+   - FAQ y glosario accesibles desde la GUI.  
+     Responsable: UX Writer + Frontend Developer (GUI)
+
+4. **Accesibilidad y Personalización**
+   - Modo claro/oscuro y ajuste de tamaño de fuente.  
+     Responsable: Frontend Developer (GUI)
+   - Navegación completa con teclado y contraste mejorado.  
+     Responsable: Frontend Developer (GUI) + QA
+   - Configuración de columnas visibles y orden.  
+     Responsable: Frontend Developer (GUI)
+
+5. **Filtros, Búsqueda y Exportación**
+   - Búsqueda por nombre de estrategia y botón “Reset filtros”.  
+     Responsable: Frontend Developer (GUI)
+   - Exportación amigable (solo lo visible/filtrado, con leyenda y explicación).  
+     Responsable: Frontend Developer (GUI)
+   - Feedback visual al exportar (toast/mensaje de éxito/error).  
+     Responsable: Frontend Developer (GUI)
+
+6. **Paneles y Estado**
+   - Estado de cada paso en la barra lateral (completado, pendiente, error).  
+     Responsable: Frontend Developer (GUI)
+   - Indicador de última actualización de datos y estado de conexión.  
+     Responsable: Backend Developer + Frontend Developer (GUI)
+   - Logs accesibles para usuarios avanzados.  
+     Responsable: Backend Developer + Frontend Developer (GUI)
+
+7. **Internacionalización**
+   - Preparar la GUI para traducción y soporte multi-idioma.  
+     Responsable: Frontend Developer (GUI) + UX Writer
+
+---
+
+## Checklist de Control para Despliegue y Pruebas Internas
+
+### Antes del despliegue:
+- [ ] Todos los tooltips y glosario revisados y presentes en métricas clave.
+- [ ] Panel de detalles muestra correctamente Factor K, QVA Score, Unified Score, archivos fuente y explicación personalizada.
+- [ ] Sticky row y badges funcionan y se visualizan correctamente.
+- [ ] Comparador visual permite seleccionar y comparar varias estrategias.
+- [ ] Leyenda y explicación exportable en todos los gráficos/tablas.
+- [ ] Toasts y mensajes claros tras cada acción (importar, exportar, filtrar, error).
+- [ ] Panel de ayuda y tour guiado accesibles y funcionales.
+- [ ] Modo claro/oscuro y ajuste de fuente disponibles y sin errores visuales.
+- [ ] Navegación con teclado y contraste revisados por QA.
+- [ ] Configuración de columnas y filtros funciona correctamente.
+- [ ] Exportación solo de lo visible/filtrado, con leyenda.
+- [ ] Estado de cada paso y logs accesibles.
+- [ ] Internacionalización lista para al menos dos idiomas (ES/EN).
+
+### Pruebas internas:
+- [ ] Pruebas de usabilidad con al menos 3 usuarios internos (novato, intermedio, avanzado).
+- [ ] Pruebas de regresión para asegurar que la lógica de resultados no se ha alterado.
+- [ ] Pruebas de accesibilidad (contraste, navegación teclado, screen reader).
+- [ ] Pruebas de rendimiento (la GUI no se bloquea en operaciones largas).
+- [ ] Validación de exportación y comparador visual.
+- [ ] Feedback recogido y documentado para iteración futura.
+
+---
+
+**Nota:** Por ahora, el responsable principal de la implementación y pruebas es el propio usuario. El plan está preparado para escalar a un equipo cuando sea necesario. 
