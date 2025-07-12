@@ -2,6 +2,56 @@
 
 ## Fase 0: Investigación y Auditoría Profesional
 
+### Informe de Benchmarking de GUIs líderes
+
+**Plataformas analizadas:**
+- MetaTrader 5 (MT5)
+- QuantConnect
+- Darwinex
+- TradingView
+- Portfolio Visualizer
+- NinjaTrader
+- MultiCharts
+
+**Criterios:**
+- Jerarquía visual y navegación
+- Identificación de “mejores estrategias”
+- Presentación de métricas clave y tooltips
+- Filtros y comparadores
+- Paneles de ayuda/contexto
+- Accesibilidad y personalización
+- Exportación y feedback visual
+
+**Resumen profesional:**
+
+- **MetaTrader 5:**
+  - Ventajas: Tabla central clara, colores para resultados, panel de detalles, tooltips, exportación fácil.
+  - Debilidades: Poca ayuda contextual, interfaz densa para novatos, comparador visual limitado.
+- **QuantConnect:**
+  - Ventajas: Dashboard visual potente, badges para “top strategies”, filtros avanzados, ayuda contextual, exportación profesional.
+  - Debilidades: Curva de aprendizaje, exceso de opciones para usuarios básicos.
+- **Darwinex:**
+  - Ventajas: Ranking visual con medallas, panel de detalles con explicación textual, comparador de estrategias, tooltips claros, feedback inmediato.
+  - Debilidades: Algunos gráficos saturados, navegación mejorable.
+- **TradingView:**
+  - Ventajas: Interfaz moderna, dashboards interactivos, tooltips y leyendas, personalización visual, accesibilidad.
+  - Debilidades: No orientado a ranking de estrategias, sino a gráficos de activos.
+- **Portfolio Visualizer:**
+  - Ventajas: Comparador visual de carteras, exportación clara, panel de métricas con explicación, filtros rápidos.
+  - Debilidades: Interfaz menos atractiva, navegación poco intuitiva.
+- **NinjaTrader / MultiCharts:**
+  - Ventajas: Paneles personalizables, dashboards avanzados, feedback visual.
+  - Debilidades: Interfaz compleja, ayuda contextual limitada.
+
+**Conclusiones:**
+- Las mejores GUIs destacan la estrategia top con color, badge y sticky row.
+- El panel de detalles y la explicación textual son clave para la objetividad.
+- Filtros rápidos y exportación amigable son estándar profesional.
+- Ayuda contextual y tooltips marcan la diferencia en experiencia de usuario.
+- Accesibilidad (modo oscuro, teclado, tamaño fuente) es cada vez más valorada.
+
+---
+
 ### Objetivo
 Realizar una auditoría exhaustiva y una investigación comparativa para definir, con base empírica y profesional, qué debe incluir la GUI de ranking cuantitativo y cómo debe presentarse cada elemento para que la elección de la mejor estrategia sea objetiva, clara y amigable para cualquier usuario.
 
