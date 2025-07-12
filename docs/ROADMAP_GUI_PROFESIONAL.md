@@ -425,3 +425,108 @@ Desarrollar una interfaz gráfica (GUI) para QVA Strategy Studio que sea intuiti
 
 ## Notas y Lecciones Aprendidas
 - (Espacio para registrar feedback, cambios de alcance, incidencias y mejoras continuas) 
+
+## Lógica y Estructura de Métricas en la GUI
+
+- **Tabla principal:**
+  - Columna “Unified Score” como métrica global y ranking principal (badge y tooltip explicativo).
+  - Ordenación por Unified Score por defecto.
+  - Tooltip: “Unified Score: índice global que integra robustez (Factor K) y validación empírica (QVA Score).”
+
+- **Panel de detalles:**
+  - Sección “Desglose de métricas”:
+    - Factor K: valor, badge, explicación personalizada.
+    - QVA Score: valor, badge, explicación personalizada.
+    - Predictividad IS/OOS, drawdown, trades, etc.
+  - Explicación personalizada generada dinámicamente según fortalezas y debilidades.
+  - Desglose de la fórmula del Unified Score (opcional, para usuarios avanzados).
+
+- **Comparador visual:**
+  - Mostrar Unified Score en la tabla comparativa.
+  - Desglose de Factor K y QVA Score en el panel de comparación.
+
+---
+
+## Wireframes/Prototipos Actualizados
+
+### Tabla Central
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Estrategias (Ranking)                                                       │
+├─────┬───────────────┬──────────────┬─────────┬──────────┬───────┬────────────┬─────────────┤
+│ 🥇  │ EliteStrategy │ 9.7 (U.Score)│ 9.8 (FK)│ 9.5 (QVA)│ Elite │ 22.1% │ 2.10 │ 5.2%        │
+│     │ (sticky row)  │              │         │          │ [Oro] │      │      │             │
+├─────┼───────────────┼──────────────┼─────────┼──────────┼───────┼────────────┼─────────────┤
+│ 🥈  │ SilverStrat   │ 8.7 (U.Score)│ 8.8 (FK)│ 8.5 (QVA)│ Excellent│ ... │ ... │ ...         │
+│ 🥉  │ BronzeStrat   │ 7.9 (U.Score)│ 8.0 (FK)│ 7.8 (QVA)│ Very Good│ ... │ ... │ ...         │
+│     │ ...           │ ...          │ ...     │ ...      │ ...    │ ... │ ... │ ...         │
+└─────┴───────────────┴──────────────┴─────────┴──────────┴───────┴────────────┴─────────────┘
+* Tooltip en Unified Score: “Índice global que integra robustez (Factor K) y validación empírica (QVA Score)”
+```
+
+### Panel de Detalles Avanzado
+```
+┌───────────────────────────────────────────────────────────────┐
+│ Detalles de: EliteStrategy                                   │
+├───────────────────────────────────────────────────────────────┤
+│ Unified Score: 9.7 (badge oro)                               │
+│ Factor K: 9.8 (Elite)                                        │
+│ QVA Score: 9.5 (Excelente)                                   │
+│ Predictividad IS/OOS: 1.12 (Excelente)                       │
+│ Drawdown: 5.2% (Muy bajo)                                    │
+│ Trades: 120 (Adecuado)                                       │
+│ Archivo fuente: Estrategia_Elite.sqx                         │
+│ Archivo Excel: Resultados_Elite.xlsx                         │
+│                                                              │
+│ Explicación personalizada:                                   │
+│ “Esta estrategia es Elite por su Unified Score sobresaliente,│
+│ con un Factor K y QVA Score muy altos. Destaca por su        │
+│ consistencia IS/OOS y drawdown bajo. Su principal fortaleza  │
+│ es la robustez fuera de muestra. Debilidad: número de trades │
+│ algo bajo respecto al promedio del top 10.”                  │
+│                                                              │
+│ [Comparar con…] [Exportar]                                   │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### Comparador Visual
+```
+┌───────────────────────────────────────────────┐
+│ Comparador de Estrategias                    │
+├───────────────┬───────────────┬───────────────┤
+│               │ EliteStrategy │ SilverStrat   │
+├───────────────┼───────────────┼───────────────┤
+│ Unified Score │ 9.7           │ 8.7           │
+│ Factor K      │ 9.8           │ 8.8           │
+│ QVA Score     │ 9.5           │ 8.5           │
+│ IS/OOS        │ 1.12          │ 1.05          │
+│ Drawdown      │ 5.2%          │ 6.1%          │
+│ Trades        │ 120           │ 95            │
+│ Archivo .sqx  │ Elite.sqx     │ Silver.sqx    │
+│ Archivo Excel │ Elite.xlsx    │ Silver.xlsx   │
+├───────────────┴───────────────┴───────────────┤
+│ [Radar Chart] [Bar Chart]                     │
+└───────────────────────────────────────────────┘
+```
+
+---
+
+## Ejemplos de Explicación Personalizada
+
+### Ejemplo 1: Estrategia Elite
+“Esta estrategia es Elite por su Unified Score sobresaliente (9.7), con un Factor K (9.8) y QVA Score (9.5) muy altos. Destaca por su consistencia IS/OOS (1.12) y drawdown bajo (5.2%). Su principal fortaleza es la robustez fuera de muestra. Debilidad: número de trades algo bajo respecto al promedio del top 10.”
+
+### Ejemplo 2: Estrategia Excellent
+“Esta estrategia es Excellent por su Unified Score alto (8.7), con buen Factor K (8.8) y QVA Score (8.5). Presenta buena eficiencia y drawdown aceptable, aunque la consistencia IS/OOS podría mejorar (1.18).”
+
+### Ejemplo 3: Estrategia con debilidad en drawdown
+“Estrategia con Unified Score notable (8.2), pero penalizada por un drawdown elevado (12.5%). Su fortaleza es la eficiencia y el número de trades, pero se recomienda precaución en mercados volátiles.”
+
+### Ejemplo 4: Estrategia con baja consistencia IS/OOS
+“Estrategia con buen Unified Score (7.9), pero la consistencia IS/OOS es baja (1.35), lo que indica posible sobreajuste. Fortalezas: robustez en periodo IS y drawdown bajo.”
+
+---
+
+**Nota:** La explicación personalizada debe generarse dinámicamente según los valores de cada métrica, resaltando siempre fortalezas y debilidades objetivas.
+
+--- 
