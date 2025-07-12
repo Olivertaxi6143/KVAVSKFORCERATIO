@@ -58,7 +58,7 @@ import asyncio
 from typing_extensions import TypedDict, Literal
 import warnings
 # ELIMINADO: data_utils.py eliminado, funciones integradas en DataManager
-from src.data_manager import DataManager
+# DataManager eliminado, funcionalidad integrada en DataLoaderEnhanced
 import functools
 from tqdm import tqdm
 from src.logger_config import (
@@ -67,6 +67,7 @@ from src.logger_config import (
     LOG_FORMAT,
     LOG_LEVEL
 )
+from src.data.data_manager import DataManager
 
 warnings.filterwarnings("ignore")
 
@@ -111,13 +112,14 @@ def _improve_missing_data_handling(df: pd.DataFrame) -> pd.DataFrame:
         
         # Para columnas numéricas, usar métodos apropiados de imputación
         for col in numeric_columns:
-            if df_improved[col].isna().any():
+            if bool(df_improved[col].isna().any()):
                 # Para métricas de rendimiento, usar mediana (más robusta)
                 if any(metric in col.lower() for metric in ['cagr', 'profit', 'sharpe', 'return']):
                     df_improved[col] = df_improved[col].fillna(df_improved[col].median())
                 # Para métricas de riesgo, usar percentil 75 (conservador)
                 elif any(metric in col.lower() for metric in ['drawdown', 'risk', 'var', 'cvar']):
-                    df_improved[col] = df_improved[col].fillna(df_improved[col].quantile(0.75))
+                    quantile_value = df_improved[col].quantile(0.75)
+                    df_improved[col] = df_improved[col].fillna(float(quantile_value))
                 # Para otras métricas numéricas, usar media
                 else:
                     df_improved[col] = df_improved[col].fillna(df_improved[col].mean())
@@ -125,12 +127,32 @@ def _improve_missing_data_handling(df: pd.DataFrame) -> pd.DataFrame:
         # Para columnas categóricas, usar moda o valor por defecto
         categorical_columns = df_improved.select_dtypes(include=['object']).columns
         for col in categorical_columns:
-            if df_improved[col].isna().any():
+            if bool(df_improved[col].isna().any()):
                 mode_value = df_improved[col].mode()
-                if not mode_value.empty:
-                    df_improved[col] = df_improved[col].fillna(mode_value.iloc[0])
+                # Corrección robusta para acceso seguro a datetime64/timedelta64
+                if isinstance(mode_value, pd.Series) and not mode_value.empty:
+                    # Si es Serie y no está vacía, usar .iloc[0]
+                    fill_value = mode_value.iloc[0]
+                elif hasattr(mode_value, 'item') and callable(getattr(mode_value, 'item', None)):
+                    # Si es numpy escalar (datetime64/timedelta64), usar .item()
+                    fill_value = mode_value.item()
+                elif hasattr(mode_value, '__getitem__') and len(mode_value) > 0:
+                    # Si tiene __getitem__ y no está vacío, usar [0]
+                    # Convertir a numpy array antes de indexar para evitar errores de datetime64/timedelta64
+                    mode_array = np.array(mode_value)
+                    fill_value = mode_array[0]
                 else:
-                    df_improved[col] = df_improved[col].fillna("N/A")
+                    # Si es escalar, usarlo directamente
+                    fill_value = mode_value
+                # Convertir fill_value a tipo compatible con fillna
+                if isinstance(fill_value, (np.ndarray, pd.Series)):
+                    if hasattr(fill_value, 'item'):
+                        fill_value = float(fill_value.item())
+                    else:
+                        # Convertir a numpy array antes de indexar
+                        fill_array = np.array(fill_value)
+                        fill_value = float(fill_array[0])
+                df_improved[col] = df_improved[col].fillna(fill_value)
         
         # Verificar que no queden valores NaN
         remaining_nans = df_improved.isna().sum().sum()
@@ -236,7 +258,10 @@ class RobustErrorHandler:
                     time.sleep(min(2 ** attempt, 10))  # Backoff exponencial
         
         self.logger.error(f"Todas las tentativas fallaron para {func.__name__}")
-        raise last_error
+        if last_error is not None:
+            raise last_error
+        else:
+            raise RuntimeError(f"Error desconocido en {func.__name__}")
         
     def get_error_stats(self) -> Dict[str, Any]:
         """Obtiene estadísticas de errores."""
@@ -599,7 +624,7 @@ class ConfigManagerEnhanced:
         """
         errors = []
         
-        # Verificar que los KPIs habilitados existan en los datos
+        # Verificar que los KPIs habilitados existen en los datos
         enabled_kpis = self.get_enabled_kpis()
         missing_kpis = [kpi for kpi in enabled_kpis if kpi not in df.columns]
         
@@ -706,527 +731,6 @@ class ConfigManagerEnhanced:
         """Obtiene la configuración completa de KPIs disponibles."""
         return self.current_config.get("selected_kpis", {})
 
-class DataLoaderEnhanced:
-    """
-    Cargador de datos mejorado con validación robusta y manejo de errores.
-    """
-    
-    def __init__(self, progress_callback: Optional[ProgressCallback] = None):
-        self.logger = setup_logger("kforce")
-        self.progress_callback = progress_callback
-        self.data_cache = {}
-        
-    def load_and_prepare_data(self, file_path: str, is_oos_split: float = 0.75) -> pd.DataFrame:
-        """
-        Carga y prepara datos con manejo robusto de errores.
-        
-        Args:
-            file_path: Ruta al archivo de datos
-            is_oos_split: Proporción para división IS/OOS
-            
-        Returns:
-            DataFrame preparado
-            
-        Raises:
-            ValueError: Si no se pueden cargar los datos
-        """
-        try:
-            self.logger.info(f"Cargando datos desde: {file_path}")
-            
-            if self.progress_callback:
-                self.progress_callback.update_progress("Carga", 0, 100, "Iniciando carga de datos...")
-            
-            # Verificar que el archivo existe
-            file_path_obj = Path(file_path)
-            if not file_path_obj.exists():
-                raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
-            
-            # Verificar tamaño del archivo
-            file_size = file_path_obj.stat().st_size
-            if file_size == 0:
-                raise ValueError(f"Archivo vacío: {file_path}")
-            
-            if file_size > 100 * 1024 * 1024:  # 100MB
-                self.logger.warning(f"Archivo muy grande ({file_size / 1024 / 1024:.1f}MB), puede tardar en cargar")
-            
-            # Cargar datos según el formato
-            df = self._load_file_by_format(file_path_obj)
-            
-            if self.progress_callback:
-                self.progress_callback.update_progress("Carga", 30, 100, "Datos cargados, preparando...")
-            
-            # Preparar y validar datos
-            df = self._prepare_dataframe(df, file_path_obj)
-            
-            if self.progress_callback:
-                self.progress_callback.update_progress("Carga", 60, 100, "Aplicando mapeos...")
-            
-            # Aplicar mapeos de columnas
-            df = self._apply_column_mappings(df)
-            
-            if self.progress_callback:
-                self.progress_callback.update_progress("Carga", 80, 100, "Finalizando preparación...")
-            
-            # Limpiar y validar datos finales
-            df = self._clean_and_validate_final_data(df, is_oos_split)
-            
-            if self.progress_callback:
-                self.progress_callback.update_progress("Carga", 100, 100, "Carga completada")
-            
-            self.logger.info(f"Datos cargados exitosamente: {len(df)} filas, {len(df.columns)} columnas")
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"Error cargando datos: {str(e)}")
-            if self.progress_callback:
-                self.progress_callback.update_progress("Carga", 0, 100, f"Error: {str(e)}")
-            raise ValueError(f"No se pudieron cargar los datos: {str(e)}")
-    
-    def _load_file_by_format(self, file_path: Path) -> pd.DataFrame:
-        """Carga archivo según su formato con manejo de errores específico."""
-        try:
-            suffix = file_path.suffix.lower()
-            
-            if suffix in {'.csv', '.txt'}:
-                # Intentar diferentes separadores
-                separators = [';', ',', '\t']
-                encodings = ['utf-8', 'latin-1', 'cp1252']
-                
-                for encoding in encodings:
-                    for sep in separators:
-                        try:
-                            df = pd.read_csv(file_path, sep=sep, decimal=',', engine='python', encoding=encoding)
-                            if len(df.columns) > 1:  # Verificar que se cargaron múltiples columnas
-                                self.logger.info(f"Archivo CSV cargado con separador '{sep}' y encoding '{encoding}'")
-                                return df
-                        except Exception:
-                            continue
-                
-                # Si no funciona con separadores específicos, usar pandas con detección automática
-                df = pd.read_csv(file_path, engine='python')
-                return df
-                
-            elif suffix in {'.xlsx', '.xls'}:
-                df = pd.read_excel(file_path)
-                return df
-                
-            elif suffix in {'.parquet'}:
-                df = pd.read_parquet(file_path)
-                return df
-                
-            else:
-                raise ValueError(f"Formato de archivo no soportado: {suffix}")
-                
-        except Exception as e:
-            self.logger.error(f"Error cargando archivo {file_path}: {e}")
-            raise
-    
-    def _prepare_dataframe(self, df: pd.DataFrame, file_path: Path) -> pd.DataFrame:
-        """Prepara el DataFrame con validaciones básicas."""
-        try:
-            # Verificar que el DataFrame no esté vacío
-            if df.empty:
-                raise ValueError("DataFrame vacío después de la carga")
-            
-            # Verificar que hay suficientes columnas
-            if len(df.columns) < 3:
-                self.logger.warning(f"Pocas columnas detectadas: {len(df.columns)}")
-            
-            # Mostrar información de columnas originales
-            self.logger.info(f"Columnas originales: {df.columns.tolist()}")
-            
-            # Limpiar nombres de columnas
-            df.columns = df.columns.str.strip()
-            
-            # Eliminar filas completamente vacías
-            df = df.dropna(how='all')
-            
-            if df.empty:
-                raise ValueError("No quedan datos después de eliminar filas vacías")
-            
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"Error preparando DataFrame: {e}")
-            raise
-    
-    def _apply_column_mappings(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Aplica mapeos de columnas QVA y ROBUST con mapeo fuzzy."""
-        try:
-            original_columns = df.columns.tolist()
-            self.logger.info(f"Columnas originales: {original_columns}")
-            
-            # Usar el mismo mapeo que gui_enhanced_rank.py
-            NORMALIZE_COL = lambda s: re.sub(r"[^0-9A-Za-z]", "", s).upper()
-            
-            QVA_COL_MAP = {
-                'STRATEGYNAME': 'Strategy_Name',
-                'CAGR': 'CAGR',
-                'DRAWDOWN': 'Drawdown',  # Drawdown es una métrica independiente
-                'MAXDD': 'Max_DD_%',     # Max DD % es otra métrica diferente
-                'MAXDD%': 'Max_DD_%',
-                'EXPECTANCY': 'Expectancy',
-                'MAXCONSECLOSURES': 'Max_Consec_Losses',
-                'MAXCONSECUTIVELOSSES': 'Max_Consec_Losses',
-                'PROFITFACTOR': 'Profit_factor',
-                'SHARPERATIO': 'Sharpe_Ratio',
-                'CALMARRATIO': 'CalmarRatio',
-                'SQN': 'SQN',
-                'RINAINDEX': 'RINAIndex',
-                'ULCERINDEX': 'Ulcer_Index_%',
-                'ULCERPERFORMANCEINDEX': 'Ulcer_Performance_Index',
-                'STAGNATION': 'Stagnation',
-                'MAXDRAWDOWNDURATION': 'Max_Drawdown_Duration',
-                'AVGBARSINTRADE': 'Avg_Bars_in_Trade',
-                'VAR95': 'VaR_95%',
-                'CVAR95': 'CVaR_95%',
-                'SORTINORATIO': 'Sortino_Ratio',
-                'RECOVERYFACTOR': 'RecoveryFactor',
-                'STAGNATIONTRADES': 'Stagnation_Trades',
-                'NEWPEAKTRADES': 'New_Peak_Trades_%',
-                'DRAWDOWNTRADES': 'Drawdown_Trades_%'
-            }
-            
-            ROBUST_COL_MAP = {
-                'STRATEGYNAME': 'Strategy_Name',
-                'CAGR': 'CAGR',
-                'DRAWDOWN': 'Drawdown',  # Drawdown es una métrica independiente
-                'MAXDD': 'Max_DD_%',     # Max DD % es otra métrica diferente
-                'MAXDD%': 'Max_DD_%',
-                'EXPECTANCY': 'Expectancy',
-                'MAXCONSECLOSURES': 'Max_Consec_Losses',
-                'MAXCONSECUTIVELOSSES': 'Max_Consec_Losses',
-                'PROFITFACTOR': 'Profit_factor',
-                'SHARPERATIO': 'Sharpe_Ratio',
-                'CALMARRATIO': 'CalmarRatio',
-                'SQN': 'SQN',
-                'RINAINDEX': 'RINAIndex',
-                'ULCERINDEX': 'Ulcer_Index_%',
-                'ULCERPERFORMANCEINDEX': 'Ulcer_Performance_Index',
-                'STAGNATION': 'Stagnation',
-                'MAXDRAWDOWNDURATION': 'Max_Drawdown_Duration',
-                'AVGBARSINTRADE': 'Avg_Bars_in_Trade',
-                'VAR95': 'VaR_95%',
-                'CVAR95': 'CVaR_95%',
-                'SORTINORATIO': 'Sortino_Ratio',
-                'RECOVERYFACTOR': 'RecoveryFactor',
-                'STAGNATIONTRADES': 'Stagnation_Trades',
-                'NEWPEAKTRADES': 'New_Peak_Trades_%',
-                'DRAWDOWNTRADES': 'Drawdown_Trades_%'
-            }
-            
-            # Aplicar mapeo fuzzy
-            normalized_columns = {NORMALIZE_COL(col): col for col in df.columns}
-            
-            # Mapear columnas QVA
-            for norm_col, target_col in QVA_COL_MAP.items():
-                if norm_col in normalized_columns:
-                    original_col = normalized_columns[norm_col]
-                    if original_col != target_col:
-                        df = df.rename(columns={original_col: target_col})
-                        self.logger.info(f"Mapeado QVA: {original_col} -> {target_col}")
-            
-            # Mapear columnas ROBUST
-            for norm_col, target_col in ROBUST_COL_MAP.items():
-                if norm_col in normalized_columns:
-                    original_col = normalized_columns[norm_col]
-                    if original_col != target_col:
-                        df = df.rename(columns={original_col: target_col})
-                        self.logger.info(f"Mapeado ROBUST: {original_col} -> {target_col}")
-            
-            # Asegurar columnas críticas con mapeo fuzzy mejorado
-            df = self._ensure_critical_columns(df, original_columns)
-            
-            self.logger.info(f"Columnas finales: {df.columns.tolist()}")
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"Error en mapeo de columnas: {e}")
-            return df
-    
-    def _normalize_column_name(self, col: str) -> str:
-        """Normaliza el nombre de una columna."""
-        return (
-            col.strip()
-            .replace('"', '')
-            .replace("'", '')
-            .replace('%', 'pct')
-            .replace('(', '')
-            .replace(')', '')
-            .replace('.', '_')
-            .replace('-', '_')
-            .replace(' ', '_')
-            .lower()
-        )
-    
-    def _ensure_critical_columns(self, df: pd.DataFrame, original_columns: list) -> pd.DataFrame:
-        """Asegura que las columnas críticas existan con mapeo fuzzy mejorado."""
-        try:
-            # Mapeo basado en las columnas reales del archivo CSV
-            # Prioridad: 1) Métricas generales, 2) IS, 3) OOS
-            critical_mappings = {
-                'Strategy_Name': ['Strategy Name', 'StrategyName', 'Name', 'Strategy'],
-                'Profit_factor': ['Profit factor', 'Profit factor (IS)', 'Profit factor (OOS)', 'ProfitFactor', 'Profit_Factor'],
-                'Sharpe_Ratio': ['Sharpe Ratio', 'Sharpe Ratio (IS)', 'Sharpe Ratio (OOS)', 'SharpeRatio', 'Sharpe_Ratio'],
-                'Drawdown': ['Drawdown', 'Drawdown (IS)', 'Drawdown (OOS)'],
-                'Max_DD_%': ['Max DD %', 'Max_DD_%', 'Max_DD', 'Max_DD_IS', 'Max_DD_OOS']
-            }
-            
-            for target_col, possible_names in critical_mappings.items():
-                if target_col not in df.columns:
-                    # Buscar la columna con mapeo fuzzy
-                    found_col = None
-                    for possible_name in possible_names:
-                        if possible_name in df.columns:
-                            found_col = possible_name
-                            break
-                    
-                    if found_col:
-                        # Renombrar la columna encontrada
-                        df = df.rename(columns={found_col: target_col})
-                        self.logger.info(f"✅ Mapeado {target_col}: {found_col} -> {target_col}")
-                    else:
-                        # Si no se encuentra, crear una columna vacía
-                        df[target_col] = None
-                        self.logger.warning(f"⚠️ Columna crítica {target_col} no encontrada, creando columna vacía")
-            
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"Error en _ensure_critical_columns: {str(e)}")
-            return df
-    
-    def _clean_and_validate_final_data(self, df: pd.DataFrame, is_oos_split: float) -> pd.DataFrame:
-        """Limpia y valida los datos finales."""
-        try:
-            # Convertir tipos de datos
-            for col in df.columns:
-                if col == 'Strategy_Name':
-                    df[col] = df[col].astype(str)
-                elif pd.api.types.is_numeric_dtype(df[col]):
-                    df[col] = df[col].astype(float)
-                else:
-                    # Intentar conversión numérica segura
-                    col_data = df[col]
-                    if isinstance(col_data, pd.DataFrame):
-                        col_data = col_data.iloc[:, 0]  # Tomar la primera columna si es DataFrame
-                    
-                    # Asegurar que col_data sea una Series antes de usar .str
-                    if not isinstance(col_data, pd.Series):
-                        col_data = pd.Series(col_data)
-                    
-                    converted = pd.to_numeric(
-                        col_data.astype(str).str.replace(',', '.').str.replace(r'[\d\.\-eE]', '', regex=True), 
-                        errors='coerce'
-                    )
-                    # Corrección: robustez para Series o escalar
-                    if isinstance(converted, pd.Series):
-                        notna_count = converted.notna().sum()
-                    else:
-                        notna_count = _safe_sum(pd.notna(converted))
-                    if notna_count > 0:
-                        df[col] = converted
-                    else:
-                        df[col] = df[col].astype(str).replace(r'^\s*$', '', regex=True)
-            
-            # Calcular métricas IS/OOS si están disponibles
-            df = self._calculate_is_oos_metrics(df, is_oos_split)
-            
-            # Eliminar duplicados por Strategy_Name
-            if 'Strategy_Name' in df.columns:
-                initial_count = len(df)
-                df.drop_duplicates(subset=['Strategy_Name'], inplace=True)
-                final_count = len(df)
-                if initial_count != final_count:
-                    self.logger.info(f"Eliminadas {initial_count - final_count} estrategias duplicadas")
-            
-            # Validación final
-            if len(df) < 1:
-                raise ValueError("No quedan datos después de la limpieza")
-            
-            self.logger.info(f"DataFrame final preparado: {df.shape}")
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"Error limpiando y validando datos finales: {e}")
-            raise
-    
-    def _calculate_is_oos_metrics(self, df: pd.DataFrame, is_oos_split: float) -> pd.DataFrame:
-        """
-        Calcula métricas IS/OOS de forma empírica y científica.
-        Reemplaza el cálculo básico anterior con análisis avanzado.
-        """
-        try:
-            import numpy as np
-            
-            # Detectar pares IS/OOS
-            is_cols = [col for col in df.columns if '(IS)' in col]
-            oos_cols = [col for col in df.columns if '(OOS)' in col]
-            kpi_pairs = []
-            
-            for is_col in is_cols:
-                base = is_col.replace(' (IS)', '').replace('(IS)', '').strip()
-                oos_col = next((c for c in oos_cols if base == c.replace(' (OOS)', '').replace('(OOS)', '').strip()), None)
-                if oos_col:
-                    kpi_pairs.append((base, is_col, oos_col))
-            
-            if not kpi_pairs:
-                self.logger.info("No se encontraron pares IS/OOS para análisis")
-                return df
-            
-            # Recolectar todas las diferencias relativas del dataset para percentiles automáticos
-            all_diffs = []
-            for base, is_col, oos_col in kpi_pairs:
-                is_vals = pd.to_numeric(df[is_col], errors='coerce').to_numpy()
-                oos_vals = pd.to_numeric(df[oos_col], errors='coerce').to_numpy()
-                diffs = ((oos_vals - is_vals) / (np.abs(is_vals) + 1e-8)) * 100
-                all_diffs.extend(diffs[~np.isnan(diffs)].tolist())
-            
-            # Calcular percentiles automáticos para umbrales
-            if all_diffs:
-                all_diffs_np = np.array(all_diffs)
-                p10 = np.percentile(all_diffs_np, 10)
-                p25 = np.percentile(all_diffs_np, 25)
-                p75 = np.percentile(all_diffs_np, 75)
-            else:
-                p10, p25, p75 = -20, -12, -5
-            
-            # Penalización según el split IS/OOS
-            penalizacion = 1 - (is_oos_split * 0.5)
-            
-            # Métricas clave para alertas
-            metricas_clave = {"Profit Factor", "CAGR", "Sharpe Ratio", "CalmarRatio"}
-            
-            # Calcular predictividad para cada estrategia
-            resultados = []
-            detalles_all = []
-            
-            for idx, row in df.iterrows():
-                detalles = []
-                perdidas_rel = []
-                n_mejoran = 0
-                n_empeoran = 0
-                n_igual = 0
-                alertas = []
-                alerta_critica = False
-                
-                for base, is_col, oos_col in kpi_pairs:
-                    is_val = row.get(is_col)
-                    oos_val = row.get(oos_col)
-                    
-                    try:
-                        is_val = float(is_val)
-                        oos_val = float(oos_val)
-                    except Exception:
-                        continue
-                    
-                    diff_abs = oos_val - is_val
-                    diff_rel = 0.0
-                    if abs(is_val) > 1e-8:
-                        diff_rel = (oos_val - is_val) / abs(is_val) * 100
-                    
-                    perdidas_rel.append(diff_rel)
-                    
-                    # Contar tendencias
-                    if diff_abs > 0.01:
-                        n_mejoran += 1
-                    elif diff_abs < -0.01:
-                        n_empeoran += 1
-                    else:
-                        n_igual += 1
-                    
-                    # Alertas para métricas clave
-                    if base in metricas_clave:
-                        oos_vals = pd.to_numeric(df[oos_col], errors='coerce').to_numpy()
-                        oos_vals_valid = oos_vals[~np.isnan(oos_vals)]
-                        umbral_critico = np.percentile(oos_vals_valid, 10) if len(oos_vals_valid) > 0 else (1 if base == "Profit Factor" else 0)
-                        
-                        if base == "Profit Factor" and oos_val < umbral_critico:
-                            alertas.append(f"⚠️ Profit Factor OOS < {umbral_critico:.2f}")
-                            alerta_critica = True
-                        if base == "CAGR" and oos_val < umbral_critico:
-                            alertas.append(f"⚠️ CAGR OOS < {umbral_critico:.2f}")
-                            alerta_critica = True
-                
-                # Calcular estadísticas
-                n_total = len(perdidas_rel)
-                media_perdida = np.mean(perdidas_rel) * penalizacion if perdidas_rel else 0.0
-                pct_mejoran = n_mejoran / n_total * 100 if n_total else 0
-                pct_empeoran = n_empeoran / n_total * 100 if n_total else 0
-                
-                # Clasificación multinivel automática
-                nivel = ""
-                icono = ""
-                if alerta_critica or media_perdida < p10 or pct_empeoran > 50:
-                    nivel = "Pobre"
-                    icono = "🔴"
-                elif media_perdida < p25 or pct_empeoran > 30:
-                    nivel = "Aceptable"
-                    icono = "🟡"
-                elif media_perdida < p75 or pct_empeoran > 20:
-                    nivel = "Buena"
-                    icono = "🟢"
-                else:
-                    nivel = "Excelente"
-                    icono = "🔬"
-                
-                resumen = f"{icono} {nivel} (Δ={media_perdida:+.1f}%, {n_total} KPIs, {pct_mejoran:.0f}% mejoran)"
-                if alertas:
-                    resumen += " [" + ", ".join(alertas) + "]"
-                
-                resultados.append(resumen)
-                detalles_all.append(detalles)
-            
-            # Asignar resultados al DataFrame
-            df = df.copy()
-            df['IS/OOS'] = resultados
-            df['IS_OOS_DETALLES'] = detalles_all
-            
-            # Log detallado
-            self.logger.info(f"Análisis IS/OOS empírico completado: {len(df)} estrategias")
-            self.logger.info(f"Umbrales automáticos: Pobre<{p10:.1f}%, Aceptable<{p25:.1f}%, Buena<{p75:.1f}%")
-            self.logger.info(f"Penalización IS/OOS aplicada: {penalizacion:.3f} (IS%={is_oos_split*100:.1f}%)")
-            
-            return df
-            
-        except Exception as e:
-            self.logger.warning(f"Error calculando métricas IS/OOS empíricas: {e}")
-            return df
-    
-    def validate_data_compatibility(self, df: pd.DataFrame, required_kpis: List[str]) -> Tuple[bool, List[str]]:
-        """
-        Valida que los datos sean compatibles con los KPIs requeridos.
-        
-        Args:
-            df: DataFrame con los datos
-            required_kpis: Lista de KPIs requeridos
-            
-        Returns:
-            Tupla con (es_compatible, lista_de_errores)
-        """
-        errors = []
-        
-        # Verificar que los KPIs requeridos existan
-        missing_kpis = [kpi for kpi in required_kpis if kpi not in df.columns]
-        if missing_kpis:
-            errors.append(f"KPIs faltantes: {missing_kpis}")
-        
-        # Verificar que hay suficientes datos
-        if len(df) < 10:
-            errors.append("Insuficientes datos (mínimo 10 estrategias)")
-        
-        # Verificar que hay datos numéricos válidos
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        if len(numeric_cols) < 5:
-            errors.append("Insuficientes columnas numéricas")
-        
-        # Verificar que no hay demasiados valores nulos
-        null_percentage = df.isnull().sum().sum() / (len(df) * len(df.columns)) * 100
-        if null_percentage > 50:
-            errors.append(f"Demasiados valores nulos ({null_percentage:.1f}%)")
-        
-        return len(errors) == 0, errors 
-
 class FactorKElite96Enhanced:
     """
     Motor principal mejorado con procesamiento en hilos y optimizaciones para GUI.
@@ -1235,7 +739,7 @@ class FactorKElite96Enhanced:
     def __init__(self, config: Optional[Dict] = None, progress_callback: Optional[ProgressCallback] = None):
         self.logger = setup_logger("kforce")
         self.config_manager = ConfigManagerEnhanced()
-        self.data_loader = DataLoaderEnhanced(progress_callback)
+        self.data_manager = DataManager()
         self.progress_callback = progress_callback
         
         # Configuración de rendimiento
@@ -1294,7 +798,7 @@ class FactorKElite96Enhanced:
             DataFrame preparado
         """
         try:
-            return self.data_loader.load_and_prepare_data(file_path)
+            return self.data_manager.load_and_prepare_data_pipeline(file_path)
         except Exception as e:
             self.logger.error(f"Error en load_and_prepare_data: {e}")
             raise
@@ -1406,8 +910,8 @@ class FactorKElite96Enhanced:
             for col in numeric_columns:
                 if col in df.columns:
                     # Calcular percentiles para detectar outliers
-                    q1 = df[col].quantile(0.01)
-                    q3 = df[col].quantile(0.99)
+                    q1 = float(df[col].quantile(0.01))
+                    q3 = float(df[col].quantile(0.99))
                     iqr = q3 - q1
                     
                     # Definir límites
@@ -1454,7 +958,12 @@ class FactorKElite96Enhanced:
             if 'Sharpe_Ratio' in df.columns and 'CAGR' in df.columns:
                 # Score basado en Sharpe y CAGR
                 sharpe_normalized = (df['Sharpe_Ratio'] + 3) / 6  # Normalizar a [0,1]
-                cagr_normalized = (df['CAGR'] - df['CAGR'].min()) / (df['CAGR'].max() - df['CAGR'].min())
+                cagr_min = df['CAGR'].min()
+                cagr_max = df['CAGR'].max()
+                if cagr_max > cagr_min:
+                    cagr_normalized = (df['CAGR'] - cagr_min) / (cagr_max - cagr_min)
+                else:
+                    cagr_normalized = df['CAGR'] * 0  # Si no hay variación, normalizar a 0
                 df['Unified_Score_Enhanced'] = 0.6 * df['Unified_Score'] + 0.4 * (sharpe_normalized + cagr_normalized) / 2
                 self.logger.info("✅ Unified_Score_Enhanced creado con Sharpe y CAGR")
             else:
@@ -1476,7 +985,16 @@ class FactorKElite96Enhanced:
             # Max Drawdown (invertido para que menor sea mejor)
             if 'Max_DD_%' in df.columns:
                 max_dd = df['Max_DD_%'].fillna(0)
-                stability_metrics.append(1 / (1 + abs(max_dd)))
+                if isinstance(max_dd, pd.Series):
+                    # Si es Series, tomar la media o el primer valor según contexto
+                    max_dd_scalar = float(max_dd.mean())
+                else:
+                    # Convertir a float de forma segura
+                    if isinstance(max_dd, (pd.DataFrame, pd.Series)):
+                        max_dd_scalar = float(max_dd.iloc[0] if len(max_dd) > 0 else 0)
+                    else:
+                        max_dd_scalar = float(max_dd)
+                stability_metrics.append(1 / (1 + abs(max_dd_scalar)))
             
             # Sharpe Ratio
             if 'Sharpe_Ratio' in df.columns:
@@ -1495,7 +1013,12 @@ class FactorKElite96Enhanced:
             
             # Calcular componente de estabilidad
             if stability_metrics:
-                df['FK96_Stability_Enhanced'] = np.mean(stability_metrics, axis=0)
+                # Si hay Series, concatenar y hacer mean por filas
+                if any(isinstance(m, pd.Series) for m in stability_metrics):
+                    metrics_df = pd.concat([m if isinstance(m, pd.Series) else pd.Series(m, index=df.index) for m in stability_metrics], axis=1)
+                    df['FK96_Stability_Enhanced'] = metrics_df.mean(axis=1)
+                else:
+                    df['FK96_Stability_Enhanced'] = float(np.mean(stability_metrics))
             else:
                 df['FK96_Stability_Enhanced'] = 0.5
             
@@ -1529,7 +1052,11 @@ class FactorKElite96Enhanced:
             
             # Calcular componente de crecimiento
             if growth_metrics:
-                df['FK96_Growth_Enhanced'] = np.mean(growth_metrics, axis=0)
+                if any(isinstance(m, pd.Series) for m in growth_metrics):
+                    metrics_df = pd.concat([m if isinstance(m, pd.Series) else pd.Series(m, index=df.index) for m in growth_metrics], axis=1)
+                    df['FK96_Growth_Enhanced'] = metrics_df.mean(axis=1)
+                else:
+                    df['FK96_Growth_Enhanced'] = float(np.mean(growth_metrics))
             else:
                 df['FK96_Growth_Enhanced'] = 0.5
             
@@ -1563,7 +1090,11 @@ class FactorKElite96Enhanced:
             
             # Calcular componente de eficiencia
             if efficiency_metrics:
-                df['FK96_Efficiency_Enhanced'] = np.mean(efficiency_metrics, axis=0)
+                if any(isinstance(m, pd.Series) for m in efficiency_metrics):
+                    metrics_df = pd.concat([m if isinstance(m, pd.Series) else pd.Series(m, index=df.index) for m in efficiency_metrics], axis=1)
+                    df['FK96_Efficiency_Enhanced'] = metrics_df.mean(axis=1)
+                else:
+                    df['FK96_Efficiency_Enhanced'] = float(np.mean(efficiency_metrics))
             else:
                 df['FK96_Efficiency_Enhanced'] = 0.5
             
@@ -1597,7 +1128,11 @@ class FactorKElite96Enhanced:
             
             # Calcular componente de consistencia
             if consistency_metrics:
-                df['FK96_Consistency_Enhanced'] = np.mean(consistency_metrics, axis=0)
+                if any(isinstance(m, pd.Series) for m in consistency_metrics):
+                    metrics_df = pd.concat([m if isinstance(m, pd.Series) else pd.Series(m, index=df.index) for m in consistency_metrics], axis=1)
+                    df['FK96_Consistency_Enhanced'] = metrics_df.mean(axis=1)
+                else:
+                    df['FK96_Consistency_Enhanced'] = float(np.mean(consistency_metrics))
             else:
                 df['FK96_Consistency_Enhanced'] = 0.5
             
@@ -1617,12 +1152,28 @@ class FactorKElite96Enhanced:
             # VaR 95%
             if 'VaR_95%' in df.columns:
                 var = df['VaR_95%'].fillna(0)
-                risk_metrics.append(1 / (1 + abs(var)))
+                if isinstance(var, pd.Series):
+                    var_values = var.astype(float)
+                else:
+                    # Convertir a float de forma segura
+                    if isinstance(var, (pd.DataFrame, pd.Series)):
+                        var_values = var.astype(float)
+                    else:
+                        var_values = float(var)
+                risk_metrics.append(1 / (1 + abs(var_values)))
             
             # CVaR 95%
             if 'CVaR_95%' in df.columns:
                 cvar = df['CVaR_95%'].fillna(0)
-                risk_metrics.append(1 / (1 + abs(cvar)))
+                if isinstance(cvar, pd.Series):
+                    cvar_values = cvar.astype(float)
+                else:
+                    # Convertir a float de forma segura
+                    if isinstance(cvar, (pd.DataFrame, pd.Series)):
+                        cvar_values = cvar.astype(float)
+                    else:
+                        cvar_values = float(cvar)
+                risk_metrics.append(1 / (1 + abs(cvar_values)))
             
             # Sortino Ratio
             if 'Sortino_Ratio' in df.columns:
@@ -1631,7 +1182,11 @@ class FactorKElite96Enhanced:
             
             # Calcular componente de riesgo
             if risk_metrics:
-                df['FK96_Risk_Enhanced'] = np.mean(risk_metrics, axis=0)
+                if any(isinstance(m, pd.Series) for m in risk_metrics):
+                    metrics_df = pd.concat([m if isinstance(m, pd.Series) else pd.Series(m, index=df.index) for m in risk_metrics], axis=1)
+                    df['FK96_Risk_Enhanced'] = metrics_df.mean(axis=1)
+                else:
+                    df['FK96_Risk_Enhanced'] = float(np.mean(risk_metrics))
             else:
                 df['FK96_Risk_Enhanced'] = 0.5
             
@@ -1656,7 +1211,32 @@ class FactorKElite96Enhanced:
             # Penalización por drawdown alto
             if 'Max_DD_%' in df.columns:
                 max_dd = df['Max_DD_%'].fillna(0)
-                dd_penalty = np.where(abs(max_dd) > 20, 0.8, 1.0)
+                if isinstance(max_dd, pd.Series):
+                    max_dd_values = max_dd.astype(float)
+                else:
+                    # Convertir a float de forma segura
+                    if isinstance(max_dd, (pd.DataFrame, pd.Series)):
+                        max_dd_values = max_dd.astype(float)
+                    else:
+                        max_dd_values = float(max_dd)
+                # Convertir a numpy array para operaciones vectorizadas (estricto)
+                if isinstance(max_dd_values, pd.Series):
+                    max_dd_array = max_dd_values.to_numpy(dtype=np.float64)
+                elif isinstance(max_dd_values, pd.DataFrame):
+                    # Extraer el primer valor escalar si es DataFrame
+                    if not max_dd_values.empty:
+                        val = max_dd_values.values.flatten()[0]
+                        max_dd_float = float(val) if isinstance(val, (int, float, np.floating, np.integer)) else 0.0
+                    else:
+                        max_dd_float = 0.0
+                    max_dd_array = np.array([max_dd_float], dtype=np.float64)
+                elif isinstance(max_dd_values, (int, float, np.floating, np.integer)):
+                    max_dd_float = float(max_dd_values)
+                    max_dd_array = np.array([max_dd_float], dtype=np.float64)
+                else:
+                    max_dd_float = 0.0
+                    max_dd_array = np.array([max_dd_float], dtype=np.float64)
+                dd_penalty = np.where(np.abs(max_dd_array) > 20.0, 0.8, 1.0)
                 penalties *= dd_penalty
             
             # Penalización por profit factor bajo
@@ -1798,12 +1378,21 @@ class FactorKElite96Enhanced:
                     weights.append(0.3)
                 
                 if 'CAGR' in df.columns:
-                    cagr_norm = (df['CAGR'] - df['CAGR'].min()) / (df['CAGR'].max() - df['CAGR'].min())
+                    cagr_min = df['CAGR'].min()
+                    cagr_max = df['CAGR'].max()
+                    if cagr_max > cagr_min:
+                        cagr_norm = (df['CAGR'] - cagr_min) / (cagr_max - cagr_min)
+                    else:
+                        cagr_norm = df['CAGR'] * 0  # Si no hay variación, normalizar a 0
                     scientific_components.append(cagr_norm)
                     weights.append(0.3)
                 
                 if 'Profit_factor' in df.columns:
-                    pf_norm = (df['Profit_factor'] - 1) / (df['Profit_factor'].max() - 1)
+                    pf_max = df['Profit_factor'].max()
+                    if pf_max > 1:
+                        pf_norm = (df['Profit_factor'] - 1) / (pf_max - 1)
+                    else:
+                        pf_norm = df['Profit_factor'] * 0  # Si no hay variación, normalizar a 0
                     scientific_components.append(pf_norm)
                     weights.append(0.2)
                 
@@ -1822,7 +1411,11 @@ class FactorKElite96Enhanced:
             
             # Crear Unified_Score_Enhanced con ajuste dinámico
             if 'Regime_Score' in df.columns:
-                regime_adjustment = df['Regime_Score'] / df['Regime_Score'].max()
+                regime_max = df['Regime_Score'].max()
+                if regime_max > 0:
+                    regime_adjustment = df['Regime_Score'] / regime_max
+                else:
+                    regime_adjustment = df['Regime_Score'] * 0  # Si no hay variación, normalizar a 0
                 df['Unified_Score_Enhanced'] = df['Unified_Score'] * (1 + 0.2 * regime_adjustment)
                 self.logger.info("✅ Unified_Score_Enhanced creado con ajuste de régimen")
             else:
@@ -2490,11 +2083,12 @@ class QVAScorerEnhanced:
             
             def normalize_metric(series: pd.Series, higher_is_better: bool = True) -> pd.Series:
                 """Normaliza una métrica de forma robusta."""
-                if series.empty or series.isna().all():
+                if series.empty or bool(series.isna().all()):
                     return pd.Series(0.5, index=series.index)
                 
                 # Usar percentiles para robustez
-                q1, q3 = series.quantile([0.1, 0.9])
+                quantiles = series.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 
                 if iqr == 0:
@@ -2768,8 +2362,6 @@ class UnifiedEvaluatorEnhanced:
                 X = df[available_metrics].fillna(0).values
                 
                 # Normalizar datos
-                from sklearn.preprocessing import StandardScaler
-                from sklearn.cluster import KMeans
                 scaler = StandardScaler()
                 X_scaled = scaler.fit_transform(X)
                 
@@ -2779,13 +2371,12 @@ class UnifiedEvaluatorEnhanced:
                 
                 # Asignar regímenes
                 df['Market_Regime'] = cluster_labels
-                self.logger.info(f"✅ Regímenes de mercado asignados: {len(df)} estrategias")
                 
-                # Calcular scores por régimen usando Unified_Score
+                # Calcular scores por régimen
                 for regime in range(3):
                     regime_mask = df['Market_Regime'] == regime
                     if regime_mask.any():
-                        regime_score = df.loc[regime_mask, 'Unified_Score'].mean()
+                        regime_score = df.loc[regime_mask, 'FK96_Elite_Enhanced'].mean()
                         df.loc[regime_mask, 'Regime_Score'] = regime_score
                         self.logger.info(f"📊 Régimen {regime}: {regime_mask.sum()} estrategias, score promedio: {regime_score:.4f}")
             else:
@@ -2824,7 +2415,7 @@ class UnifiedEvaluatorEnhanced:
                 for state in range(3):
                     state_mask = df['HMM_State'] == state
                     if state_mask.any():
-                        state_score = df.loc[state_mask, 'Unified_Score'].mean()
+                        state_score = df.loc[state_mask, 'FK96_Elite_Enhanced'].mean()
                         df.loc[state_mask, 'HMM_Score'] = state_score
                         self.logger.info(f"📊 Estado HMM {state}: {state_mask.sum()} estrategias, score promedio: {state_score:.4f}")
             else:
@@ -2872,7 +2463,11 @@ class UnifiedEvaluatorEnhanced:
             
             # Crear Unified_Score_Enhanced con ajuste dinámico
             if has_regime:
-                regime_adjustment = df['Regime_Score'] / df['Regime_Score'].max()
+                regime_max = df['Regime_Score'].max()
+                if regime_max > 0:
+                    regime_adjustment = df['Regime_Score'] / regime_max
+                else:
+                    regime_adjustment = df['Regime_Score'] * 0  # Si no hay variación, normalizar a 0
                 df['Unified_Score_Enhanced'] = df['Unified_Score'] * (1 + 0.2 * regime_adjustment)
                 self.logger.info("✅ Unified_Score_Enhanced creado con ajuste de régimen")
             else:
@@ -2923,7 +2518,8 @@ class UnifiedEvaluatorEnhanced:
             # Correlaciones entre scores
             score_cols = [col for col in score_columns if col in df.columns]
             if len(score_cols) > 1:
-                correlations = df.loc[:, score_cols].corr()
+                score_data = df.loc[:, score_cols].astype(float)
+                correlations = score_data.corr(method='pearson')
                 summary['score_correlations'] = correlations.to_dict()
             
             return summary
@@ -4018,10 +3614,11 @@ def categorize_quality(df, score_col="Unified_Score"):
     if len(scores) == 0:
         df["Quality_Category"] = "Regular"
         return df
-    p80 = np.percentile(scores, 80)
-    p60 = np.percentile(scores, 60)
-    p40 = np.percentile(scores, 40)
-    p20 = np.percentile(scores, 20)
+    scores_float = scores.astype(np.float64)
+    p80 = float(np.percentile(scores_float, 80))
+    p60 = float(np.percentile(scores_float, 60))
+    p40 = float(np.percentile(scores_float, 40))
+    p20 = float(np.percentile(scores_float, 20))
     def cat(val):
         if val >= p80:
             return "Excelente"
@@ -4062,10 +3659,10 @@ def predictividad_is_oos_empirica(df, is_oos_split=0.75):
         diffs = ((oos_vals - is_vals) / (np.abs(is_vals) + 1e-8)) * 100
         all_diffs.extend(diffs[~np.isnan(diffs)].tolist())
     if all_diffs:
-        all_diffs_np = np.array(all_diffs)
-        p10 = np.percentile(all_diffs_np, 10)
-        p25 = np.percentile(all_diffs_np, 25)
-        p75 = np.percentile(all_diffs_np, 75)
+        all_diffs_np = np.array(all_diffs, dtype=np.float64)
+        p10 = float(np.percentile(all_diffs_np, 10))
+        p25 = float(np.percentile(all_diffs_np, 25))
+        p75 = float(np.percentile(all_diffs_np, 75))
     else:
         p10, p25, p75 = -20, -12, -5
     penalizacion = 1 - (is_oos_split * 0.5)
@@ -4113,8 +3710,21 @@ def predictividad_is_oos_empirica(df, is_oos_split=0.75):
             # Alertas para métricas clave (usando percentil 10 de OOS)
             if base in metricas_clave:
                 oos_vals = pd.to_numeric(df[oos_col], errors='coerce').to_numpy()
-                oos_vals_valid = oos_vals[~np.isnan(oos_vals)]
-                umbral_critico = np.percentile(oos_vals_valid, 10) if len(oos_vals_valid) > 0 else (1 if base == "Profit Factor" else 0)
+                
+                # Asegurar que oos_vals es un array antes de indexar
+                if isinstance(oos_vals, np.ndarray):
+                    oos_vals_valid = oos_vals[~np.isnan(oos_vals)]
+                else:
+                    # Si no es array, convertir a array primero
+                    oos_vals_array = np.array(oos_vals)
+                    oos_vals_valid = oos_vals_array[~np.isnan(oos_vals_array)]
+                
+                if len(oos_vals_valid) > 0:
+                    # Convertir a float64 para evitar problemas de tipos
+                    oos_vals_float = oos_vals_valid.astype(np.float64)
+                    umbral_critico = float(np.percentile(oos_vals_float, 10))
+                else:
+                    umbral_critico = 1.0 if base == "Profit Factor" else 0.0
                 if base == "Profit Factor" and oos_val < umbral_critico:
                     alertas.append(f"⚠️ Profit Factor OOS < {umbral_critico:.2f}")
                     alerta_critica = True
@@ -4181,8 +3791,18 @@ class RobustnessAnalyzer:
             # Análisis de correlación entre métricas
             numeric_cols = df.select_dtypes(include=[np.number]).columns
             if len(numeric_cols) > 1:
-                correlation_matrix = df[numeric_cols].corr()
-                stability_metrics['metric_correlation'] = correlation_matrix.mean().mean()
+                # Calcular correlación entre columnas numéricas
+                numeric_data = df[numeric_cols].astype(float)
+                correlation_matrix = numeric_data.corr(method='pearson') if isinstance(numeric_data, pd.DataFrame) else pd.DataFrame()
+                if not correlation_matrix.empty:
+                    # Excluir la diagonal (autocorrelación)
+                    mask = ~np.eye(len(correlation_matrix), dtype=bool)
+                    mean_corr = float(np.abs(correlation_matrix.values[mask]).mean())
+                    stability_metrics['metric_correlation'] = mean_corr
+                else:
+                    stability_metrics['metric_correlation'] = 0.0
+            else:
+                stability_metrics['metric_correlation'] = 0.0
             
             self.logger.info("Análisis de robustez completado")
             return stability_metrics
@@ -4195,11 +3815,15 @@ class RobustnessAnalyzer:
         """Calcula la estabilidad del Sharpe Ratio."""
         try:
             sharpe_values = pd.to_numeric(df['Sharpe_Ratio'], errors='coerce').dropna()
+            if not isinstance(sharpe_values, pd.Series):
+                sharpe_values = pd.Series(sharpe_values)
             if len(sharpe_values) < 2:
                 return 0.0
             
             # Calcular coeficiente de variación (menor = más estable)
-            cv = sharpe_values.std() / abs(sharpe_values.mean()) if sharpe_values.mean() != 0 else 0
+            sharpe_mean = float(sharpe_values.mean()) if len(sharpe_values) > 0 else 0.0
+            sharpe_std = float(sharpe_values.std()) if len(sharpe_values) > 0 else 0.0
+            cv = sharpe_std / abs(sharpe_mean) if sharpe_mean != 0 else 0
             stability = max(0, 1 - cv)  # Convertir a métrica de estabilidad
             return float(stability)
         except Exception as e:
@@ -4210,12 +3834,14 @@ class RobustnessAnalyzer:
         """Calcula la estabilidad del Drawdown."""
         try:
             dd_values = pd.to_numeric(df['Max_DD_%'], errors='coerce').dropna()
+            if not isinstance(dd_values, pd.Series):
+                dd_values = pd.Series(dd_values)
             if len(dd_values) < 2:
                 return 0.0
             
             # Calcular estabilidad basada en la dispersión del drawdown
-            dd_std = dd_values.std()
-            dd_mean = abs(dd_values.mean())
+            dd_std = float(dd_values.std()) if len(dd_values) > 0 else 0.0
+            dd_mean = abs(float(dd_values.mean())) if len(dd_values) > 0 else 0.0
             stability = max(0, 1 - (dd_std / dd_mean)) if dd_mean > 0 else 0
             return float(stability)
         except Exception as e:
@@ -4226,12 +3852,14 @@ class RobustnessAnalyzer:
         """Calcula la consistencia de retornos."""
         try:
             cagr_values = pd.to_numeric(df['CAGR'], errors='coerce').dropna()
+            if not isinstance(cagr_values, pd.Series):
+                cagr_values = pd.Series(cagr_values)
             if len(cagr_values) < 2:
                 return 0.0
             
             # Calcular consistencia basada en la variabilidad de CAGR
-            cagr_std = cagr_values.std()
-            cagr_mean = abs(cagr_values.mean())
+            cagr_std = float(cagr_values.std()) if len(cagr_values) > 0 else 0.0
+            cagr_mean = abs(float(cagr_values.mean())) if len(cagr_values) > 0 else 0.0
             consistency = max(0, 1 - (cagr_std / cagr_mean)) if cagr_mean > 0 else 0
             return float(consistency)
         except Exception as e:
@@ -4293,7 +3921,25 @@ class WalkForwardAnalyzer:
                 return {'error': 'Datos insuficientes'}
             
             # Calcular correlación
-            correlation = np.corrcoef(is_values, oos_values)[0, 1] if len(is_values) == len(oos_values) else 0
+            if len(is_values) == len(oos_values) and len(is_values) > 1:
+                try:
+                    # Convertir a numpy arrays de forma segura
+                    is_array = is_values.to_numpy() if hasattr(is_values, 'to_numpy') else np.array(is_values)
+                    oos_array = oos_values.to_numpy() if hasattr(oos_values, 'to_numpy') else np.array(oos_values)
+                    
+                    # Verificar que los arrays sean compatibles
+                    if len(is_array) == len(oos_array) and len(is_array) > 1:
+                        # Convertir a float arrays para evitar problemas de tipado
+                        is_float_array = is_array.astype(float)
+                        oos_float_array = oos_array.astype(float)
+                        correlation_matrix = np.corrcoef(is_float_array, oos_float_array)
+                        correlation = float(correlation_matrix[0, 1]) if correlation_matrix.shape == (2, 2) else 0.0
+                    else:
+                        correlation = 0.0
+                except Exception:
+                    correlation = 0.0
+            else:
+                correlation = 0
             
             # Calcular R²
             r_squared = self._calculate_r_squared(is_values.tolist(), oos_values.tolist())
@@ -4331,7 +3977,7 @@ class WalkForwardAnalyzer:
                 return 0.0
             
             correlation = numerator / (denominator_x * denominator_y) ** 0.5
-            return correlation ** 2
+            return float(correlation ** 2)
             
         except Exception:
             return 0.0
@@ -4351,7 +3997,7 @@ class WalkForwardAnalyzer:
             
             t_stat = mean_val / (std_val / np.sqrt(len(values)))
             # Aproximación simple del p-value
-            p_value = 2 * (1 - norm.cdf(abs(t_stat)))
+            p_value = 2 * (1 - float(norm.cdf(abs(t_stat))))
             return float(p_value)
             
         except Exception:
@@ -4400,7 +4046,7 @@ class WalkForwardAnalyzer:
                 score = correlation * significance_factor
                 scores.append(score)
             
-            return float(np.mean(scores))
+            return float(np.mean(scores)) if scores else 0.0
             
         except Exception as e:
             self.logger.warning(f"Error calculando score de predictibilidad: {e}")
@@ -4458,29 +4104,39 @@ class NullSimulationAnalyzer:
             if len(values) < 2:
                 return {'error': 'Datos insuficientes'}
             
-            original_mean = values.mean()
-            original_std = values.std()
+            # Asegurar que values sea una Serie antes de calcular estadísticas
+            if not isinstance(values, pd.Series):
+                values = pd.Series(values)
+            
+            original_mean = float(values.mean()) if len(values) > 0 else 0.0
+            original_std = float(values.std()) if len(values) > 0 else 0.0
             
             # Simular distribuciones nulas
             null_means = []
             for _ in range(self.n_simulations):
                 # Permutar valores para crear distribución nula
-                shuffled_values = np.random.permutation(values)
+                shuffled_values = np.random.permutation(values.to_numpy() if hasattr(values, 'to_numpy') else np.array(values))
                 null_means.append(shuffled_values.mean())
             
             null_means = np.array(null_means)
             
             # Calcular p-value
-            p_value = np.mean(null_means >= original_mean) if original_mean > 0 else np.mean(null_means <= original_mean)
+            if len(null_means) > 0:
+                p_value = float(np.mean(null_means >= original_mean) if original_mean > 0 else np.mean(null_means <= original_mean))
+            else:
+                p_value = 1.0
             
             # Calcular percentiles
-            percentiles = np.percentile(null_means, [5, 25, 50, 75, 95])
+            if len(null_means) > 0:
+                percentiles = np.percentile(null_means.astype(np.float64), [5, 25, 50, 75, 95])
+            else:
+                percentiles = [0.0, 0.0, 0.0, 0.0, 0.0]
             
             return {
                 'original_mean': float(original_mean),
                 'original_std': float(original_std),
-                'null_mean': float(null_means.mean()),
-                'null_std': float(null_means.std()),
+                'null_mean': float(null_means.mean()) if len(null_means) > 0 else 0.0,
+                'null_std': float(null_means.std()) if len(null_means) > 0 else 0.0,
                 'p_value': float(p_value),
                 'significant': p_value < 0.05,
                 'percentiles': percentiles.tolist(),
@@ -4560,7 +4216,13 @@ class PredictabilityAnalyzer:
             values1 = values1[:min_len]
             values2 = values2[:min_len]
             
-            correlation = np.corrcoef(values1, values2)[0, 1]
+            # Convertir a numpy arrays de forma segura
+            values1_array = values1.to_numpy() if hasattr(values1, 'to_numpy') else np.array(values1)
+            values2_array = values2.to_numpy() if hasattr(values2, 'to_numpy') else np.array(values2)
+            # Convertir a float arrays para evitar problemas de tipado
+            values1_float_array = values1_array.astype(float)
+            values2_float_array = values2_array.astype(float)
+            correlation = np.corrcoef(values1_float_array, values2_float_array)[0, 1]
             return float(correlation) if not np.isnan(correlation) else 0.0
             
         except Exception as e:
@@ -4581,14 +4243,18 @@ class PredictabilityAnalyzer:
                 if len(values) < 2:
                     continue
                 
+                # Asegurar que values sea una Serie antes de calcular estadísticas
+                if not isinstance(values, pd.Series):
+                    values = pd.Series(values)
+                
                 # Estadísticas básicas
-                mean_val = values.mean()
-                std_val = values.std()
-                median_val = values.median()
+                mean_val = float(values.mean()) if len(values) > 0 else 0.0
+                std_val = float(values.std()) if len(values) > 0 else 0.0
+                median_val = float(values.median()) if len(values) > 0 else 0.0
                 
                 # Detectar outliers usando IQR
-                q1 = values.quantile(0.25)
-                q3 = values.quantile(0.75)
+                q1 = float(values.quantile(0.25))
+                q3 = float(values.quantile(0.75))
                 iqr = q3 - q1
                 lower_bound = q1 - 1.5 * iqr
                 upper_bound = q3 + 1.5 * iqr
@@ -4597,8 +4263,8 @@ class PredictabilityAnalyzer:
                 outlier_percentage = len(outliers) / len(values) * 100
                 
                 # Asimetría y curtosis
-                skewness = values.skew()
-                kurtosis = values.kurtosis()
+                skewness = float(values.skew()) if len(values) > 0 else 0.0
+                kurtosis = float(values.kurtosis()) if len(values) > 0 else 0.0
                 
                 analysis_results[col] = {
                     'mean': float(mean_val),
@@ -4634,11 +4300,16 @@ class PredictabilityAnalyzer:
             for metric in available_metrics:
                 values = pd.to_numeric(df[metric], errors='coerce').dropna()
                 
+                # Asegurar que values sea una Serie antes de calcular estadísticas
+                if not isinstance(values, pd.Series):
+                    values = pd.Series(values)
+                
                 if len(values) < 2:
                     continue
                 
                 # Calcular métricas de calidad
-                cv = values.std() / abs(values.mean()) if values.mean() != 0 else 0
+                values_mean = float(values.mean())
+                cv = values.std() / abs(values_mean) if values_mean != 0 else 0
                 range_val = values.max() - values.min()
                 median_absolute_deviation = np.median(np.abs(values - values.median()))
                 
@@ -4736,7 +4407,14 @@ class PredictabilityAnalyzer:
             
             # Calcular matriz de correlación entre métricas IS
             is_data = df[is_cols].apply(pd.to_numeric, errors='coerce')
-            correlation_matrix = is_data.corr()
+            if not is_data.empty:
+                # Asegurar que is_data sea DataFrame antes de calcular correlación
+                if isinstance(is_data, pd.DataFrame):
+                    correlation_matrix = is_data.corr(method='pearson')
+                else:
+                    correlation_matrix = pd.DataFrame()
+            else:
+                correlation_matrix = pd.DataFrame()
             
             # Calcular métricas de predictibilidad multivariada
             mean_correlation = correlation_matrix.values[np.triu_indices_from(correlation_matrix.values, k=1)].mean()
@@ -4956,7 +4634,13 @@ def predictividad_is_oos_empirica_dict(df: pd.DataFrame, split_ratio: float = 0.
                 
                 if len(is_values) >= 2 and len(oos_values) >= 2:
                     min_len = min(len(is_values), len(oos_values))
-                    correlation = np.corrcoef(is_values[:min_len], oos_values[:min_len])[0, 1]
+                    # Convertir a numpy arrays de forma segura
+                    is_array = is_values.to_numpy() if hasattr(is_values, 'to_numpy') else np.array(is_values)
+                    oos_array = oos_values.to_numpy() if hasattr(oos_values, 'to_numpy') else np.array(oos_values)
+                    # Convertir a float arrays para evitar problemas de tipado
+                    is_float_array = is_array[:min_len].astype(float)
+                    oos_float_array = oos_array[:min_len].astype(float)
+                    correlation = np.corrcoef(is_float_array, oos_float_array)[0, 1]
                     
                     if not np.isnan(correlation):
                         total_correlation += abs(correlation)
@@ -5031,11 +4715,11 @@ class AdvancedDataProcessor:
             for col in df.columns:
                 if df[col].dtype == 'object':
                     # Para columnas de texto, usar category si hay pocos valores únicos
-                    if df[col].nunique() / len(df) < 0.5:
+                    if len(df) > 0 and float(df[col].nunique()) / float(len(df)) < 0.5:
                         df[col] = df[col].astype('category')
                 elif df[col].dtype == 'float64':
                     # Para floats, usar float32 si es posible
-                    if df[col].notna().all():
+                    if bool(df[col].notna().all()):
                         df[col] = df[col].astype('float32')
                 elif df[col].dtype == 'int64':
                     # Para ints, usar tipos más pequeños si es posible
@@ -5072,7 +4756,12 @@ class InteractiveVisualizationPreparer:
         """Prepara datos para matriz de correlación interactiva."""
         try:
             numeric_cols = df.select_dtypes(include=[np.number]).columns
-            correlation_matrix = df[numeric_cols].corr()
+            if len(numeric_cols) > 1:
+                # Asegurar que los datos sean numéricos antes de calcular correlación
+                numeric_data = df[numeric_cols].astype(float)
+                correlation_matrix = numeric_data.corr(method='pearson') if isinstance(numeric_data, pd.DataFrame) else pd.DataFrame()
+            else:
+                correlation_matrix = pd.DataFrame()
             
             # Preparar datos para visualización
             corr_data = []
@@ -5107,7 +4796,7 @@ class InteractiveVisualizationPreparer:
             for col in score_cols:
                 if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
                     values = df[col].dropna()
-                    if len(values) > 0:
+                    if isinstance(values, pd.Series) and len(values) > 0:
                         distribution_data[col] = {
                             'values': values.tolist(),
                             'mean': float(values.mean()),
@@ -5137,7 +4826,7 @@ class InteractiveVisualizationPreparer:
             for metric in key_metrics:
                 if metric in df.columns and pd.api.types.is_numeric_dtype(df[metric]):
                     values = df[metric].dropna()
-                    if len(values) > 0:
+                    if isinstance(values, pd.Series) and len(values) > 0:
                         performance_data[metric] = {
                             'values': values.tolist(),
                             'mean': float(values.mean()),
@@ -5194,7 +4883,7 @@ class PostAnalysisProcessor:
             best_score = 0
             if 'Unified_Score' in df.columns:
                 best_idx = df['Unified_Score'].idxmax()
-                if not pd.isna(best_idx):
+                if not bool(pd.isna(best_idx)):
                     best_strategy = df.loc[best_idx]
                     best_score = best_strategy.get('Unified_Score', 0)
             
@@ -5258,7 +4947,7 @@ class PostAnalysisProcessor:
         
         try:
             # Verificar datos faltantes
-            missing_data = df.isnull().sum().sum()
+            missing_data = int(df.isnull().sum().sum())
             if missing_data > 0:
                 warnings.append({
                     'type': 'warning',
@@ -5272,7 +4961,8 @@ class PostAnalysisProcessor:
                 if col in df.columns:
                     values = df[col].dropna()
                     if len(values) > 0:
-                        q1, q3 = values.quantile([0.25, 0.75])
+                        quantiles = values.quantile([0.25, 0.75])
+                        q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                         iqr = q3 - q1
                         outliers = values[(values < q1 - 1.5 * iqr) | (values > q3 + 1.5 * iqr)]
                         if len(outliers) > len(values) * 0.1:
@@ -5299,7 +4989,35 @@ class PostAnalysisProcessor:
                 numeric_cols = df.select_dtypes(include=[np.number]).columns
                 for col in numeric_cols:
                     if col != 'Unified_Score':
-                        corr = df['Unified_Score'].corr(df[col])
+                        # Asegurar que ambas columnas sean Series de float antes de calcular correlación
+                        unified_score_series = df['Unified_Score']
+                        col_series = df[col]
+                        # Forzar ambos a Series de float estrictos
+                        if isinstance(col_series, pd.DataFrame):
+                            if not col_series.empty:
+                                col_series = col_series.iloc[:, 0]
+                            else:
+                                continue
+                        if not isinstance(unified_score_series, pd.Series):
+                            unified_score_series = pd.Series(unified_score_series)
+                        if not isinstance(col_series, pd.Series):
+                            col_series = pd.Series(col_series)
+                        try:
+                            unified_score_float = pd.to_numeric(unified_score_series, errors='coerce')
+                            col_float = pd.to_numeric(col_series, errors='coerce')
+                            # Solo calcular si ambos tienen más de 1 valor válido
+                            if unified_score_float.count() > 1 and col_float.count() > 1:
+                                # Asegurar que ambos sean Series antes de calcular correlación
+                                unified_series = pd.Series(unified_score_float.dropna())
+                                col_series = pd.Series(col_float.dropna())
+                                if len(unified_series) == len(col_series) and len(unified_series) > 1:
+                                    corr = float(unified_series.corr(col_series))
+                                else:
+                                    corr = 0.0
+                            else:
+                                corr = 0.0
+                        except Exception:
+                            corr = 0.0
                         if abs(corr) > 0.5:
                             score_correlations[col] = corr
                 
@@ -5358,12 +5076,12 @@ class PostAnalysisProcessor:
             for metric in risk_metrics:
                 if metric in df.columns:
                     values = df[metric].dropna()
-                    if len(values) > 0:
+                    if isinstance(values, pd.Series) and len(values) > 0:
                         risk_assessment[metric] = {
                             'mean': float(values.mean()),
                             'median': float(values.median()),
                             'max': float(values.max()),
-                            'high_risk_count': len(values[values > values.quantile(0.9)])
+                            'high_risk_count': len(values[values > float(values.quantile(0.9))])
                         }
             
             return risk_assessment
@@ -5382,7 +5100,7 @@ class PostAnalysisProcessor:
             for metric in perf_metrics:
                 if metric in df.columns:
                     values = df[metric].dropna()
-                    if len(values) > 0:
+                    if isinstance(values, pd.Series) and len(values) > 0:
                         performance_metrics[metric] = {
                             'mean': float(values.mean()),
                             'median': float(values.median()),
@@ -5499,6 +5217,9 @@ class ExtraKPIManager:
                 if kpi_name in df.columns:
                     # Normalizar el KPI
                     kpi_data = df[kpi_name].fillna(0)
+                    # Asegurar que kpi_data sea una Serie antes de pasar a _normalize_extra_kpi
+                    if not isinstance(kpi_data, pd.Series):
+                        kpi_data = pd.Series(kpi_data, index=df.index)
                     normalized_score = self._normalize_extra_kpi(kpi_data, kpi_name)
                     extra_scores.append(normalized_score)
                     extra_weights.append(kpi_config["weight"])
@@ -5544,7 +5265,7 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Avgtradedur", "Avg_Bars_in_Trade"]:
                 # Duración: menor es mejor para intradía
-                max_duration = kpi_data.quantile(0.9)
+                max_duration = float(kpi_data.quantile(0.9))
                 normalized = 1 - (kpi_data / max_duration).clip(0, 1)
                 return normalized
                 
@@ -5558,7 +5279,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Avg_Mae", "Avg_Mfe"]:
                 # Valores monetarios: usar percentiles
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5567,7 +5289,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Sortino_Ratio", "Sharpe_Ratio"]:
                 # Ratios: usar percentiles robustos
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5576,7 +5299,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["RecoveryFactor"]:
                 # Recovery Factor: mayor es mejor
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5585,7 +5309,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Max_Drawdown_Duration", "Maxdddur"]:
                 # Duración de drawdown: menor es mejor
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5594,7 +5319,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Ulcer_Index_%"]:
                 # Ulcer Index: menor es mejor
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5603,7 +5329,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Payout_ratio"]:
                 # Payout ratio: mayor es mejor
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5612,7 +5339,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Marratio"]:
                 # Mar ratio: mayor es mejor
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5621,7 +5349,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["CVaR_95%"]:
                 # CVaR: menor es mejor (menor riesgo)
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5630,7 +5359,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Expectancy"]:
                 # Expectancy: mayor es mejor
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5639,7 +5369,8 @@ class ExtraKPIManager:
                 
             elif kpi_name in ["Max_Consec_Losses"]:
                 # Máximo de pérdidas consecutivas: menor es mejor
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5648,7 +5379,8 @@ class ExtraKPIManager:
                 
             else:
                 # Normalización genérica por percentiles
-                q1, q3 = kpi_data.quantile([0.1, 0.9])
+                quantiles = kpi_data.quantile([0.1, 0.9])
+                q1, q3 = float(quantiles.iloc[0]), float(quantiles.iloc[1])
                 iqr = q3 - q1
                 if iqr == 0:
                     return pd.Series(0.5, index=kpi_data.index)
@@ -5722,11 +5454,553 @@ class ExtraKPIManager:
                 "Considera SQN para calidad del sistema"
             ],
             "Breakout": [
-                "Enfócate en Payout_ratio para relación riesgo-recompensa",
-                "Monitorea Max_Consec_Losses para streaks de pérdidas",
-                "Usa Sortino_Ratio para protección contra drawdowns",
-                "Considera RecoveryFactor para recuperación tras pérdidas"
+                "Prioriza Winrate para frecuencia de éxito",
+                "Monitorea Payout_ratio para relación ganancia/pérdida",
+                "Usa Max_Consec_Losses para gestionar series de pérdidas",
+                "Considera RecoveryFactor para recuperación tras series de pérdidas"
             ]
         }
+        return recommendations.get(trading_style, [])
+
+
+class MarketRegimeDetectorEnhanced:
+    """
+    Detector de regímenes de mercado usando clustering y análisis de características.
+    """
+    
+    def __init__(self, config: Optional[Dict] = None):
+        """
+        Inicializa el detector de regímenes de mercado.
         
-        return recommendations.get(trading_style, ["Usa los KPIs extra recomendados para este estilo"])
+        Args:
+            config: Configuración opcional
+        """
+        self.config = config or {}
+        self.logger = setup_logger("kforce")
+        self.n_clusters = self.config.get('n_clusters', 3)
+        self.random_state = self.config.get('random_state', 42)
+        self.feature_columns = self.config.get('feature_columns', [])
+        
+    def extract_market_features(self, market_data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Extrae características del mercado para detección de regímenes.
+        
+        Args:
+            market_data: DataFrame con datos de mercado
+            
+        Returns:
+            DataFrame con características extraídas
+        """
+        try:
+            self.logger.info("Extrayendo características de mercado")
+            
+            # Asegurar que features_df es un DataFrame de pandas
+            features_df: pd.DataFrame = market_data.copy()
+            
+            # Características básicas de volatilidad
+            if 'Close' in features_df.columns:
+                # Retornos
+                features_df['returns'] = features_df['Close'].pct_change()
+                features_df['log_returns'] = np.log(features_df['Close'] / features_df['Close'].shift(1))
+                
+                # Volatilidad
+                features_df['volatility'] = features_df['returns'].rolling(window=20).std()
+                features_df['volatility_ma'] = features_df['volatility'].rolling(window=50).mean()
+                
+                                # RSI
+                features_df['rsi'] = self._calculate_rsi(features_df['Close'])
+                
+                # Momentum
+                features_df['momentum'] = features_df['Close'] / features_df['Close'].shift(10) - 1
+                features_df['momentum_ma'] = features_df['momentum'].rolling(window=20).mean()
+                
+                # Características de tendencia
+                features_df['trend_20'] = features_df['Close'].rolling(window=20).mean()
+                features_df['trend_50'] = features_df['Close'].rolling(window=50).mean()
+                features_df['trend_strength'] = (features_df['trend_20'] - features_df['trend_50']) / features_df['trend_50']
+                
+                # Características de volumen (si está disponible)
+                if 'Volume' in features_df.columns:
+                    features_df['volume_ma'] = features_df['Volume'].rolling(window=20).mean()
+                    features_df['volume_ratio'] = features_df['Volume'] / features_df['volume_ma']
+                else:
+                    features_df['volume_ratio'] = 1.0
+                
+                # Características de volatilidad adicionales
+                features_df['high_low_ratio'] = features_df['High'] / features_df['Low'] if 'High' in features_df.columns and 'Low' in features_df.columns else 1.0
+                features_df['price_range'] = (features_df['High'] - features_df['Low']) / features_df['Close'] if 'High' in features_df.columns and 'Low' in features_df.columns else 0.0
+                
+                # Limpiar valores NaN
+                features_df = features_df.fillna(method='ffill').fillna(method='bfill').fillna(0)
+                
+                self.logger.info(f"Características extraídas: {list(features_df.columns)}")
+                return features_df
+            else:
+                self.logger.warning("No se encontró columna 'Close' en los datos de mercado")
+                return market_data
+        except Exception as e:
+            self.logger.error(f"Error extrayendo características de mercado: {e}")
+            return market_data
+
+# --- FIN DEL MÓDULO core_engine_enhanced.py ---
+# --- Espacio reservado para futuras ampliaciones y utilidades ---
+
+class DarwinLabsMetrics:
+    """
+    Sistema predictivo Darwin Labs orientado a objetivos de DarwinEX.
+    Predice comportamiento de estrategias y proporciona recomendaciones específicas
+    para alcanzar los objetivos de captación de capital de terceros.
+    """
+    
+    def __init__(self, config_manager: Optional[ConfigManagerEnhanced] = None):
+        self.config_manager = config_manager or ConfigManagerEnhanced()
+        self.logger = setup_logger("darwin_labs")
+        
+        # Configuración predictiva Darwin Labs (orientada a objetivos DarwinEX)
+        self.metrics_config = {
+            # Pesos para predicción de comportamiento
+            "years_running_weight": 0.25,
+            "lea_os_weight": 0.40,
+            "engine_type_bonus": 5.0,
+            "semi_algo_bonus": 2.5,
+            
+            # Umbrales para predicción de éxito
+            "correlation_threshold": 0.25,
+            "frequency_stability_threshold": 0.30,
+            "dd_correlation_threshold": 0.60,
+            "min_trade_frequency": 50,
+            "automation_threshold": 0.8,
+            
+            # Objetivos DarwinEX específicos
+            "darwinex_targets": {
+                "min_score": 75,  # Score mínimo para considerar viable
+                "target_capital": 100000,  # Capital objetivo por estrategia
+                "max_drawdown": 0.15,  # Drawdown máximo aceptable
+                "min_sharpe": 1.2,  # Sharpe mínimo
+                "target_return": 0.20,  # Retorno objetivo anual
+                "stability_threshold": 0.7,  # Umbral de estabilidad
+                "min_track_record": 2.0,  # Años mínimos de track record
+                "max_correlation": 0.3  # Correlación máxima entre estrategias
+            },
+            
+            # Factores de predicción para objetivos
+            "prediction_factors": {
+                "market_regime_adaptation": 0.3,  # Adaptación a regímenes
+                "risk_management": 0.25,  # Gestión de riesgo
+                "scalability": 0.2,  # Escalabilidad
+                "consistency": 0.15,  # Consistencia
+                "innovation": 0.1  # Innovación
+            },
+            
+            # Criterios de asignación de capital
+            "capital_allocation": {
+                "gold_threshold": 85,  # Score para categoría Gold
+                "silver_threshold": 75,  # Score para categoría Silver
+                "bronze_threshold": 60,  # Score para categoría Bronze
+                "gold_capital": 100000,  # Capital inicial Gold
+                "silver_capital": 25000,  # Capital inicial Silver
+                "bronze_capital": 13000,  # Capital inicial Bronze
+                "max_escalation_gold": 1000000,  # Escalación máxima Gold
+                "max_escalation_silver": 250000,  # Escalación máxima Silver
+                "max_escalation_bronze": 50000   # Escalación máxima Bronze
+            }
+        }
+    
+    def calculate_years_running(self, df: pd.DataFrame, is_development: bool = False) -> pd.Series:
+        """
+        Calcula antigüedad del track-record en años.
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            is_development: True si las estrategias están en desarrollo (sin fecha real)
+            
+        Returns:
+            Series con años de antigüedad
+        """
+        try:
+            if is_development:
+                # Para estrategias NUEVAS, usar valor mínimo
+                self.logger.info("🔬 Estrategias NUEVAS detectadas - usando antigüedad mínima")
+                return pd.Series(0.1, index=df.index)  # 1.2 meses por defecto para estrategias nuevas
+            
+            if 'Total_Data_Months' in df.columns:
+                total_data_series = df['Total_Data_Months']
+                # Verificar si hay valores no-NaN
+                if len(total_data_series.dropna()) > 0:
+                    max_months = total_data_series.max()
+                    # Verificar que max_months es un valor válido
+                    if isinstance(max_months, (int, float)) and not pd.isna(max_months):
+                        years_running = float(max_months) / 12
+                        return pd.Series(years_running, index=df.index)
+                # Si no se cumplen las condiciones, usar valor por defecto
+                self.logger.warning("Datos de Total_Data_Months no válidos, usando valor por defecto")
+                return pd.Series(5.0, index=df.index)
+            else:
+                # Fallback: estimar desde primera fecha de datos
+                self.logger.warning("Columna Total_Data_Months no encontrada, usando valor por defecto")
+                return pd.Series(5.0, index=df.index)
+        except Exception as e:
+            self.logger.error(f"Error calculando years_running: {e}")
+            return pd.Series(5.0, index=df.index)
+    
+    def calculate_lea(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Calcula Loss Expectancy Average (Aversión a la pérdida).
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            
+        Returns:
+            Series con valores LEA
+        """
+        try:
+            # LEA = promedio de pérdidas esperadas
+            if 'Avg_Loss' in df.columns:
+                return pd.Series(df['Avg_Loss'].fillna(0), index=df.index)
+            elif 'Loss_Factor' in df.columns:
+                return pd.Series(df['Loss_Factor'].fillna(0), index=df.index)
+            elif 'Expectancy' in df.columns:
+                # Usar Expectancy como proxy para LEA
+                return pd.Series(df['Expectancy'].fillna(0), index=df.index)
+            else:
+                # Calcular desde métricas disponibles
+                if 'Win_Rate' in df.columns and 'Profit_Factor' in df.columns:
+                    win_rate = df['Win_Rate'].fillna(0.5)
+                    profit_factor = df['Profit_Factor'].fillna(1.0)
+                    # LEA aproximado basado en win rate y profit factor
+                    lea = (win_rate * profit_factor - (1 - win_rate)) / 100
+                    return pd.Series(lea, index=df.index)
+                else:
+                    return pd.Series(0, index=df.index)
+        except Exception as e:
+            self.logger.error(f"Error calculando LEA: {e}")
+            return pd.Series(0, index=df.index)
+    
+    def calculate_os(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Calcula Overall System score (Tendencia del sistema).
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            
+        Returns:
+            Series con valores OS
+        """
+        try:
+            # OS = combinación de métricas de rendimiento
+            metrics = ['Sharpe_Ratio', 'Profit_Factor', 'Win_Rate', 'CAGR']
+            available_metrics = [m for m in metrics if m in df.columns]
+            
+            if available_metrics:
+                # Normalizar y combinar métricas
+                normalized = df[available_metrics].apply(lambda x: (x - x.mean()) / x.std())
+                os_score = normalized.mean(axis=1)
+                return pd.Series(os_score.fillna(0), index=df.index)
+            else:
+                return pd.Series(0, index=df.index)
+        except Exception as e:
+            self.logger.error(f"Error calculando OS: {e}")
+            return pd.Series(0, index=df.index)
+    
+    def calculate_engine_type(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Clasifica tipo de estrategia algorítmica según métricas de automatización.
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            
+        Returns:
+            Series con tipos de engine algorítmico
+        """
+        try:
+            engine_types = []
+            for idx in df.index:
+                # Clasificación basada en métricas de trading algorítmico
+                if 'Trade_Frequency' in df.columns and df.loc[idx, 'Trade_Frequency'] > self.metrics_config["min_trade_frequency"]:
+                    # Alta frecuencia = algoritmo puro
+                    engine_types.append('algo')
+                elif 'Strategy_Type' in df.columns:
+                    strategy_type = str(df.loc[idx, 'Strategy_Type']).lower()
+                    if any(keyword in strategy_type for keyword in ['algo', 'automated', 'bot', 'robot', 'ea']):
+                        engine_types.append('algo')
+                    elif any(keyword in strategy_type for keyword in ['semi', 'hybrid', 'assisted']):
+                        engine_types.append('semi_algo')
+                    else:
+                        # Por defecto, considerar como algorítmico si no especifica manual
+                        engine_types.append('algo')
+                elif 'Automation_Level' in df.columns:
+                    # Usar nivel de automatización si está disponible
+                    automation_level = df.loc[idx, 'Automation_Level']
+                    if automation_level >= self.metrics_config["automation_threshold"]:
+                        engine_types.append('algo')
+                    elif automation_level >= 0.5:
+                        engine_types.append('semi_algo')
+                    else:
+                        engine_types.append('algo')  # Por defecto algorítmico
+                else:
+                    # En este flujo, todas las estrategias se consideran algorítmicas
+                    engine_types.append('algo')
+            
+            return pd.Series(engine_types, index=df.index)
+        except Exception as e:
+            self.logger.error(f"Error calculando engine_type: {e}")
+            # Por defecto, todas las estrategias son algorítmicas en este flujo
+            return pd.Series(['algo'] * len(df), index=df.index)
+    
+    def calculate_darwin_score(self, df: pd.DataFrame, is_development: bool = False) -> pd.Series:
+        """
+        Calcula score predictivo Darwin Labs orientado a objetivos DarwinEX.
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            is_development: True si las estrategias están en desarrollo
+            
+        Returns:
+            Series con scores Darwin (0-100)
+        """
+        try:
+            self.logger.info("Calculando score predictivo Darwin Labs...")
+            
+            # Detectar automáticamente si son estrategias en desarrollo
+            if not is_development:
+                # Verificar si los datos sugieren desarrollo
+                has_total_data_months = False
+                if 'Total_Data_Months' in df.columns:
+                    total_data_series = df['Total_Data_Months']
+                    # Verificar si hay valores no-NaN
+                    if len(total_data_series.dropna()) > 0:
+                        max_months = total_data_series.max()
+                        # Verificar que max_months es un valor válido
+                        if isinstance(max_months, (int, float)) and not pd.isna(max_months):
+                            has_total_data_months = float(max_months) > 12
+                
+                has_real_track_record = any([
+                    'Years_Running' in df.columns,
+                    has_total_data_months
+                ])
+                
+                if not has_real_track_record:
+                    is_development = True
+                    self.logger.info("🔬 Detectadas estrategias en desarrollo automáticamente")
+            
+            # Componentes del score
+            years_running = self.calculate_years_running(df, is_development)
+            lea = self.calculate_lea(df)
+            os = self.calculate_os(df)
+            engine_type = self.calculate_engine_type(df)
+            
+            # Predicción de comportamiento para objetivos DarwinEX
+            behavior_prediction = self._predict_strategy_behavior(df)
+            
+            # Ajustar ponderaciones para estrategias en desarrollo
+            if is_development:
+                self.logger.info("🔬 Aplicando ponderaciones adaptadas para estrategias en desarrollo")
+                # Reducir peso de antigüedad y aumentar peso de métricas de rendimiento
+                years_weight = self.metrics_config["years_running_weight"] * 0.3  # Reducir peso
+                performance_weight = 1.0 - years_weight  # Aumentar peso de rendimiento
+            else:
+                years_weight = self.metrics_config["years_running_weight"]
+                performance_weight = 1.0 - years_weight
+            
+            # Ponderaciones según metodología Darwin Labs (orientada a objetivos)
+            score = (
+                years_running * years_weight * 10 +  # Escalar años con peso ajustado
+                (lea > 0).astype(int) * (performance_weight * 0.4 * 50) +  # LEA con peso ajustado
+                (os > 0).astype(int) * (performance_weight * 0.6 * 50) +   # OS con peso ajustado
+                (engine_type == 'algo').astype(int) * self.metrics_config["engine_type_bonus"] +  # Bonus por algoritmo puro
+                (engine_type == 'semi_algo').astype(int) * self.metrics_config["semi_algo_bonus"] +  # Bonus reducido por semi-algoritmo
+                behavior_prediction * 10  # Bonus por comportamiento predictivo
+            )
+            
+            # Normalizar a rango 0-100
+            score = score.clip(0, 100)
+            
+            self.logger.info(f"Score predictivo Darwin Labs calculado para {len(df)} estrategias")
+            return score
+            
+        except Exception as e:
+            self.logger.error(f"Error calculando Darwin score: {e}")
+            return pd.Series(50, index=df.index)
+    
+    def _predict_strategy_behavior(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Predice comportamiento de estrategias para objetivos DarwinEX.
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            
+        Returns:
+            Series con predicciones de comportamiento (0-1)
+        """
+        try:
+            behavior_scores = []
+            
+            for idx in df.index:
+                score = 0.0
+                
+                # Factor 1: Adaptación a regímenes de mercado
+                if 'Sharpe_Ratio' in df.columns and 'CAGR' in df.columns:
+                    sharpe = df.loc[idx, 'Sharpe_Ratio']
+                    cagr = df.loc[idx, 'CAGR']
+                    if sharpe >= self.metrics_config["darwinex_targets"]["min_sharpe"]:
+                        score += self.metrics_config["prediction_factors"]["market_regime_adaptation"]
+                
+                # Factor 2: Gestión de riesgo
+                if 'Max_Drawdown' in df.columns:
+                    max_dd = abs(df.loc[idx, 'Max_Drawdown'])
+                    if max_dd <= self.metrics_config["darwinex_targets"]["max_drawdown"]:
+                        score += self.metrics_config["prediction_factors"]["risk_management"]
+                
+                # Factor 3: Escalabilidad
+                if 'Trade_Frequency' in df.columns:
+                    freq = df.loc[idx, 'Trade_Frequency']
+                    if freq >= self.metrics_config["min_trade_frequency"]:
+                        score += self.metrics_config["prediction_factors"]["scalability"]
+                
+                # Factor 4: Consistencia
+                if 'Win_Rate' in df.columns and 'Profit_Factor' in df.columns:
+                    win_rate = df.loc[idx, 'Win_Rate']
+                    profit_factor = df.loc[idx, 'Profit_Factor']
+                    if win_rate >= 50 and profit_factor >= 1.5:
+                        score += self.metrics_config["prediction_factors"]["consistency"]
+                
+                # Factor 5: Innovación (basado en antigüedad y rendimiento)
+                years = self.calculate_years_running(df).iloc[idx]
+                if years >= self.metrics_config["darwinex_targets"]["min_track_record"]:
+                    score += self.metrics_config["prediction_factors"]["innovation"]
+                
+                behavior_scores.append(score)
+            
+            return pd.Series(behavior_scores, index=df.index)
+            
+        except Exception as e:
+            self.logger.error(f"Error prediciendo comportamiento: {e}")
+            return pd.Series(0.5, index=df.index)
+    
+    def get_capital_allocation(self, darwin_score: float) -> Dict[str, Any]:
+        """
+        Obtiene reglas de asignación de capital según score Darwin.
+        
+        Args:
+            darwin_score: Score Darwin Labs (0-100)
+            
+        Returns:
+            Diccionario con reglas de asignación
+        """
+        targets = self.metrics_config["darwinex_targets"]
+        allocation = self.metrics_config["capital_allocation"]
+        
+        if darwin_score >= allocation["gold_threshold"]:
+            return {
+                "category": "Gold",
+                "initial_ticket": allocation["gold_capital"],
+                "max_escalation": allocation["max_escalation_gold"],
+                "description": "Estrategia premium - Máxima asignación de capital",
+                "prediction": "Alta probabilidad de éxito en DarwinEX",
+                "recommendations": [
+                    "Aprovechar escalación máxima de capital",
+                    "Foco en diversificación de mercados",
+                    "Mantener estándares de calidad premium"
+                ]
+            }
+        elif darwin_score >= allocation["silver_threshold"]:
+            return {
+                "category": "Silver", 
+                "initial_ticket": allocation["silver_capital"],
+                "max_escalation": allocation["max_escalation_silver"],
+                "description": "Estrategia de alta calidad - Asignación media",
+                "prediction": "Buena probabilidad de éxito con optimizaciones",
+                "recommendations": [
+                    "Optimizar gestión de riesgo",
+                    "Mejorar consistencia de rendimiento",
+                    "Considerar escalación gradual"
+                ]
+            }
+        elif darwin_score >= allocation["bronze_threshold"]:
+            return {
+                "category": "Bronze",
+                "initial_ticket": allocation["bronze_capital"],
+                "max_escalation": allocation["max_escalation_bronze"],
+                "description": "Estrategia aceptable - Asignación limitada",
+                "prediction": "Probabilidad moderada, requiere mejoras",
+                "recommendations": [
+                    "Implementar mejoras en gestión de riesgo",
+                    "Aumentar track record mínimo",
+                    "Optimizar métricas de rendimiento"
+                ]
+            }
+        else:
+            return {
+                "category": "Rejected",
+                "initial_ticket": 0,
+                "max_escalation": 0,
+                "description": "Estrategia no cumple criterios mínimos",
+                "prediction": "Baja probabilidad de éxito en DarwinEX",
+                "recommendations": [
+                    "Revisar criterios de entrada",
+                    "Mejorar métricas fundamentales",
+                    "Considerar estrategia alternativa"
+                ]
+            }
+    
+    def apply_darwin_analysis(self, df: pd.DataFrame, is_development: bool = False) -> pd.DataFrame:
+        """
+        Aplica análisis completo Darwin Labs al DataFrame.
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            is_development: True si las estrategias están en desarrollo
+            
+        Returns:
+            DataFrame con métricas Darwin Labs añadidas
+        """
+        try:
+            self.logger.info("Aplicando análisis Darwin Labs...")
+            
+            # Detectar automáticamente si son estrategias en desarrollo
+            if not is_development:
+                # Verificar si los datos sugieren desarrollo
+                has_total_data_months = False
+                if 'Total_Data_Months' in df.columns:
+                    total_data_series = df['Total_Data_Months']
+                    # Verificar si hay valores no-NaN
+                    if len(total_data_series.dropna()) > 0:
+                        max_months = total_data_series.max()
+                        # Verificar que max_months es un valor válido
+                        if isinstance(max_months, (int, float)) and not pd.isna(max_months):
+                            has_total_data_months = float(max_months) > 12
+                
+                has_real_track_record = any([
+                    'Years_Running' in df.columns,
+                    has_total_data_months
+                ])
+                
+                if not has_real_track_record:
+                    is_development = True
+                    self.logger.info("🔬 Detectadas estrategias en desarrollo automáticamente")
+            
+            # Calcular métricas Darwin
+            df['Darwin_Years_Running'] = self.calculate_years_running(df, is_development)
+            df['Darwin_LEA'] = self.calculate_lea(df)
+            df['Darwin_OS'] = self.calculate_os(df)
+            df['Darwin_Engine_Type'] = self.calculate_engine_type(df)
+            df['Darwin_Score'] = self.calculate_darwin_score(df, is_development)
+            
+            # Aplicar reglas de asignación de capital
+            capital_allocations = []
+            for score in df['Darwin_Score']:
+                allocation = self.get_capital_allocation(score)
+                capital_allocations.append(allocation)
+            
+            # Añadir información de capital al DataFrame
+            df['Darwin_Category'] = [alloc['category'] for alloc in capital_allocations]
+            df['Darwin_Initial_Ticket'] = [alloc['initial_ticket'] for alloc in capital_allocations]
+            df['Darwin_Max_Escalation'] = [alloc['max_escalation'] for alloc in capital_allocations]
+            df['Darwin_Description'] = [alloc['description'] for alloc in capital_allocations]
+            
+            self.logger.info("Análisis Darwin Labs completado exitosamente")
+            return df
+            
+        except Exception as e:
+            self.logger.error(f"Error aplicando análisis Darwin Labs: {e}")
+            return df
