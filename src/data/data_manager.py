@@ -175,8 +175,34 @@ class DataManager:
         
         self.logger.info("DataManager inicializado correctamente")
         
-        # No cargar datos automáticamente - solo cuando se solicite
-        self.logger.info("DataManager listo - los datos se cargarán cuando se solicite")
+        # Cargar datos automáticamente si están disponibles
+        self._auto_load_data()
+        
+    def _auto_load_data(self):
+        """Carga datos automáticamente si están disponibles."""
+        try:
+            # Intentar cargar datos de INPUTTEST primero
+            if self.config['development']['use_inputtest']:
+                inputtest_data = load_inputtest_data_pipeline()
+                kpis_data = inputtest_data.get('kpis')
+                if kpis_data is not None and not kpis_data.empty:
+                    self._kpis_data = kpis_data
+                    self._load_status['kpis'] = True
+                    self.logger.info(f"✅ Datos de INPUTTEST cargados automáticamente: {len(kpis_data)} registros")
+                    return
+            
+            # Intentar cargar datos por defecto
+            default_kpis = self.config['default_files']['kpis_file']
+            if os.path.exists(default_kpis):
+                success = self.load_kpis_data(default_kpis)
+                if success and self._kpis_data is not None:
+                    self.logger.info(f"✅ Datos por defecto cargados automáticamente: {len(self._kpis_data)} registros")
+                    return
+            
+            self.logger.info("⚠️ No se encontraron datos para carga automática")
+            
+        except Exception as e:
+            self.logger.error(f"Error en carga automática: {e}")
     
     # ===================== PROPIEDADES Y GETTERS =====================
     
@@ -288,12 +314,15 @@ class DataManager:
             # Cargar archivo
             df = self._load_file_by_format(file_path)
             
-            if df.empty:
+            if df is None or df.empty:
                 self.logger.error(f"No se pudieron cargar datos de: {file_path}")
                 return pd.DataFrame()
             
+            self.logger.info(f"Archivo cargado exitosamente: {len(df)} filas, {len(df.columns)} columnas")
+            
             # Normalizar nombres de columnas (preservando datos reales)
             df = self._normalize_column_names(df)
+            self.logger.info(f"Columnas normalizadas: {len(df)} filas, {len(df.columns)} columnas")
             
             # Validar datos (sin modificar valores)
             is_valid, errors = self._validate_dataframe(df)
@@ -302,7 +331,20 @@ class DataManager:
             
             # Limpiar datos básicos (sin cocinamiento)
             df = self._clean_data_basic(df)
-            
+            self.logger.info(f"Datos limpios: {len(df)} filas, {len(df.columns)} columnas")
+
+            # --- CORRECCIÓN: Renombrar columnas críticas al formato requerido por el core engine ---
+            required_case_map = {
+                'strategy_name': 'Strategy_Name',
+                'cagr': 'CAGR',
+                'drawdown': 'Drawdown',
+                'sharpe_ratio': 'Sharpe Ratio',
+                'profit_factor': 'Profit factor',
+                'unified_score': 'Unified_Score',
+            }
+            df.rename(columns={k: v for k, v in required_case_map.items() if k in df.columns}, inplace=True)
+            self.logger.info(f"Columnas finales tras renombrado crítico: {list(df.columns)}")
+
             self.logger.info(f"Datos cargados exitosamente: {len(df)} filas, {len(df.columns)} columnas")
             return df
             
@@ -324,7 +366,7 @@ class DataManager:
             path_obj = Path(file_path)
             
             if not path_obj.exists():
-                self.logger.error(f"Archivo no encontrado: {file_path}")
+                self.logger.error(f"Archivo no encontrado: {file_path}. SUGERENCIA: Verifica la ruta o selecciona el archivo correcto desde la GUI.")
                 return pd.DataFrame()
             
             # Detectar formato por extensión
@@ -341,14 +383,14 @@ class DataManager:
                 # Cargar Excel
                 df = pd.read_excel(file_path, engine='openpyxl')
             else:
-                self.logger.error(f"Formato no soportado: {path_obj.suffix}")
+                self.logger.error(f"Formato no soportado: {path_obj.suffix}. SUGERENCIA: Usa archivos .csv o .xlsx válidos.")
                 return pd.DataFrame()
             
             self.logger.info(f"Archivo cargado: {len(df)} filas, {len(df.columns)} columnas")
             return df
             
         except Exception as e:
-            self.logger.error(f"Error cargando archivo {file_path}: {e}")
+            self.logger.error(f"Error cargando archivo {file_path}: {e}. SUGERENCIA: Revisa el formato y el delimitador del archivo.")
             return pd.DataFrame()
     
     def _normalize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -421,7 +463,7 @@ class DataManager:
         errors = []
         
         # Verificar que no esté vacío
-        if df.empty:
+        if df is None or df.empty:
             errors.append("DataFrame está vacío")
             return False, errors
         
@@ -429,8 +471,7 @@ class DataManager:
         required_columns = self.config['required_columns']
         missing_required = [col for col in required_columns if col not in df.columns]
         if missing_required:
-            # Solo mostrar warning, no error crítico
-            self.logger.warning(f"Columnas requeridas faltantes: {missing_required}")
+            self.logger.warning(f"Columnas requeridas faltantes: {missing_required}. SUGERENCIA: Verifica el mapeo y la normalización de columnas en el archivo fuente. Puedes editar el archivo o ajustar el mapeo en DataManager.COLUMN_MAPPINGS.")
             # No agregar a errores para no bloquear el proceso
         
         # Verificar tipos de datos numéricos
@@ -465,7 +506,7 @@ class DataManager:
                 # Intentar convertir a numérico sin modificar original
                 try:
                     pd.to_numeric(df[col], errors='coerce')
-                except:
+                except Exception:
                     errors.append(f"Columna {col} no es numérica")
         
         return errors
@@ -488,9 +529,12 @@ class DataManager:
         for col in numeric_columns:
             if col in df.columns:
                 # Verificar valores infinitos
-                inf_check = np.isinf(df[col])
-                if inf_check.any():
-                    errors.append(f"Valores infinitos detectados en {col}")
+                try:
+                    inf_check = np.isinf(df[col])
+                    if inf_check.any():
+                        errors.append(f"Valores infinitos detectados en {col}")
+                except Exception:
+                    pass  # Ignorar errores de validación
                 
                 # Verificar valores extremos
                 max_val = df[col].abs().max()
@@ -499,7 +543,7 @@ class DataManager:
                     if pd.notna(max_val_scalar):
                         if max_val_scalar > 1e6:
                             errors.append(f"Valores extremos detectados en {col}")
-                except:
+                except Exception:
                     pass  # Ignorar errores de validación
         
         return errors
@@ -593,7 +637,7 @@ class DataManager:
             
             self._market_data = self.load_and_prepare_data_pipeline(file_path)
             
-            if len(self._market_data) > 0:
+            if self._market_data is not None and not self._market_data.empty:
                 self._load_status['market'] = True
                 self.logger.info(f"Datos de mercado cargados: {len(self._market_data)} registros")
                 return True
@@ -625,7 +669,7 @@ class DataManager:
                 self.logger.info(f"KPIs cargados: {len(self._kpis_data)} registros")
                 return True
             else:
-                self.logger.error("No se pudieron cargar KPIs")
+                self.logger.error("No se pudieron cargar KPIs - DataFrame vacío o None")
                 return False
                 
         except Exception as e:
@@ -715,7 +759,7 @@ class DataManager:
                     if pd.notna(max_val_scalar):
                         if max_val_scalar > 1e6:
                             errors.append(f"Valores extremos detectados en {col}")
-            except:
+                except Exception:
                     pass  # Ignorar errores de validación
         
         return len(errors) == 0, errors

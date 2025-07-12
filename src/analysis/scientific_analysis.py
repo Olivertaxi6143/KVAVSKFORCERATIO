@@ -294,11 +294,13 @@ class ScientificAnalysisFilter:
             
             # Agregar metadatos del filtrado
             if isinstance(results, dict):
-                results["filtered_strategies_count"] = len(strategies_df)
-                results["analysis_type"] = "comprehensive"
-                results["timestamp"] = time.time()
+                results_dict: Dict[str, Any] = results
+                results_dict["filtered_strategies_count"] = len(strategies_df)
+                results_dict["analysis_type"] = "comprehensive"
+                results_dict["timestamp"] = time.time()
+                results = results_dict
             else:
-                results = {
+                results: Dict[str, Any] = {
                     "comprehensive_analysis": results,
                     "filtered_strategies_count": len(strategies_df),
                     "analysis_type": "comprehensive",
@@ -366,8 +368,10 @@ class ScientificVisualizationManager:
             results = self.visualization_preparer.prepare_correlation_matrix(self.filtered_strategies)
             
             # Agregar metadatos
-            results["filtered_strategies_count"] = len(self.filtered_strategies)
-            results["visualization_type"] = "correlation_matrix"
+            results_dict: Dict[str, Any] = results
+            results_dict["filtered_strategies_count"] = len(self.filtered_strategies)
+            results_dict["visualization_type"] = "correlation_matrix"
+            results = results_dict
             
             logger.info("✅ Matriz de correlación preparada")
             return results
@@ -384,8 +388,10 @@ class ScientificVisualizationManager:
             results = self.visualization_preparer.prepare_score_distribution(self.filtered_strategies)
             
             # Agregar metadatos
-            results["filtered_strategies_count"] = len(self.filtered_strategies)
-            results["visualization_type"] = "score_distribution"
+            results_dict: Dict[str, Any] = results
+            results_dict["filtered_strategies_count"] = len(self.filtered_strategies)
+            results_dict["visualization_type"] = "score_distribution"
+            results = results_dict
             
             logger.info("✅ Distribución de scores preparada")
             return results
@@ -402,8 +408,10 @@ class ScientificVisualizationManager:
             results = self.visualization_preparer.prepare_performance_metrics(self.filtered_strategies)
             
             # Agregar metadatos
-            results["filtered_strategies_count"] = len(self.filtered_strategies)
-            results["visualization_type"] = "performance_metrics"
+            results_dict: Dict[str, Any] = results
+            results_dict["filtered_strategies_count"] = len(self.filtered_strategies)
+            results_dict["visualization_type"] = "performance_metrics"
+            results = results_dict
             
             logger.info("✅ Métricas de rendimiento preparadas")
             return results
