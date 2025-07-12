@@ -2,6 +2,62 @@
 
 ## Fase 0: Investigación y Auditoría Profesional
 
+### Principios y Buenas Prácticas para GUIs Cuantitativas
+
+#### 1. Principios Universales de UX/UI en Finanzas y Trading
+- **Jerarquía Visual y Claridad**: Lo más importante debe ser lo más visible (ranking, top estrategias, alertas). Usa colores, tamaño y posición para guiar la atención. Evita saturación: menos es más, pero sin perder información clave.
+- **Consistencia y Familiaridad**: Usa patrones visuales conocidos (tablas, badges, tooltips, paneles laterales). Mantén la misma lógica de navegación y feedback en toda la app. Los iconos y colores deben tener el mismo significado en todas las vistas.
+- **Feedback Inmediato y Explícito**: Cada acción del usuario debe tener respuesta visual (toasts, spinners, mensajes). Los errores deben ser claros, con explicación y solución sugerida. El éxito debe ser visible (ej: “Estrategia importada correctamente”).
+- **Explicatividad y Transparencia**: Cada métrica debe tener tooltip y/o glosario accesible. El usuario debe entender por qué una estrategia es “mejor” (explicación textual, badges, panel de detalles). Las reglas de ranking y colores deben ser visibles y no ambiguas.
+- **Accesibilidad y Personalización**: Soporte para modo claro/oscuro, ajuste de fuente, navegación con teclado. Contraste suficiente para usuarios con baja visión. Configuración de columnas y paneles según preferencia del usuario.
+- **Empirismo y Validación**: Medir con usuarios reales: tiempo para identificar la mejor estrategia, tasa de error, satisfacción. Pruebas A/B para comparar variantes de interfaz. Recoger feedback y ajustar iterativamente.
+
+#### 2. Buenas Prácticas Específicas para GUIs de Ranking Cuantitativo
+- Sticky row para la mejor estrategia (siempre visible arriba).
+- Badges y colores para categorías (oro, plata, bronce, verde, etc.).
+- Panel de detalles al seleccionar una estrategia, con explicación textual y mini-dashboard.
+- Comparador visual: seleccionar varias estrategias y comparar en radar/barra.
+- Filtros rápidos: “Ver solo Elite/Excellent”, “Comparar Top 5”.
+- Exportación amigable: solo lo visible/filtrado, con leyenda y explicación de colores.
+- Tour guiado la primera vez que se abre la app.
+- Panel de ayuda/contexto siempre accesible.
+- Logs y mensajes claros para usuarios avanzados.
+
+#### 3. Anti-patrones (lo que NO se debe hacer)
+- Saturar la pantalla con demasiadas métricas sin jerarquía.
+- Usar colores ambiguos o sin leyenda.
+- Ocultar el significado de badges o categorías.
+- No dar feedback al usuario tras una acción.
+- No permitir personalización ni accesibilidad.
+- Mensajes de error genéricos (“Error desconocido”).
+- No explicar por qué una estrategia es “mejor” (falta de transparencia).
+- No permitir comparar estrategias fácilmente.
+
+#### 4. Recomendaciones Empíricas y de Negocio
+- **Para negocio**:
+  - La GUI debe reducir el tiempo de decisión y aumentar la confianza del usuario.
+  - El usuario debe poder justificar su elección ante terceros (explicatividad).
+  - La interfaz debe ser usable tanto por novatos como por expertos.
+  - La exportación debe ser profesional y lista para informes.
+- **Para desarrollo**:
+  - Usar MVC y separar lógica de presentación.
+  - Pruebas automáticas de GUI (pytest-qt).
+  - Internacionalización desde el inicio.
+  - Documentar cada métrica y decisión visual en el código y en la ayuda.
+
+#### 5. Checklist Integrado
+- [ ] Ranking central con sticky row y badges
+- [ ] Tooltips y glosario en todas las métricas
+- [ ] Panel de detalles con explicación textual
+- [ ] Filtros rápidos y comparador visual
+- [ ] Exportación amigable y profesional
+- [ ] Tour guiado y ayuda contextual
+- [ ] Accesibilidad y personalización
+- [ ] Feedback inmediato y logs claros
+- [ ] Pruebas de usabilidad y validación empírica
+
+---
+
 ### Informe de Benchmarking de GUIs líderes
 
 **Plataformas analizadas:**
