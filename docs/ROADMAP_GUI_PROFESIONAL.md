@@ -2,6 +2,132 @@
 
 ## Fase 0: Investigación y Auditoría Profesional
 
+### Auditoría de la GUI Actual (QVA Strategy Studio)
+
+**Importación y Gestión de Datos**
+- ✔️ Botón “Importar estrategias CSV” presente.
+- ✔️ Botón “Importar portafolios PDF” presente.
+- ❌ Falta historial de importaciones y feedback visual avanzado (toast, estado, fecha/hora).
+
+**Tabla Central de Estrategias**
+- ✔️ QTableView con columnas clave.
+- ✔️ Ordenación y filtrado en tiempo real.
+- ❌ Fila sticky para la mejor estrategia (no implementado).
+- ✔️ Coloreado automático por categoría.
+- ❌ Badges visuales para “Elite”, “Excellent”, “Top 10” (solo color, falta iconografía).
+- ❌ Tooltips explicativos en todas las métricas (algunos, pero no todos).
+- ✔️ Menú contextual para copiar/exportar.
+- ❌ Selección múltiple para comparación visual.
+
+**Panel de Filtros y Búsqueda**
+- ✔️ Sliders y combos para filtrar.
+- ❌ Búsqueda por nombre de estrategia (no implementado).
+- ❌ Botón “Reset filtros” (no visible).
+
+**Panel de Detalles/Desglose**
+- ❌ No hay panel de detalles avanzado al seleccionar estrategia (solo info básica).
+- ❌ Falta mini-dashboard y explicación textual del ranking/categoría.
+- ❌ Botón “Comparar con…” no implementado.
+
+**Dashboard Visual**
+- ✔️ Histograma de Factor K, barras, scatter, pie chart presentes.
+- ❌ Leyenda visual y exportable no siempre visible.
+- ✔️ Gráficos en hilo separado (no bloquea UI).
+
+**Panel de Portafolios**
+- ✔️ Tabla de portafolios si se importan PDFs.
+- ✔️ Columna FactorKPortfolio y categoría.
+- ❌ Botón “Comparar portafolios” (falta comparador visual avanzado).
+- ❌ Exportación de portafolio a HTML/Excel con leyenda (falta explicación visual).
+
+**Exportación**
+- ✔️ Botón “Exportar a Excel avanzado”.
+- ✔️ Botón “Exportar dashboard HTML”.
+- ❌ Feedback visual al exportar (toast/mensaje de éxito/error no siempre presente).
+
+**Barra Lateral y Navegación**
+- ✔️ Barra lateral con pasos claros.
+- ✔️ Iconos presentes.
+- ❌ Estado de cada paso (completado, pendiente, error) no visible.
+
+**Toolbar y Atajos**
+- ✔️ Toolbar con iconos.
+- ✔️ Atajos de teclado básicos.
+- ❌ Tooltips en todos los iconos (faltan algunos).
+
+**Feedback y Ayuda Contextual**
+- ❌ Toasts/mensajes al completar cada acción (no siempre presentes).
+- ❌ Panel de ayuda dinámica y tour guiado (no implementados).
+- ❌ FAQ y glosario accesibles desde la GUI (no implementados).
+
+**Accesibilidad y Personalización**
+- ❌ Modo claro/oscuro (no implementado).
+- ❌ Ajuste de tamaño de fuente (no implementado).
+- ❌ Navegación completa con teclado (parcial).
+- ❌ Contraste y legibilidad (mejorable).
+- ❌ Configuración de columnas visibles y orden (no implementado).
+
+**Indicadores de Progreso y Estado**
+- ✔️ Spinners/barras de progreso en operaciones largas.
+- ❌ Estado de conexión/datos en tiempo real (no visible).
+- ❌ Indicador de última actualización de datos (no implementado).
+
+**Pruebas y Validación**
+- ✔️ Mensajes claros ante errores de importación/cálculo/exportación (parcial).
+- ✔️ Validación de inputs antes de ejecutar acciones.
+- ❌ Logs accesibles para el usuario avanzado (no expuestos en GUI).
+
+**Internacionalización**
+- ❌ Preparada para traducción (no implementado).
+- ❌ Soporte para varios idiomas (no implementado).
+
+---
+
+### Plan de Acción Prioritario para Cubrir Gaps (Roadmap de Implementación)
+
+1. **Explicatividad y Transparencia**
+   - Implementar tooltips y glosario en todas las métricas y columnas.
+   - Añadir panel de detalles avanzado al seleccionar estrategia (mini-dashboard, explicación textual, badges).
+   - Mostrar leyenda visual y exportable en todos los gráficos y tablas.
+
+2. **Identificación Visual de la Mejor Estrategia**
+   - Fila sticky para la mejor estrategia.
+   - Badges visuales (oro, plata, bronce, Top 10) y explicación textual.
+   - Comparador visual de estrategias (selección múltiple y radar/barra).
+
+3. **Feedback Inmediato y Ayuda Contextual**
+   - Toasts/mensajes claros al completar cada acción.
+   - Panel de ayuda dinámica y tour guiado para nuevos usuarios.
+   - FAQ y glosario accesibles desde la GUI.
+
+4. **Accesibilidad y Personalización**
+   - Modo claro/oscuro y ajuste de tamaño de fuente.
+   - Navegación completa con teclado y contraste mejorado.
+   - Configuración de columnas visibles y orden.
+
+5. **Filtros, Búsqueda y Exportación**
+   - Búsqueda por nombre de estrategia y botón “Reset filtros”.
+   - Exportación amigable (solo lo visible/filtrado, con leyenda y explicación).
+   - Feedback visual al exportar (toast/mensaje de éxito/error).
+
+6. **Paneles y Estado**
+   - Estado de cada paso en la barra lateral (completado, pendiente, error).
+   - Indicador de última actualización de datos y estado de conexión.
+   - Logs accesibles para usuarios avanzados.
+
+7. **Internacionalización**
+   - Preparar la GUI para traducción y soporte multi-idioma.
+
+---
+
+**Prioridad:**
+- Primero: Explicatividad, identificación visual y feedback inmediato (impacto directo en experiencia y objetividad).
+- Segundo: Accesibilidad, personalización y ayuda contextual.
+- Tercero: Mejoras de filtros, exportación y paneles avanzados.
+- Cuarto: Internacionalización y detalles de logs/estado.
+
+---
+
 ### Principios y Buenas Prácticas para GUIs Cuantitativas
 
 #### 1. Principios Universales de UX/UI en Finanzas y Trading
