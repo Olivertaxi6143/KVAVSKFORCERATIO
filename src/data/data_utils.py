@@ -51,13 +51,8 @@ def validate_dataframe(df: pd.DataFrame | None) -> bool:
 def read_and_prepare(path: Path, is_oos_split: float = 0.75) -> pd.DataFrame:
     """
     Lee y prepara datos de KPIs con normalización y mapeo de columnas.
-    
-    Args:
-        path: Ruta al archivo CSV
-        is_oos_split: Proporción de datos IS vs OOS
-        
-    Returns:
-        DataFrame preparado y normalizado
+    - 'Stagnation': periodo de estancamiento (tiempo o trades sin nuevo máximo de equity).
+    - 'Stagnation_Trades': número máximo de operaciones consecutivas en estancamiento (si la fuente lo provee).
     """
     try:
         # Leer archivo
@@ -95,9 +90,10 @@ def read_and_prepare(path: Path, is_oos_split: float = 0.75) -> pd.DataFrame:
             'MAXDRAWDOWNDURATION': 'Max_Drawdown_Duration',
             'AVGBARSINTRADE': 'Avg_Bars_in_Trade',
             'AVG_BARS_TRADE': 'Avg_Bars_in_Trade',
-            'AVGSTAGTRADES': 'Avg_Stagnation_Trades',
-            'MAXSTAGTRADES': 'Stagnation_Trades',
+                'AVGSTAGTRADES': 'Avg_Stagnation',
+    'MAXSTAGTRADES': 'Stagnation',
             'STAGNATION': 'Stagnation',
+            'STAGNATION_TRADES': 'Stagnation_Trades',
             'NEWPEAKTRADESPCT': 'New_Peak_Trades_pct',
             'DRAWDOWNTRADESPCT': 'Drawdown_Trades_pct',
             'AVGMAE': 'Avg_MAE_Profit_loss',

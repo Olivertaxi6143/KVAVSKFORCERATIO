@@ -203,7 +203,7 @@ def create_sample_data():
 def test_imports():
     """Prueba que se pueden importar todos los módulos."""
     modules = [
-        'src.core.core_engine_enhanced',
+        'src.core.integration_layer',
         'src.data.data_utils',
         'src.gui.gui_enhanced_rank',
         'src.analysis.research_docs'
@@ -231,7 +231,7 @@ def run_basic_tests():
         logger.info("Ejecutando pruebas básicas...")
         
         # Importar módulos principales
-        from src.core.core_engine_enhanced import ConfigManagerEnhanced
+        from src.core.integration_layer import ConfigManagerEnhanced
         
         # Probar ConfigManager
         config_manager = ConfigManagerEnhanced()

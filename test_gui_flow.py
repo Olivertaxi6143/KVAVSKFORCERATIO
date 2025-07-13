@@ -35,7 +35,7 @@ def test_core_engine():
     try:
         logger.info("🧪 Probando Core Engine...")
         from src.data_manager import DataManager
-        from src.core_engine_enhanced import UnifiedEvaluatorEnhanced
+        from src.core.integration_layer import UnifiedEvaluatorEnhanced
         
         # Cargar datos
         dm = DataManager()
@@ -82,12 +82,10 @@ def test_file_structure():
         logger.info("🧪 Verificando estructura de archivos...")
         
         required_files = [
-            'DatabankExport_M1.csv',
-            'DATOSMQL5.csv',
-            'src/data_manager.py',
-            'src/core_engine_enhanced.py',
-            'src/gui_enhanced_rank.py',
-            'cli_runner.py'
+            'src/gui/gui_enhanced_rank.py',
+            'src/data/data_manager.py',
+            'src/core/integration_layer.py',
+            'main.py'
         ]
         
         missing_files = []

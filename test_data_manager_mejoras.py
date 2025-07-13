@@ -19,7 +19,7 @@ from datetime import datetime
 # Agregar src al path
 sys.path.append('src')
 
-from data_manager import DataManager, create_data_manager, load_inputtest_data_pipeline
+from src.data.data_manager import DataManager, create_data_manager, load_inputtest_data_pipeline
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)

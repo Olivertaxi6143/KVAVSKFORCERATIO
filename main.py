@@ -83,7 +83,7 @@ def create_sample_data():
         'Total_Trades': np.random.randint(100, 1000, n_strategies),
         'Avg_Bars_in_Trade': np.random.randint(20, 200, n_strategies),
         'Max_Consec_Losses': np.random.randint(3, 15, n_strategies),
-        'Stagnation_Trades': np.random.randint(0, 50, n_strategies),
+        'Stagnation': np.random.randint(0, 50, n_strategies),
         'Net_profit': np.random.normal(50000, 25000, n_strategies),
         'Exposure': np.random.normal(85, 10, n_strategies),
         'VaR_95%': np.random.normal(-2.5, 1.0, n_strategies),
@@ -109,7 +109,7 @@ def create_sample_data():
     df['Total_Trades'] = df['Total_Trades'].abs()
     df['Avg_Bars_in_Trade'] = df['Avg_Bars_in_Trade'].abs()
     df['Max_Consec_Losses'] = df['Max_Consec_Losses'].abs()
-    df['Stagnation_Trades'] = df['Stagnation_Trades'].abs()
+    df['Stagnation'] = df['Stagnation'].abs()
     df['Max_Drawdown_Duration'] = df['Max_Drawdown_Duration'].abs()
     
     # Asegurar valores negativos donde corresponde
@@ -128,7 +128,7 @@ def test_core_engine():
     try:
         logger.info("=== Probando Core Engine ===")
         
-        from core_engine_enhanced import (
+        from src.core.integration_layer import (
             FactorKElite96Enhanced,
             UnifiedEvaluatorEnhanced,
             run_complete_analysis_with_gui_integration
@@ -156,7 +156,7 @@ def test_data_manager():
     try:
         logger.info("=== Probando Data Manager ===")
         
-        from src.data_manager import DataManager
+        from src.data.data_manager import DataManager
         
         # Crear gestor de datos
         dm = DataManager()
@@ -176,6 +176,7 @@ def test_data_processing():
     """Prueba el procesamiento de datos usando SOLO DataManager."""
     try:
         logger.info("=== Probando DataManager ===")
+        from src.data.data_manager import DataManager
         processor = DataManager()
         logger.info("DataManager creado correctamente")
         return True
@@ -188,7 +189,7 @@ def test_research_docs():
     try:
         logger.info("=== Probando funciones de investigación en DataManager ===")
         
-        from src.data_manager import DataManager
+        from src.data.data_manager import DataManager
         
         # Crear DataManager
         dm = DataManager()
@@ -228,7 +229,7 @@ def test_gui():
         logger.info("=== Probando GUI Enhanced Rank ===")
         
         # Importar GUI
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         # Verificar que se puede importar sin errores
         logger.info("GUI EnhancedRankGUI importada correctamente")
@@ -281,7 +282,7 @@ def run_complete_test():
     
     for test_name, result in results.items():
         status = "✅ PASÓ" if result else "❌ FALLÓ"
-        logger.info(f"{test_name}: {status}")
+        logger.info(f"{test_name}: {'PASO' if result else 'FALLO'}")
     
     passed = sum(results.values())
     total = len(results)

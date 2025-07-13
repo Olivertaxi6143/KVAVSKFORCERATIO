@@ -48,7 +48,7 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Importar componentes del core engine
-from core_engine_enhanced import (
+from src.core.integration_layer import (
     ConfigManagerEnhanced,
     DataLoaderEnhanced,
     FactorKElite96Enhanced,

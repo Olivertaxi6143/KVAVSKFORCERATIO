@@ -59,7 +59,7 @@ def load_data():
     return dm.kpis_data
 
 def run_core_engine_analysis(df, config):
-    from src.core_engine_enhanced import UnifiedEvaluatorEnhanced
+    from src.core.integration_layer import UnifiedEvaluatorEnhanced
     evaluator = UnifiedEvaluatorEnhanced()
     logger.info(f"⚙️ Ejecutando análisis con estilo: {config['trading_style']} y KPIs: {config['enabled_kpi_names']}")
     results = evaluator.evaluate_strategies_unified(df)

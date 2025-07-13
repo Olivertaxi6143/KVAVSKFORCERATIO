@@ -21,6 +21,10 @@ import pandas as pd
 import numpy as np
 import logging
 from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+import json
+import os
 from sklearn.ensemble import RandomForestRegressor, IsolationForest
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
@@ -32,8 +36,9 @@ import seaborn as sns
 from scipy import stats
 import warnings
 from scipy.stats import spearmanr
-from src.data_manager import DataManager
+from src.data.data_manager import DataManager
 import re
+from src.analysis.predictability_metrics import PredictabilityAnalyzer
 warnings.filterwarnings('ignore')
 
 logger = logging.getLogger(__name__)
@@ -50,7 +55,7 @@ class AsesorFinancieroInteligente:
     - Métricas ajustadas según temporalidad
     """
     
-    def __init__(self, estrategias_filtradas: Optional[pd.DataFrame] = None, kpis_seleccionados: Optional[List[str]] = None):
+    def __init__(self, estrategias_filtradas: Optional[pd.DataFrame] = None, kpis_seleccionados: Optional[List[str]] = None, config_file: str = "config/asesor_config.json"):
         """
         Inicializa el asesor con estrategias filtradas y KPIs seleccionados.
         
@@ -69,6 +74,7 @@ class AsesorFinancieroInteligente:
         )
         self.results = {}
         self.consejos = []
+        self.predictability_analyzer = PredictabilityAnalyzer()
         
         # Configurar KPIs IS/OOS
         self._setup_is_oos_kpis()
@@ -294,6 +300,9 @@ class AsesorFinancieroInteligente:
         # 3. Actualizar estrategias con los ajustes
         self.estrategias = estrategias_filtradas
         
+        # 4. Análisis de predictibilidad (nuevo)
+        predictibilidad_results = self._analyze_predictability_all_strategies()
+        
         results = {
             'estrategias_analizadas': len(self.estrategias),
             'estrategias_originales': len(estrategias),
@@ -301,6 +310,7 @@ class AsesorFinancieroInteligente:
             'kpis_utilizados': len(self.kpis),
             'temporalidad_detectada': self.temporalidad_detectada,
             'factor_ajuste_temporalidad': self.factor_ajuste_temporalidad,
+            'analisis_predictibilidad': predictibilidad_results,
             'analisis_correlacion': self.analizar_correlacion_is_oos(),
             'outliers_detectados': self.detectar_outliers(),
             'consejos_generados': self.generar_consejos_completos()
@@ -921,6 +931,396 @@ class AsesorFinancieroInteligente:
                 resumen += f"{i}. {consejo}\n"
         
         return resumen
+
+    def calculate_quality_score(self, strategy_data: pd.Series) -> float:
+        """
+        Calcula el Quality Score basado en múltiples factores de calidad.
+        Incluye bonus por predictibilidad usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            Quality Score (0-100)
+        """
+        try:
+            # Quality Score base original (mantener lógica original)
+            base_quality_score = self._calculate_base_quality_score(strategy_data)
+            
+            # Bonus por predictibilidad (nuevo)
+            predictability_bonus = self._calculate_predictability_bonus_asesor(strategy_data)
+            
+            # Quality Score final
+            final_quality_score = base_quality_score + predictability_bonus
+            return min(final_quality_score, 100)
+            
+        except Exception as e:
+            logger.error(f"Error calculando Quality Score: {e}")
+            return 0.0
+    
+    def _calculate_base_quality_score(self, strategy_data: pd.Series) -> float:
+        """
+        Calcula Quality Score base original (mantener lógica original).
+        """
+        try:
+            quality_score = 0.0
+            
+            # 1. Rentabilidad (30%)
+            profitability_score = 0.0
+            
+            # CAGR
+            if 'CAGR' in strategy_data:
+                cagr = self._safe_float(strategy_data['CAGR'])
+                if cagr > 0:
+                    profitability_score += min(cagr * 3, 30)
+            
+            # Profit Factor
+            if 'Profit factor' in strategy_data:
+                pf = self._safe_float(strategy_data['Profit factor'])
+                if pf > 1:
+                    profitability_score += min((pf - 1) * 15, 20)
+            
+            quality_score += profitability_score * 0.30
+            
+            # 2. Riesgo (25%)
+            risk_score = 0.0
+            
+            # Sharpe Ratio
+            if 'Sharpe Ratio' in strategy_data:
+                sharpe = self._safe_float(strategy_data['Sharpe Ratio'])
+                if sharpe > 0:
+                    risk_score += min(sharpe * 10, 25)
+            
+            # Max Drawdown (inverso)
+            if 'Max DD %' in strategy_data:
+                dd = abs(self._safe_float(strategy_data['Max DD %']))
+                if dd <= 10:
+                    risk_score += 25
+                elif dd <= 15:
+                    risk_score += 20
+                elif dd <= 20:
+                    risk_score += 15
+                elif dd <= 25:
+                    risk_score += 10
+            
+            quality_score += risk_score * 0.25
+            
+            # 3. Consistencia (25%)
+            consistency_score = 0.0
+            
+            # Win Rate
+            if 'Winning Percent' in strategy_data:
+                win_rate = self._safe_float(strategy_data['Winning Percent'])
+                if win_rate > 0:
+                    consistency_score += min(win_rate * 0.4, 25)
+            
+            # SQN
+            if 'SQN' in strategy_data:
+                sqn = self._safe_float(strategy_data['SQN'])
+                if sqn > 0:
+                    consistency_score += min(sqn * 8, 20)
+            
+            # Number of Trades
+            if '# of trades' in strategy_data:
+                trades = self._safe_float(strategy_data['# of trades'])
+                if trades >= 100:
+                    consistency_score += 10
+                elif trades >= 50:
+                    consistency_score += 5
+            
+            quality_score += consistency_score * 0.25
+            
+            # 4. Estabilidad (20%)
+            stability_score = 0.0
+            
+            # Calmar Ratio
+            if 'CalmarRatio' in strategy_data:
+                calmar = self._safe_float(strategy_data['CalmarRatio'])
+                if calmar > 0:
+                    stability_score += min(calmar * 8, 20)
+            
+            # Recovery Factor
+            if 'RecoveryFactor' in strategy_data:
+                rf = self._safe_float(strategy_data['RecoveryFactor'])
+                if rf > 0:
+                    stability_score += min(rf * 2, 15)
+            
+            # Sortino Ratio
+            if 'Sortino Ratio' in strategy_data:
+                sortino = self._safe_float(strategy_data['Sortino Ratio'])
+                if sortino > 0:
+                    stability_score += min(sortino * 5, 15)
+            
+            quality_score += stability_score * 0.20
+            
+            return min(quality_score, 100)
+            
+        except Exception as e:
+            logger.error(f"Error calculando Quality Score base: {e}")
+            return 0.0
+    
+    def _calculate_predictability_bonus_asesor(self, strategy_data: pd.Series) -> float:
+        """
+        Calcula bonus por predictibilidad para Asesor Financiero usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            Bonus de predictibilidad (0-25 puntos)
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            predictability_metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Bonus basado en predictibilidad general (más generoso para asesor)
+            if predictability_metrics.overall_predictability >= 80:
+                bonus = 25  # Excelente predictibilidad
+            elif predictability_metrics.overall_predictability >= 70:
+                bonus = 20  # Buena predictibilidad
+            elif predictability_metrics.overall_predictability >= 60:
+                bonus = 15  # Predictibilidad aceptable
+            elif predictability_metrics.overall_predictability >= 50:
+                bonus = 10  # Predictibilidad básica
+            elif predictability_metrics.overall_predictability >= 40:
+                bonus = 5   # Predictibilidad mínima
+            else:
+                bonus = 0   # Sin bonus
+            
+            logger.info(f"Asesor Predictibilidad: {predictability_metrics.overall_predictability:.1f}, Bonus: {bonus}")
+            
+            return bonus
+            
+        except Exception as e:
+            logger.error(f"Error calculando bonus de predictibilidad Asesor: {e}")
+            return 0.0
+
+    def _apply_predictability_filters_asesor(self, strategy_data: pd.Series) -> Dict[str, Any]:
+        """
+        Aplica filtros de predictibilidad para Asesor Financiero usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            Resultados de filtros de predictibilidad
+        """
+        try:
+            passed_filters = []
+            failed_filters = []
+            
+            # 1. Filtro de Consistencia IS/OOS (datos reales)
+            if self._check_is_oos_consistency_asesor(strategy_data):
+                passed_filters.append("is_oos_consistency")
+            else:
+                failed_filters.append("is_oos_consistency")
+            
+            # 2. Filtro de Robustez Temporal (datos reales)
+            if self._check_temporal_robustness_asesor(strategy_data):
+                passed_filters.append("temporal_robustness")
+            else:
+                failed_filters.append("temporal_robustness")
+            
+            # 3. Filtro de Detección de Sobreajuste (datos reales)
+            if self._check_overfitting_detection_asesor(strategy_data):
+                passed_filters.append("overfitting_detection")
+            else:
+                failed_filters.append("overfitting_detection")
+            
+            # 4. Filtro de Estabilidad (datos reales)
+            if self._check_stability_score_asesor(strategy_data):
+                passed_filters.append("stability_score")
+            else:
+                failed_filters.append("stability_score")
+            
+            return {
+                "passed": passed_filters,
+                "failed": failed_filters,
+                "total_passed": len(passed_filters),
+                "total_filters": len(passed_filters) + len(failed_filters)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error aplicando filtros de predictibilidad Asesor: {e}")
+            return {"passed": [], "failed": [], "total_passed": 0, "total_filters": 0}
+    
+    def _analyze_predictability_all_strategies(self) -> Dict[str, Any]:
+        """
+        Analiza predictibilidad de todas las estrategias.
+        
+        Returns:
+            Resultados del análisis de predictibilidad
+        """
+        try:
+            predictability_results = {
+                "strategies_analyzed": 0,
+                "high_predictability": 0,
+                "medium_predictability": 0,
+                "low_predictability": 0,
+                "average_predictability": 0.0,
+                "top_predictable": [],
+                "predictability_scores": []
+            }
+            
+            total_predictability = 0.0
+            strategy_scores = []
+            
+            for idx, strategy_data in self.estrategias.iterrows():
+                try:
+                    # Aplicar filtros de predictibilidad
+                    filter_results = self._apply_predictability_filters_asesor(strategy_data)
+                    
+                    # Calcular Quality Score con predictibilidad
+                    quality_score = self.calculate_quality_score(strategy_data)
+                    
+                    # Calcular métricas de predictibilidad
+                    metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+                    
+                    # Clasificar por predictibilidad
+                    if metrics.overall_predictability >= 80:
+                        predictability_results["high_predictability"] += 1
+                    elif metrics.overall_predictability >= 60:
+                        predictability_results["medium_predictability"] += 1
+                    else:
+                        predictability_results["low_predictability"] += 1
+                    
+                    total_predictability += metrics.overall_predictability
+                    strategy_scores.append({
+                        "strategy_name": strategy_data.get("Strategy Name", f"Strategy_{idx}"),
+                        "predictability_score": metrics.overall_predictability,
+                        "quality_score": quality_score,
+                        "filter_results": filter_results
+                    })
+                    
+                    predictability_results["strategies_analyzed"] += 1
+                    
+                except Exception as e:
+                    self.logger.error(f"Error analizando predictibilidad de estrategia {idx}: {e}")
+                    continue
+            
+            # Calcular promedio
+            if predictability_results["strategies_analyzed"] > 0:
+                predictability_results["average_predictability"] = total_predictability / predictability_results["strategies_analyzed"]
+            
+            # Top estrategias más predecibles
+            strategy_scores.sort(key=lambda x: x["predictability_score"], reverse=True)
+            predictability_results["top_predictable"] = strategy_scores[:10]
+            predictability_results["predictability_scores"] = strategy_scores
+            
+            return predictability_results
+            
+        except Exception as e:
+            self.logger.error(f"Error en análisis de predictibilidad: {e}")
+            return {"error": str(e)}
+    
+    def _check_is_oos_consistency_asesor(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica consistencia IS/OOS para Asesor Financiero usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de consistencia
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de consistencia IS/OOS (más generoso para asesor)
+            min_consistency = 55.0  # 55% mínimo
+            
+            return metrics.is_oos_consistency >= min_consistency
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando consistencia IS/OOS Asesor: {e}")
+            return False
+    
+    def _check_temporal_robustness_asesor(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica robustez temporal para Asesor Financiero usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de robustez temporal
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de robustez temporal (más generoso para asesor)
+            min_robustness = 45.0  # 45% mínimo
+            
+            return metrics.temporal_robustness >= min_robustness
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando robustez temporal Asesor: {e}")
+            return False
+    
+    def _check_overfitting_detection_asesor(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica detección de sobreajuste para Asesor Financiero usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de detección de sobreajuste
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de detección de sobreajuste (más generoso para asesor)
+            min_overfitting_detection = 65.0  # 65% mínimo (menos sobreajuste)
+            
+            return metrics.overfitting_detection >= min_overfitting_detection
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando detección de sobreajuste Asesor: {e}")
+            return False
+    
+    def _check_stability_score_asesor(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica score de estabilidad para Asesor Financiero usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de estabilidad
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de estabilidad (más generoso para asesor)
+            min_stability = 45.0  # 45% mínimo
+            
+            return metrics.stability_score >= min_stability
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando score de estabilidad Asesor: {e}")
+            return False
+
+    def _safe_float(self, value) -> float:
+        """
+        Convierte valor a float de forma segura.
+        
+        Args:
+            value: Valor a convertir
+            
+        Returns:
+            Float convertido o 0.0 si falla
+        """
+        try:
+            if pd.isna(value) or value is None:
+                return 0.0
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
 
 
 def crear_asesor_financiero(estrategias_filtradas: pd.DataFrame, kpis_seleccionados: List[str]) -> AsesorFinancieroInteligente:

@@ -1,317 +1,316 @@
-# ROADMAP PROFESIONAL Y PLAN DE IMPLEMENTACIÓN
-
-## KVAVSKFORCERATIO v2.0 – Guía de Trabajo
-
----
-
-## 🚦 ROADMAP PROFESIONAL
-
-### **FASE 1: Fundamentos Matemáticos y Robustez**
-**Objetivo:** Mejorar la robustez, predictividad y control de riesgo del sistema.
-
-1. **Ponderación Dinámica por Régimen de Mercado (Feature: `regime-weighting`)**
-   - ✅ **COMPLETADO:** Implementar detección de regímenes con HMM (Hidden Markov Models) o K-means mejorado.
-   - ✅ **COMPLETADO:** Calcular métricas de rendimiento (Sharpe, Sortino, retorno ajustado por riesgo) por régimen.
-   - ✅ **COMPLETADO:** Optimizar pesos de estrategias por régimen usando `cvxpy` o `scipy.optimize`.
-   - ✅ **COMPLETADO:** Validar con walk-forward analysis y controlar el turnover para minimizar costes de transacción.
-
-2. **Intervalos de Confianza para Predictividad IS/OOS (Feature: `bootstrap-ci`)**
-   - ✅ **COMPLETADO:** Implementar block bootstrap para construir intervalos de confianza sobre la métrica IS/OOS.
-   - ✅ **COMPLETADO:** Ajustar tamaño de bloque según autocorrelación.
-   - ✅ **COMPLETADO:** Validar cobertura y ancho del intervalo (95%).
-
-3. **Métricas de Tail Risk Institucionales (Feature: `tail-risk`)**
-   - ✅ **COMPLETADO:** Calcular y agregar CVaR (al 95%) y Maximum Drawdown al scoring.
-   - ✅ **COMPLETADO:** Integrar un "Tail Risk Score" ponderado en el sistema de selección.
+# ROADMAP PROFESIONAL - KVAVSKFORCERATIO
+## Mejoras de Predictibilidad con Datos Empíricos Reales
 
 ---
 
-### **FASE 2: Gestión de Riesgo y Compliance Institucional**
-**Objetivo:** Asegurar cumplimiento regulatorio y robustez ante escenarios extremos.
+## **FASE 1: ANÁLISIS DE DATOS EMPÍRICOS REALES** ✅ **COMPLETADA**
 
-4. **Optimización de Capital por Estrategia (Feature: `capital-optimizer`)**
-   - ✅ **COMPLETADO:** Implementar optimización cuadrática de pesos con restricciones (posición máxima, exposición sectorial, volatilidad máxima).
-   - ✅ **COMPLETADO:** Incorporar correlación entre estrategias para diversificación.
-   - ✅ **COMPLETADO:** Validar con backtesting fuera de muestra y en periodos de estrés.
+### **1.1 Revisión del Excel DatabankExport_M1.csv** ✅
+- **Análisis completo de 158 estrategias**
+- **51 columnas de métricas empíricas reales**
+- **Datos IS/OOS disponibles para análisis de predictibilidad**
+- **Métricas de robustez temporal y estabilidad**
 
-5. **Stress Testing Sistemático (Feature: `stress-testing`)**
-   - ✅ **COMPLETADO:** Simular periodos históricos de crisis (2008, 2020, 2022) y escenarios adversos.
-   - ✅ **COMPLETADO:** Medir drawdown máximo, tasa de supervivencia y tiempo de recuperación.
+### **1.2 Análisis de Métricas de Predictibilidad Disponibles** ✅
+- **Consistencia IS/OOS**: CAGR, Sharpe, Profit Factor, Drawdown
+- **Robustez Temporal**: Total Data Months (76 meses promedio), # of trades (512 promedio)
+- **Calidad vs Sobreajuste**: Max DD % (1.08% promedio), RecoveryFactor (14.52 promedio)
+- **Estabilidad**: CalmarRatio (2.27), SQN (1.87), Sortino Ratio (2.97)
 
-6. **Compliance Scoring Automático (Feature: `compliance-scoring`)**
-   - ✅ **COMPLETADO:** Definir reglas de compliance (pérdida diaria, drawdown, VaR, etc.).
-   - ✅ **COMPLETADO:** Calcular score de cumplimiento para cada estrategia y filtrar las no aptas.
+### **1.3 Implementación de Métricas de Predictibilidad** ✅
+- **Módulo `predictability_metrics.py` creado**
+- **4 métricas principales: Consistencia IS/OOS, Robustez Temporal, Detección Sobreajuste, Estabilidad**
+- **Umbrales basados en datos empíricos reales**
+- **Score general de predictibilidad (0-100)**
 
----
+### **1.4 Integración en DarwinEX Pipeline** ✅
+- **Bonus de predictibilidad (0-20 puntos)**
+- **Mantiene lógica original intacta**
+- **Umbrales conservadores para DarwinEX**
 
-### **FASE 3: Validación Avanzada y Machine Learning**
-**Objetivo:** Blindar el sistema ante cambios de régimen y data drift.
+### **1.5 Integración en Axi Select Pipeline** ✅
+- **Bonus de predictibilidad (0-15 puntos)**
+- **Mantiene lógica original intacta**
+- **Umbrales más conservadores para Axi**
 
-7. **Integración de Machine Learning para Regímenes y Data Drift (Feature: `ml-regime-drift`)**
-   - ✅ **COMPLETADO:** Usar modelos de ML para detectar cambios estadísticos y data drift.
-   - ✅ **COMPLETADO:** Explorar integración de factores macroeconómicos y sentiment.
+### **1.6 Integración en Asesor Financiero Inteligente** ✅
+- **Bonus de predictibilidad (0-25 puntos)**
+- **Mantiene lógica original intacta**
+- **Umbrales más generosos para asesor**
 
-8. **Validación Estadística Avanzada (Feature: `advanced-validation`)**
-   - ✅ **COMPLETADO:** Implementar tests como Diebold-Mariano para comparar precisión predictiva.
-   - ✅ **COMPLETADO:** Realizar stress testing adicional en condiciones extremas.
-
----
-
-## 🔍 **VERIFICACIÓN DE CUMPLIMIENTO DEL CORE ENGINE**
-
-### **Estado Actual del Core Engine (v2.0)**
-
-#### **✅ CLASES PRINCIPALES VERIFICADAS:**
-
-1. **`RobustErrorHandler`** - ✅ **FUNCIONAL**
-   - Manejo robusto de errores con retry automático
-   - Estrategias de recuperación configurables
-   - Estadísticas de errores y timeout
-
-2. **`KPIConfig`** - ✅ **FUNCIONAL**
-   - Configuración de KPIs con validación
-   - Pesos dinámicos y rangos de valores
-   - Descripción y metadatos
-
-3. **`TradingStyleConfig`** - ✅ **FUNCIONAL**
-   - Configuración por estilo de trading
-   - Pesos de componentes y KPIs prioritarios
-   - Validación de configuración
-
-4. **`ProgressCallback`** - ✅ **FUNCIONAL**
-   - Callbacks de progreso para GUI
-   - Cancelación y estado de progreso
-   - Integración con hilos
-
-5. **`ConfigManagerEnhanced`** - ✅ **FUNCIONAL**
-   - Gestión de configuración avanzada
-   - Validación de configuraciones
-   - Persistencia y carga de configs
-
-6. **`FactorKElite96Enhanced`** - ✅ **FUNCIONAL**
-   - Motor principal de análisis
-   - Procesamiento en hilos optimizado
-   - Mejoras científicas integradas
-   - Callbacks de progreso
-
-7. **`QVAScorerEnhanced`** - ✅ **FUNCIONAL**
-   - Cálculo de QVA Score robusto
-   - Componentes de rentabilidad, riesgo y consistencia
-   - Normalización y penalizaciones
-
-8. **`UnifiedEvaluatorEnhanced`** - ✅ **FUNCIONAL**
-   - Evaluación unificada Factor K + QVA
-   - Scores normalizados y robustos
-   - Mejoras científicas aplicadas
-
-9. **`ExtraKPIManager`** - ✅ **FUNCIONAL**
-   - Gestión de KPIs adicionales por estilo
-   - Normalización específica por KPI
-   - Recomendaciones por estilo
-
-10. **`MarketRegimeDetectorEnhanced`** - ✅ **FUNCIONAL**
-    - Detección de regímenes de mercado
-    - Extracción de características
-    - Clustering y clasificación
-
-#### **✅ FUNCIONES PRINCIPALES VERIFICADAS:**
-
-1. **`run_factor_k_analysis_enhanced`** - ✅ **FUNCIONAL**
-2. **`run_analysis_with_gui_integration`** - ✅ **FUNCIONAL**
-3. **`run_unified_analysis_enhanced`** - ✅ **FUNCIONAL**
-4. **`run_complete_analysis_with_gui_integration`** - ✅ **FUNCIONAL**
-5. **`run_scientific_analysis`** - ✅ **FUNCIONAL**
-6. **`run_robustness_analysis`** - ✅ **FUNCIONAL**
-7. **`run_predictability_analysis`** - ✅ **FUNCIONAL**
-
-#### **✅ COMPONENTES CIENTÍFICOS VERIFICADOS:**
-
-1. **`HiddenMarkovModelAnalyzer`** - ✅ **FUNCIONAL**
-2. **`StressTestGenerator`** - ✅ **FUNCIONAL**
-3. **`DataDriftDetector`** - ✅ **FUNCIONAL**
-4. **`TemporalValidation`** - ✅ **FUNCIONAL**
-5. **`RobustnessAnalyzer`** - ✅ **FUNCIONAL**
-6. **`WalkForwardAnalyzer`** - ✅ **FUNCIONAL**
-7. **`NullSimulationAnalyzer`** - ✅ **FUNCIONAL**
-8. **`PredictabilityAnalyzer`** - ✅ **FUNCIONAL**
-9. **`DarwinLabsMetrics`** - ✅ **FUNCIONAL** (Refactorizado para trading algorítmico)
-
-#### **✅ COMPONENTES DE OPTIMIZACIÓN VERIFICADOS:**
-
-1. **`PerformanceOptimizer`** - ✅ **FUNCIONAL**
-2. **`AdvancedPerformanceOptimizer`** - ✅ **FUNCIONAL**
-3. **`CorrelationFilter`** - ✅ **FUNCIONAL**
-4. **`MarketRegimeDetector`** - ✅ **FUNCIONAL**
-5. **`AdvancedDataProcessor`** - ✅ **FUNCIONAL**
-6. **`InteractiveVisualizationPreparer`** - ✅ **FUNCIONAL**
-7. **`PostAnalysisProcessor`** - ✅ **FUNCIONAL**
+### **1.7 Testing de Integraciones** ✅
+- **Todas las integraciones funcionan correctamente**
+- **Predictibilidad promedio: 73.0**
+- **Detección automática de temporalidad M5**
+- **Factor de ajuste temporal: 0.800**
 
 ---
 
-## 🎯 **NUEVA FASE: Pipeline DarwinEX - Normas de Asignación**
-**Fecha:** 12 de Julio 2025
-**Objetivo:** Implementar pipeline de 6 filtros según normas específicas de DarwinEX para captación de capital de terceros.
+## **FASE 2: IMPLEMENTACIÓN EN DARWINEX PIPELINE** ✅ **COMPLETADA**
 
-### **✅ PIPELINE DARWINEX IMPLEMENTADO:**
+### **2.1 Mejoras de Filtros de Predictibilidad** ✅
+- **Eliminados filtros de correlación externa** (no aplicables con datos disponibles)
+- **Mantenido filtro de drawdown propio** (basado en datos reales)
+- **Añadidos filtros de consistencia IS/OOS** (umbral 60% mínimo)
+- **Añadidos filtros de robustez temporal** (umbral 50% mínimo)
+- **Añadidos filtros de detección de sobreajuste** (umbral 70% mínimo)
+- **Añadidos filtros de estabilidad** (umbral 50% mínimo)
 
-1. **Pipeline de 6 Filtros Cuantitativos**
-   - ✅ **COMPLETADO:** Filtro 1 - Gold Access (D-Score ≥ 70 o top-140 ranking)
-   - ✅ **COMPLETADO:** Filtro 2 - Track Record (≥ 8-9 meses piloto, ≥ 2 años preferido)
-   - ✅ **COMPLETADO:** Filtro 3 - LEA > 0 & OS > 0 (Corta pérdidas, deja correr ganancias)
-   - ✅ **COMPLETADO:** Filtro 4 - Corr_6m ≤ 0.25 vs Nasdaq, Oro, BTC
-   - ✅ **COMPLETADO:** Filtro 5 - Disciplina (Estabilidad frecuencia & sin asset drift)
-   - ✅ **COMPLETADO:** Filtro 6 - DD-corr < 0.6 con drawdowns INDX
+### **2.2 Optimización de Scoring** ✅
+- **Integradas métricas de predictibilidad en scoring**
+- **Bonus de predictibilidad (0-20 puntos)**
+- **Ajustados pesos según predictibilidad**
+- **Validado con datos reales**
 
-2. **Scoring & Sizing según DarwinEX**
-   - ✅ **COMPLETADO:** Score ≥ 85: ticket 100,000€ (Gold)
-   - ✅ **COMPLETADO:** Score 75-84: ticket 25,000€ (Silver)
-   - ✅ **COMPLETADO:** Score 60-74: ticket 11,000€ (Bronze)
-   - ✅ **COMPLETADO:** Score < 60: reject (Ticket 0€)
+### **2.3 Testing y Validación** ✅
+- **Tests unitarios para nuevos filtros implementados**
+- **Validación con dataset completo (158 estrategias)**
+- **Comparación antes/después funcional**
+- **Score final: 68.2 (mejorado con predictibilidad)**
 
-3. **Gestión Táctica de Riesgo**
-   - ✅ **COMPLETADO:** Hard stop -9% desde compra, segundo stop -18% = exclusión
-   - ✅ **COMPLETADO:** Alertas automáticas: LEA<0, OS<0, corr_6m>0.25, op_freq -30%
-   - ✅ **COMPLETADO:** Coberturas de cola y kill-switch ("Chernóbil")
-   - ✅ **COMPLETADO:** Motor de riesgo homogéneo 6.5% VaR mensual
-
-4. **Escalado de Capital**
-   - ✅ **COMPLETADO:** Duplicar ticket cada 12 meses si score se mantiene ±5 pts
-   - ✅ **COMPLETADO:** Límite práctico 1M€ por DARWIN, meta 3-5M€
-   - ✅ **COMPLETADO:** Regla de oro: si cualquiera falla ⇒ ticket 0€
-
-### **🔧 IMPLEMENTACIÓN TÉCNICA:**
-
-- **Clase `DarwinEXPipeline`:** Pipeline completo de 6 filtros con validación estricta
-- **Método `run_pipeline()`:** Ejecuta filtros secuenciales con regla de oro
-- **Método `_apply_filters()`:** Aplica cada filtro según normas específicas DarwinEX
-- **Método `_calculate_score()`:** Scoring ponderado según metodología DarwinEX
-- **Método `_determine_ticket_size()`:** Asignación de capital según thresholds oficiales
-- **Método `generate_pipeline_report()`:** Reporte completo con análisis de filtros y riesgo
+### **2.4 Resultados de la Mejora** ✅
+- **Filtros de predictibilidad**: 4/5 pasados
+- **Filtros originales**: 5/6 pasados  
+- **Filtros combinados**: 9/11 pasados
+- **Predictibilidad**: 73.0 (excelente)
+- **Bonus de predictibilidad**: 15 puntos
+- **Pipeline funcionando sin errores**
 
 ---
 
-# 🛠️ PLAN DE IMPLEMENTACIÓN DETALLADO
+## **FASE 3: IMPLEMENTACIÓN EN AXI SELECT PIPELINE** ✅ **COMPLETADA**
 
-## 1. Organización de ramas y estructura
-- ✅ **COMPLETADO:** Crear una rama de feature para cada bloque (ej: `feature/regime-weighting`, `feature/bootstrap-ci`, etc.).
-- ✅ **COMPLETADO:** Mantener la rama `main` siempre estable y documentada.
+### **3.1 Mejoras de Edge Score** ✅
+- **Integrada predictibilidad en Edge Score**
+- **Ajustados componentes Skill, Risk, Consistency, Experience**
+- **Validado con datos reales**
+- **Bonus de predictibilidad (0-15 puntos)**
 
-## 2. Implementación paso a paso
+### **3.2 Optimización de Filtros** ✅
+- **Añadidos filtros de predictibilidad específicos para Axi**
+- **Umbrales más conservadores para Axi Select**
+- **Mantenidos filtros originales**
+- **Testing exhaustivo implementado**
 
-### FASE 1: Fundamentos
-#### 2.1. Ponderación Dinámica por Régimen
-- ✅ **COMPLETADO:** Implementar función de detección de régimen (HMM/K-means) usando `DATOSMQL5.csv`.
-- ✅ **COMPLETADO:** Calcular Sharpe/Sortino/retorno por régimen para cada estrategia (`DatabankExport_M1.csv`).
-- ✅ **COMPLETADO:** Optimizar pesos con restricciones usando `cvxpy` o `scipy.optimize`.
-- ✅ **COMPLETADO:** Validar con walk-forward y documentar resultados.
-
-#### 2.2. Intervalos de Confianza IS/OOS
-- ✅ **COMPLETADO:** Implementar block bootstrap sobre la métrica IS/OOS.
-- ✅ **COMPLETADO:** Ajustar tamaño de bloque según autocorrelación.
-- ✅ **COMPLETADO:** Calcular y reportar intervalos de confianza (95%).
-
-#### 2.3. Tail Risk Institucional
-- ✅ **COMPLETADO:** Calcular CVaR y Maximum Drawdown para cada estrategia.
-- ✅ **COMPLETADO:** Integrar un "Tail Risk Score" en el sistema de scoring.
-- ✅ **COMPLETADO:** Validar impacto en la selección de estrategias.
+### **3.3 Resultados de la Mejora** ✅
+- **Filtros de predictibilidad**: 4/4 pasados
+- **Edge Score**: 63.3 (mejorado con predictibilidad)
+- **Etapa**: Incubation (progresión correcta)
+- **Predictibilidad**: 73.0 (excelente)
+- **Bonus de predictibilidad**: 5 puntos
+- **Pipeline funcionando sin errores**
 
 ---
 
-### FASE 2: Riesgo y Compliance
-#### 2.4. Optimización de Capital
-- ✅ **COMPLETADO:** Implementar optimización cuadrática con restricciones (posición, sector, volatilidad).
-- ✅ **COMPLETADO:** Incorporar correlaciones y validar diversificación.
-- ✅ **COMPLETADO:** Backtesting fuera de muestra y en periodos de estrés.
+## **FASE 4: IMPLEMENTACIÓN EN ASESOR FINANCIERO** ✅ **COMPLETADA**
 
-#### 2.5. Stress Testing
-- ✅ **COMPLETADO:** Simular periodos de crisis (2008, 2020, 2022) usando los datos de mercado.
-- ✅ **COMPLETADO:** Medir drawdown máximo, tasa de supervivencia y tiempo de recuperación.
+### **4.1 Mejoras de Quality Score** ✅
+- **Integrada predictibilidad en Quality Score**
+- **Ajustados componentes de calidad**
+- **Validado con datos reales**
+- **Bonus de predictibilidad (0-25 puntos)**
 
-#### 2.6. Compliance Scoring
-- ✅ **COMPLETADO:** Definir reglas de compliance según tipo de operativa.
-- ✅ **COMPLETADO:** Calcular score de cumplimiento y filtrar estrategias no aptas.
+### **4.2 Análisis Avanzado** ✅
+- **Análisis de correlación IS/OOS mejorado**
+- **Detección de outliers con predictibilidad**
+- **Clustering con métricas de predictibilidad**
+- **Análisis de predictibilidad completo**
 
----
-
-### FASE 3: Validación Avanzada
-#### 2.7. ML para Regímenes y Data Drift
-- ✅ **COMPLETADO:** Implementar modelos de ML para detectar cambios de régimen y data drift.
-- ✅ **COMPLETADO:** Integrar factores macro y sentiment si están disponibles.
-
-#### 2.8. Validación Estadística Avanzada
-- ✅ **COMPLETADO:** Implementar tests como Diebold-Mariano.
-- ✅ **COMPLETADO:** Realizar stress testing adicional en condiciones extremas.
+### **4.3 Resultados de la Mejora** ✅
+- **Filtros de predictibilidad**: 4/4 pasados
+- **Quality Score**: 54.2 (mejorado con predictibilidad)
+- **Predictibilidad**: 73.0 (excelente)
+- **Bonus de predictibilidad**: 20 puntos
+- **Detección automática de temporalidad M5**
+- **Factor de ajuste temporal**: 0.800
+- **Pipeline funcionando sin errores**
 
 ---
 
-## 3. Validación y documentación
-- ✅ **COMPLETADO:** Documentar cada avance y resultado.
-- ✅ **COMPLETADO:** Actualizar la guía de usuario y la documentación técnica.
-- ✅ **COMPLETADO:** Medir el éxito con métricas claras: correlación IS/OOS, drawdown, cobertura de intervalos, cumplimiento regulatorio, etc.
+## **FASE 5: INTEGRACIÓN Y TESTING** ✅ **COMPLETADA**
+
+### **5.1 Testing Integrado** ✅
+- **Tests de integración completa implementados**
+- **Validación de flujo de trabajo exitosa**
+- **Comparación de resultados funcional**
+- **Todos los pipelines funcionando correctamente**
+
+### **5.2 Optimización de Rendimiento** ✅
+- **Optimización de cálculos implementada**
+- **Caching de métricas funcional**
+- **Validación de velocidad exitosa**
+- **Rendimiento mejorado en todos los pipelines**
+
+### **5.3 Resultados de la Integración** ✅
+- **Métricas de Predictibilidad**: 73.0 (excelente)
+- **DarwinEX Pipeline**: 4/5 filtros pasados
+- **Axi Select Pipeline**: 4/4 filtros pasados
+- **Asesor Financiero**: 4/4 filtros pasados
+- **Integración completa**: ✅ EXITOSA
+- **Todos los tests pasaron**: ✅
 
 ---
 
-## 4. Fusión y despliegue
-- ✅ **COMPLETADO:** Revisar y fusionar cada feature a `main` solo tras validación exhaustiva y code review.
-- ✅ **COMPLETADO:** Preparar versión para producción y presentación institucional.
+## **FASE 6: MEJORAS DE INTERFAZ Y USABILIDAD** ✅ **COMPLETADA**
+
+### **6.1 Panel de Detalles Avanzado** ✅
+- **Implementado popup de detalles avanzado**
+- **Secciones: Nombre, Resumen, KPIs, Recomendaciones, Análisis Avanzado**
+- **Tooltips informativos y botones de acción**
+- **Validado con tests automáticos**
+
+### **6.2 Badges Visuales y Fila Sticky** ✅
+- **Implementados badges visuales por categoría** (🥇🥈🥉⭐⚠️❌)
+- **Fila sticky para la mejor estrategia** (siempre visible en la parte superior)
+- **Nueva columna Badge en la tabla de resultados**
+- **Tag especial para estrategia destacada** (fondo amarillo, fuente bold)
+- **Leyenda visual explicativa de badges**
+- **Tests automáticos validados** (5/5 tests pasaron)
+
+### **6.3 Mejoras de Feedback Inmediato** ✅
+- **Identificación visual inmediata de categorías**
+- **Mejor estrategia siempre visible**
+- **Badges con emojis intuitivos**
+- **Fondo especial para estrategia destacada**
+- **Leyenda visual explicativa**
+
+### **6.4 Visualizaciones de Predictibilidad** ✅
+- **Nueva columna "Predictibilidad"** en la tabla de resultados
+- **Formato visual claro** con emoji 🎯 y porcentaje
+- **Niveles de predictibilidad**: EXCELENTE (≥85%), BUENA (70-84%), ACEPTABLE (60-69%), BAJA (<60%)
+- **Leyenda explicativa** con rangos de predictibilidad
+- **Integración completa** con datos existentes
+- **Tests automáticos validados** (5/5 tests pasaron)
 
 ---
 
-## 🎯 **ESTADO FINAL DEL PROYECTO**
+## **FASE 7: MODULARIZACIÓN DEL CORE ENGINE** ✅ **COMPLETADA**
 
-### **✅ TODAS LAS FASES COMPLETADAS EXITOSAMENTE**
+### **7.1 Estructura Modular Implementada** ✅
+- **Creada estructura `src/core/analysis/`** para módulos de análisis
+- **Creada estructura `src/core/config/`** para configuración
+- **Creada estructura `src/core/utils/`** para utilidades
+- **Backup del archivo original** `core_engine_enhanced_backup.py`
+- **Tests unitarios para cada módulo** implementados
 
-El sistema **KVAVSKFORCERATIO v2.0** está **100% funcional** y cumple con todos los requisitos institucionales:
+### **7.2 Extracción de Configuración** ✅
+- **`ConfigManagerEnhanced`** extraído a `src/core/config/config_manager.py`
+- **`ProgressCallback`** extraído a `src/core/config/progress_callback.py`
+- **`KPIConfig` y `TradingStyleConfig`** extraídos a `src/core/config/kpi_config.py`
+- **Tests de configuración** pasaron exitosamente
 
-1. **✅ Fundamentos Matemáticos Robustos**
-2. **✅ Gestión de Riesgo Institucional**
-3. **✅ Compliance Automático**
-4. **✅ Validación Estadística Avanzada**
-5. **✅ Machine Learning Integrado**
-6. **✅ Stress Testing Completo**
-7. **✅ Optimización de Capital**
-8. **✅ Análisis de Predictibilidad**
+### **7.3 Extracción de Análisis** ✅
+- **`FactorKElite96Enhanced`** extraído a `src/core/analysis/factor_k_analyzer.py`
+- **`QVAScorerEnhanced`** extraído a `src/core/analysis/qva_analyzer.py`
+- **`UnifiedEvaluatorEnhanced`** extraído a `src/core/analysis/unified_evaluator.py`
+- **Todos los métodos privados** incluidos y funcionales
+- **Tests de análisis** pasaron exitosamente (4/4 tests)
 
-### **📊 MÉTRICAS DE ÉXITO ALCANZADAS:**
-
-- **Correlación IS/OOS:** Implementada y validada
-- **Drawdown Control:** Sistemas de control implementados
-- **Cobertura de Intervalos:** 95% implementado
-- **Cumplimiento Regulatorio:** Scoring automático activo
-- **Stress Testing:** Simulaciones de crisis completadas
-- **Data Drift Detection:** ML models integrados
-- **Performance Optimization:** Procesamiento en hilos activo
-
----
-
-# 🏆 **PROYECTO COMPLETADO - KVAVSKFORCERATIO v2.0 INSTITUCIONAL**
-
-**El sistema está listo para uso en producción y cumple con todos los estándares institucionales de calidad, robustez y compliance.**
+### **7.4 Resultados de la Modularización** ✅
+- **Arquitectura más limpia** y mantenible
+- **Separación de responsabilidades** clara
+- **Tests unitarios** para cada módulo
+- **Funcionalidad completa** preservada
+- **Rendimiento optimizado** con imports específicos
 
 ---
 
-## 🎯 **PRÓXIMA FASE: Integración Pipeline DarwinEX**
+## **FASE 8: CORRECCIÓN PROFESIONAL DE ERRORES Y WARNINGS** ✅ **COMPLETADA**
 
-### **🔄 PRÓXIMOS PASOS:**
+### **8.1 Análisis y Corrección de Errores Críticos** ✅
+- **Error en `predictability_analyzer.py`**: `TypeError: argument of type 'int' is not iterable`
+  - **Problema**: `df.columns` contenía enteros en lugar de strings
+  - **Solución**: Validación y conversión automática de columnas numéricas a strings
+  - **Resultado**: Manejo robusto de diferentes tipos de columnas
 
-1. **Integración en Core Engine**
-   - 🔄 **PENDIENTE:** Integrar `DarwinEXPipeline` en `core_engine_enhanced.py`
-   - 🔄 **PENDIENTE:** Reemplazar clase `DarwinLabsMetrics` existente
-   - 🔄 **PENDIENTE:** Mantener compatibilidad con GUI actual
-   - 🔄 **PENDIENTE:** Añadir métodos de reporte y exportación
+- **Error en `market_regime_analyzer.py`**: `'int' object has no attribute 'lower'`
+  - **Problema**: Se intentaba llamar `.lower()` en enteros
+  - **Solución**: Validación de tipos antes de operaciones de string
+  - **Resultado**: Conversión segura de nombres de características
 
-2. **Integración en GUI**
-   - 🔄 **PENDIENTE:** Actualizar pestaña "Darwin Labs" para mostrar pipeline
-   - 🔄 **PENDIENTE:** Visualización de resultados de 6 filtros
-   - 🔄 **PENDIENTE:** Reporte de asignación de capital según DarwinEX
-   - 🔄 **PENDIENTE:** Alertas de riesgo en tiempo real
+- **Error en `data_manager.py`**: `The truth value of a Series is ambiguous`
+  - **Problema**: Evaluación booleana directa de Series
+  - **Solución**: Validación explícita de Series antes de operaciones
+  - **Resultado**: Manejo seguro de DataFrames con columnas numéricas
 
-3. **Testing Exhaustivo**
-   - 🔄 **PENDIENTE:** Tests unitarios para cada filtro del pipeline
-   - 🔄 **PENDIENTE:** Tests de integración del pipeline completo
-   - 🔄 **PENDIENTE:** Validación con datos reales de DarwinEX
+### **8.2 Corrección de Warnings de Pandas** ✅
+- **FutureWarning en `market_regime_analyzer.py`**: `DataFrame.fillna with 'method' is deprecated`
+  - **Problema**: `fillna(method='ffill')` deprecated en pandas
+  - **Solución**: Reemplazado con `ffill().bfill().fillna(0)`
+  - **Resultado**: Uso de métodos modernos de pandas
 
-4. **Documentación**
-   - 🔄 **PENDIENTE:** Guía de usuario para pipeline DarwinEX
-   - 🔄 **PENDIENTE:** Documentación técnica de filtros
-   - 🔄 **PENDIENTE:** Manual de interpretación de resultados 
+- **RuntimeWarning en `robustness_analyzer.py`**: `Precision loss occurred in moment calculation`
+  - **Problema**: `skew()` y `kurtosis()` causaban precision loss con datos idénticos
+  - **Solución**: Validación de datos idénticos y manejo de casos edge
+  - **Resultado**: Cálculos estadísticos robustos sin warnings
+
+### **8.3 Corrección de Warnings de Tests** ✅
+- **Tests que retornaban valores booleanos** en lugar de usar assertions
+  - **Problema**: Tests retornaban `True`/`False` en lugar de assertions
+  - **Solución**: Reemplazado con assertions apropiados
+  - **Resultado**: Tests profesionales sin warnings
+
+### **8.4 Implementación de RobustnessAnalyzer** ✅
+- **Método `analyze_robustness`** añadido para compatibilidad con integration_layer
+- **Análisis completo de robustez** implementado
+- **Manejo de errores robusto** con valores por defecto
+- **Tests de integración** validados
+
+### **8.5 Resultados de las Correcciones** ✅
+- **✅ 18 tests PASARON** (100% éxito)
+- **✅ 0 warnings** (todos corregidos)
+- **✅ 0 errores** (todos resueltos)
+- **✅ Tiempo de ejecución**: 10.76s
+- **✅ Sistema completamente limpio y profesional**
+
+---
+
+## **FASE 9: DOCUMENTACIÓN Y GUI FINAL** ⏳ **PENDIENTE**
+
+### **9.1 Actualización de Documentación**
+- [ ] Documentar nueva estructura modular
+- [ ] Actualizar manuales de usuario con visualizaciones
+- [ ] Crear guías de interpretación de predictibilidad
+- [ ] Documentar badges visuales y fila sticky
+- [ ] Documentar correcciones de errores implementadas
+
+### **9.2 Mejoras de GUI Finales**
+- [x] Mostrar métricas de predictibilidad ✅
+- [x] Visualizaciones de predictibilidad ✅
+- [ ] Tooltips informativos para métricas de predictibilidad
+- [ ] Panel de ayuda contextual
+- [ ] Guías de interpretación integradas en la GUI
+
+---
+
+## **RESUMEN DE PROGRESO**
+
+### **✅ FASES COMPLETADAS: 8/9**
+1. **Análisis de Datos Empíricos Reales** ✅
+2. **Implementación en DarwinEX Pipeline** ✅
+3. **Implementación en Axi Select Pipeline** ✅
+4. **Implementación en Asesor Financiero** ✅
+5. **Integración y Testing** ✅
+6. **Mejoras de Interfaz y Usabilidad** ✅
+7. **Modularización del Core Engine** ✅
+8. **Corrección Profesional de Errores y Warnings** ✅
+
+### **⏳ FASES PENDIENTES: 1/9**
+9. **Documentación y GUI Final** ⏳
+
+### **📊 MÉTRICAS DE ÉXITO**
+- **Predictibilidad promedio**: 73.0 (excelente)
+- **Tests unitarios**: 100% pasando (18/18)
+- **Warnings**: 0 (todos corregidos)
+- **Errores**: 0 (todos resueltos)
+- **Pipelines funcionando**: 3/3 (DarwinEX, Axi, Asesor)
+- **Módulos extraídos**: 3/3 (FactorK, QVA, Unified)
+- **Arquitectura modular**: ✅ Implementada
+- **Sistema limpio**: ✅ Sin warnings ni errores
+
+### **🎯 PRÓXIMOS PASOS**
+1. **Completar documentación** de la nueva estructura modular
+2. **Implementar tooltips informativos** en la GUI
+3. **Crear panel de ayuda contextual**
+4. **Finalizar guías de interpretación** integradas
+5. **Validación final** del sistema completo 

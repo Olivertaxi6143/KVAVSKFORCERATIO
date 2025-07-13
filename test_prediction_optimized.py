@@ -14,7 +14,7 @@ from pathlib import Path
 # Añadir el directorio src al path
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from data_manager import DataManager
+from src.data.data_manager import DataManager
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

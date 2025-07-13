@@ -1,7 +1,11 @@
 import pandas as pd
 
 def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Normaliza nombres de columnas según el estándar único del sistema."""
+    """
+    Normaliza nombres de columnas según el estándar único del sistema.
+    - 'Stagnation': periodo de estancamiento (tiempo o trades sin nuevo máximo de equity).
+    - 'Stagnation_Trades': número máximo de operaciones consecutivas en estancamiento (si la fuente lo provee).
+    """
     column_mapping = {
         # Integrales
         'Strategy Name': 'Strategy_Name',
@@ -11,8 +15,10 @@ def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
         'CalmarRatio': 'CalmarRatio',
         'Max DD %': 'Max_DD_%',
         'Drawdown': 'Max_DD_%',
-        'Stagnation (Trades)': 'Stagnation_Trades',
-        'Avg. Stagnation Trades': 'Stagnation_Trades',
+        'Stagnation (Trades)': 'Stagnation',
+        'Avg. Stagnation Trades': 'Stagnation',
+        'Max Stagnation Trades': 'Stagnation_Trades',
+        'Stagnation_Trades': 'Stagnation_Trades',
         '# of trades': '#_of_trades',
         'Avg. Bars in Trade': 'Avg_Bars_in_Trade',
         'Ulcer Index %': 'Ulcer_Index_%',

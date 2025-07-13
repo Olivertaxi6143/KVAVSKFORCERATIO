@@ -22,7 +22,7 @@ def test_kpis_extra_integration():
     print("=" * 60)
     
     try:
-        from core_engine_enhanced import (
+        from src.core.integration_layer import (
             ConfigManagerEnhanced,
             QVAScorerEnhanced,
             ExtraKPIManager,
@@ -126,7 +126,7 @@ def create_test_data():
         'Expectancy': np.random.uniform(50, 200, n_strategies),
         'Avg._MAE_-_Profit/loss': np.random.uniform(100, 500, n_strategies),
         'Avg._MFE_-_Profit/loss': np.random.uniform(200, 800, n_strategies),
-        'Stagnation_Trades': np.random.uniform(5, 25, n_strategies),
+                    'Stagnation': np.random.uniform(5, 25, n_strategies),
         'New_Peak_Trades_%': np.random.uniform(10, 40, n_strategies),
         'Drawdown_Trades_%': np.random.uniform(20, 60, n_strategies),
         'Winrate': np.random.uniform(40, 70, n_strategies),

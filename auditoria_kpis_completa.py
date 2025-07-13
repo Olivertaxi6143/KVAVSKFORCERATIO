@@ -14,7 +14,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath('src'))
 
 try:
-    from core_engine_enhanced import run_complete_analysis_with_gui_integration
+    from src.core.integration_layer import run_complete_analysis_with_gui_integration
     from data_manager import DataManager
     from asesor_financiero_inteligente import AsesorFinancieroInteligente
 except ImportError as e:

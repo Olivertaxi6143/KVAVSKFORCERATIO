@@ -15,6 +15,8 @@ import os
 # Configurar logging
 logger = logging.getLogger(__name__)
 
+from src.analysis.predictability_metrics import PredictabilityAnalyzer
+
 @dataclass
 class AxiSelectStage:
     """Configuración de una fase de Axi Select."""
@@ -55,6 +57,7 @@ class AxiSelectAnalysis:
         self.config_file = config_file
         self.config = self._load_config()
         self.stages = self._initialize_stages()
+        self.predictability_analyzer = PredictabilityAnalyzer()
         
     def _load_config(self) -> Dict[str, Any]:
         """Carga la configuración de Axi Select."""
@@ -185,12 +188,32 @@ class AxiSelectAnalysis:
     def calculate_edge_score(self, strategy_data: pd.Series) -> float:
         """
         Calcula el Edge Score basado en 4 componentes: Skill, Risk, Consistency, Experience.
+        Incluye bonus por predictibilidad usando datos empíricos reales.
         
         Args:
             strategy_data: Datos de la estrategia
             
         Returns:
             Edge Score (0-100)
+        """
+        try:
+            # Edge Score base original (mantener lógica original)
+            base_edge_score = self._calculate_base_edge_score(strategy_data)
+            
+            # Bonus por predictibilidad (nuevo)
+            predictability_bonus = self._calculate_predictability_bonus_axi(strategy_data)
+            
+            # Edge Score final
+            final_edge_score = base_edge_score + predictability_bonus
+            return min(final_edge_score, 100)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculando Edge Score: {e}")
+            return 0.0
+    
+    def _calculate_base_edge_score(self, strategy_data: pd.Series) -> float:
+        """
+        Calcula Edge Score base original (mantener lógica original).
         """
         try:
             weights = self.config["edge_score_components"]
@@ -321,8 +344,181 @@ class AxiSelectAnalysis:
             return min(edge_score, 100)
             
         except Exception as e:
-            self.logger.error(f"Error calculando Edge Score: {e}")
+            self.logger.error(f"Error calculando Edge Score base: {e}")
             return 0.0
+    
+    def _calculate_predictability_bonus_axi(self, strategy_data: pd.Series) -> float:
+        """
+        Calcula bonus por predictibilidad para Axi Select usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            Bonus de predictibilidad (0-15 puntos)
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            predictability_metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Bonus basado en predictibilidad general (más conservador para Axi)
+            if predictability_metrics.overall_predictability >= 85:
+                bonus = 15  # Excelente predictibilidad
+            elif predictability_metrics.overall_predictability >= 75:
+                bonus = 10  # Buena predictibilidad
+            elif predictability_metrics.overall_predictability >= 65:
+                bonus = 5   # Predictibilidad aceptable
+            else:
+                bonus = 0   # Sin bonus
+            
+            self.logger.info(f"Axi Predictibilidad: {predictability_metrics.overall_predictability:.1f}, Bonus: {bonus}")
+            
+            return bonus
+            
+        except Exception as e:
+            self.logger.error(f"Error calculando bonus de predictibilidad Axi: {e}")
+            return 0.0
+    
+    def _apply_predictability_filters_axi(self, strategy_data: pd.Series) -> Dict[str, Any]:
+        """
+        Aplica filtros de predictibilidad para Axi Select usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            Resultados de filtros de predictibilidad
+        """
+        try:
+            passed_filters = []
+            failed_filters = []
+            
+            # 1. Filtro de Consistencia IS/OOS (datos reales)
+            if self._check_is_oos_consistency_axi(strategy_data):
+                passed_filters.append("is_oos_consistency")
+            else:
+                failed_filters.append("is_oos_consistency")
+            
+            # 2. Filtro de Robustez Temporal (datos reales)
+            if self._check_temporal_robustness_axi(strategy_data):
+                passed_filters.append("temporal_robustness")
+            else:
+                failed_filters.append("temporal_robustness")
+            
+            # 3. Filtro de Detección de Sobreajuste (datos reales)
+            if self._check_overfitting_detection_axi(strategy_data):
+                passed_filters.append("overfitting_detection")
+            else:
+                failed_filters.append("overfitting_detection")
+            
+            # 4. Filtro de Estabilidad (datos reales)
+            if self._check_stability_score_axi(strategy_data):
+                passed_filters.append("stability_score")
+            else:
+                failed_filters.append("stability_score")
+            
+            return {
+                "passed": passed_filters,
+                "failed": failed_filters,
+                "total_passed": len(passed_filters),
+                "total_filters": len(passed_filters) + len(failed_filters)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error aplicando filtros de predictibilidad Axi: {e}")
+            return {"passed": [], "failed": [], "total_passed": 0, "total_filters": 0}
+    
+    def _check_is_oos_consistency_axi(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica consistencia IS/OOS para Axi Select usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de consistencia
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de consistencia IS/OOS (más conservador para Axi)
+            min_consistency = 65.0  # 65% mínimo
+            
+            return metrics.is_oos_consistency >= min_consistency
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando consistencia IS/OOS Axi: {e}")
+            return False
+    
+    def _check_temporal_robustness_axi(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica robustez temporal para Axi Select usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de robustez temporal
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de robustez temporal (más conservador para Axi)
+            min_robustness = 55.0  # 55% mínimo
+            
+            return metrics.temporal_robustness >= min_robustness
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando robustez temporal Axi: {e}")
+            return False
+    
+    def _check_overfitting_detection_axi(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica detección de sobreajuste para Axi Select usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de detección de sobreajuste
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de detección de sobreajuste (más conservador para Axi)
+            min_overfitting_detection = 75.0  # 75% mínimo (menos sobreajuste)
+            
+            return metrics.overfitting_detection >= min_overfitting_detection
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando detección de sobreajuste Axi: {e}")
+            return False
+    
+    def _check_stability_score_axi(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica score de estabilidad para Axi Select usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de estabilidad
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de estabilidad (más conservador para Axi)
+            min_stability = 55.0  # 55% mínimo
+            
+            return metrics.stability_score >= min_stability
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando score de estabilidad Axi: {e}")
+            return False
     
     def determine_stage(self, strategy_data: pd.Series, edge_score: float) -> str:
         """
@@ -612,7 +808,10 @@ class AxiSelectAnalysis:
                 strategy_data = strategies_df.loc[idx]
                 strategy_name = strategy_data['Strategy Name']
                 
-                # Calcular Edge Score
+                # 1. Aplicar filtros de predictibilidad
+                predictability_results = self._apply_predictability_filters_axi(strategy_data)
+                
+                # 2. Calcular Edge Score con predictibilidad
                 edge_score = self.calculate_edge_score(strategy_data)
                 
                 # Determinar fase actual

@@ -58,8 +58,8 @@ def test_file_structure():
     """Test 1: Verificar estructura de archivos"""
     try:
         required_files = [
-            'src/gui_enhanced_rank.py',
-            'src/core_engine_enhanced.py',
+            'src/gui/gui_enhanced_rank.py',
+            'src/core/integration_layer.py',
             'src/logger_config.py',
             'BACKUP/gui_enhanced_rank.py'
         ]
@@ -116,12 +116,10 @@ def test_module_imports():
         
         # Test imports del sistema
         try:
-            from src.core_engine_enhanced import run_complete_analysis_with_gui_integration
-        except ImportError:
-            try:
-                from core_engine_enhanced import run_complete_analysis_with_gui_integration
-            except ImportError:
-                return False, "No se pudo importar core_engine_enhanced"
+            from src.core.integration_layer import run_complete_analysis_with_gui_integration
+            return True, "Importación exitosa"
+        except ImportError as e:
+            return False, "No se pudo importar integration_layer"
         
         return True, "Todos los módulos importados correctamente"
     except Exception as e:

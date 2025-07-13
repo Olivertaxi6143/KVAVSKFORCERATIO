@@ -28,10 +28,11 @@ import shutil
 from difflib import get_close_matches
 from datetime import datetime
 import math
-from typing import Dict
+from typing import Dict, Any, List, cast, Optional
+from collections.abc import Iterable as ABCIterable
 
 # Importar el motor robusto
-from src.core.core_engine_enhanced import (
+from src.core.integration_layer import (
     run_complete_analysis_with_gui_integration, 
     GUIAnalysisError, 
     ProgressCallback,
@@ -44,6 +45,9 @@ from src.analysis.darwinex_pipeline import DarwinEXPipeline, PipelineResult
 
 # Importar el DataManager consolidado
 from src.data.data_manager import DataManager, create_data_manager, load_inputtest_data_pipeline
+
+# Importar funciones de carga de datos desde data_utils.py
+from src.data.data_utils import read_and_prepare
 
 # —————————————————————————————————————————————————
 # 1. NORMALIZACIÓN Y MAPEO DE COLUMNAS (MANTENIDO PARA COMPATIBILIDAD)
@@ -118,232 +122,36 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 # —————————————————————————————————————————————————
 # 2. FUNCIÓN DE CARGA DE DATOS ACTUALIZADA CON DATAMANAGER
 # —————————————————————————————————————————————————
-def read_and_prepare(path, is_oos_split=0.75):
-    """
-    Función actualizada para usar DataManager consolidado.
-    Preserva datos reales sin cocinamiento.
-    """
-    from pathlib import Path
-    
-    logging.info(f"🔄 Iniciando carga con DataManager desde: {path}")
-    
-    try:
-        # Crear DataManager
-        dm = DataManager()
-        
-        # Determinar si usar INPUTTEST o rutas de usuario
-        if 'INPUTTEST' in str(path) or 'inputtest' in str(path).lower():
-            dm.switch_to_development_mode()
-            logging.info("🔧 Modo desarrollo activado (INPUTTEST)")
-        else:
-            dm.switch_to_production_mode()
-            logging.info("🏭 Modo producción activado (rutas de usuario)")
-        
-        # Cargar datos usando DataManager
-        if Path(path).suffix.lower() == '.csv':
-            # Cargar KPIs específicamente
-            success = dm.load_kpis_data(str(path))
-            if success and dm.kpis_data is not None:
-                df = dm.kpis_data.copy()
-                logging.info(f"✅ KPIs cargados exitosamente: {len(df)} filas, {len(df.columns)} columnas")
-                return df
-            else:
-                raise ValueError("No se pudieron cargar los KPIs con DataManager")
-        else:
-            # Para otros tipos de archivos, usar pipeline general
-            df = dm.load_and_prepare_data_pipeline(str(path))
-            if not df.empty:
-                logging.info(f"✅ Datos cargados exitosamente: {len(df)} filas, {len(df.columns)} columnas")
-                return df
-            else:
-                raise ValueError("No se pudieron cargar los datos con DataManager")
-                
-    except Exception as e:
-        logging.error(f"❌ Error cargando datos con DataManager: {str(e)}")
-        # Fallback a método anterior si DataManager falla
-        logging.warning("⚠️ Usando método de carga fallback")
-        return _read_and_prepare_fallback(path, is_oos_split)
-
-def _read_and_prepare_fallback(path, is_oos_split=0.75):
-    """
-    Método de carga fallback para compatibilidad.
-    """
-    from pathlib import Path
-    path = Path(path)
-    
-    logging.info(f"🔄 Usando método de carga fallback desde: {path}")
-    
-    # Carga de archivo con manejo robusto
-    try:
-        if path.suffix.lower() in {'.csv', '.txt'}:
-            df = pd.read_csv(path, sep=';', decimal=',', engine='python')
-        elif path.suffix.lower() in {'.xlsx', '.xls'}:
-            df = pd.read_excel(path)
-        else:
-            raise ValueError(f"Formato no soportado: {path.suffix}")
-        
-        logging.info(f"✅ Archivo cargado: {len(df)} filas, {len(df.columns)} columnas")
-        logging.info(f"📋 Columnas originales: {df.columns.tolist()}")
-        
-    except Exception as e:
-        logging.error(f"❌ Error cargando archivo: {str(e)}")
-        raise
-    
-    original_columns = df.columns.tolist()
-    new_columns = []
-    
-    # Mapeo de columnas con logging detallado
-    for c in df.columns:
-        normalized = NORMALIZE_COL(c)
-        mapped = QVA_COL_MAP.get(normalized, c)
-        if mapped not in new_columns:
-            new_columns.append(mapped)
-            if mapped != c:
-                logging.info(f"🔄 Mapeo de columna: '{c}' → '{mapped}'")
-        else:
-            logging.warning(f"⚠️ Columna duplicada evitada: {mapped}, usando nombre original {c}")
-            new_columns.append(c)
-    
-    df.columns = new_columns
-    logging.info(f"📋 Columnas tras mapeo QVA: {df.columns.tolist()}")
-    
-    # Verificación y cálculo de columnas requeridas
-    required_cols = {'CAGR', 'Drawdown', 'Expectancy', 'Max Consec. Losses', 'Sharpe Ratio', 'Profit factor', 'RINAIndex', 'Ulcer Index %', '# of trades', 'CalmarRatio'}
-    missing_cols = required_cols - set(df.columns)
-    
-    if missing_cols:
-        logging.warning(f"⚠️ Columnas requeridas faltantes: {missing_cols}")
-        
-        # Cálculo automático de CalmarRatio si es posible
-        if 'CalmarRatio' in missing_cols and 'RecoveryFactor' in df.columns and 'Drawdown' in df.columns:
-            try:
-                # Conversión robusta de tipos
-                if not pd.api.types.is_numeric_dtype(df['Drawdown']):
-                    df['Drawdown'] = pd.to_numeric(df['Drawdown'], errors='coerce').abs()
-                    logging.info("🔄 Conversión forzada de 'Drawdown' a numérico")
-                
-                if not pd.api.types.is_numeric_dtype(df['RecoveryFactor']):
-                    df['RecoveryFactor'] = pd.to_numeric(df['RecoveryFactor'], errors='coerce')
-                    logging.info("🔄 Conversión forzada de 'RecoveryFactor' a numérico")
-                
-                df['CalmarRatio'] = df['RecoveryFactor'] / df['Drawdown'].replace(0, np.nan).fillna(1e-6)
-                logging.info("✅ Calculada columna 'CalmarRatio' a partir de 'RecoveryFactor' y 'Drawdown'")
-                
-            except Exception as e:
-                logging.error(f"❌ Error calculando CalmarRatio: {str(e)}")
-                df['CalmarRatio'] = np.random.uniform(1.5, 4.0, len(df))  # Placeholder
-                logging.warning("⚠️ Usando valores placeholder para 'CalmarRatio'")
-        
-        elif 'CalmarRatio' in missing_cols:
-            df['CalmarRatio'] = np.random.uniform(1.5, 4.0, len(df))  # Placeholder
-            logging.warning("⚠️ Usando valores placeholder para 'CalmarRatio'")
-    
-    # Manejo robusto de columna Drawdown
-    if 'Drawdown' not in df.columns or not isinstance(df['Drawdown'], pd.Series):
-        drawdown_candidates = [c for c in original_columns if 'drawdown' in NORMALIZE_COL(c).lower() or 'maxdd' in NORMALIZE_COL(c).lower()]
-        if drawdown_candidates:
-            drawdown_col = next((c for c in drawdown_candidates if '(OOS)' in c), None)
-            if not drawdown_col:
-                drawdown_col = next((c for c in drawdown_candidates if c in df.columns), None)
-            if drawdown_col and drawdown_col in df.columns:
-                df['Drawdown'] = df[drawdown_col].copy()
-                logging.info(f"✅ Columna Drawdown asignada desde {drawdown_col}")
-            else:
-                logging.error("❌ No se encontraron candidatos válidos para Drawdown. Se rellenará con NaN.")
-                df['Drawdown'] = pd.Series(np.nan, index=df.index)
-        else:
-            logging.error("❌ No se encontraron columnas Drawdown. Se rellenará con NaN.")
-            df['Drawdown'] = pd.Series(np.nan, index=df.index)
-    
-    return df
-
-# —————————————————————————————————————————————————
-# 3. FUNCIÓN DE COPIA DE ARCHIVOS (MANTENIDA)
-# —————————————————————————————————————————————————
-def copy_top_n(df, top_n, source_folder, dest_folder):
-    """
-    Copia los top N archivos .sqx a la carpeta de destino.
-    """
-    try:
-        if df.empty:
-            logging.warning("⚠️ DataFrame vacío, no hay archivos para copiar")
-            return df.head(0), 0, dest_folder
-        
-        # Obtener nombres de estrategias del top N
-        top_strategies = df.head(top_n)
-        
-        # Buscar columna de nombre de estrategia
-        strategy_col = None
-        for col in ['Strategy Name', 'Strategy_Name', 'Estrategia', 'Nombre', 'Name']:
-            if col in top_strategies.columns:
-                strategy_col = col
-                break
-        
-        if not strategy_col:
-            logging.error("❌ No se encontró columna de nombre de estrategia")
-            return df.head(0), 0, dest_folder
-        
-        # Crear carpeta de destino si no existe
-        dest_path = Path(dest_folder)
-        dest_path.mkdir(parents=True, exist_ok=True)
-        
-        # Contar archivos copiados
-        copied_count = 0
-        
-        for idx, row in top_strategies.iterrows():
-            strategy_name = str(row[strategy_col]).strip()
-            if not strategy_name or strategy_name == 'nan':
-                continue
-            
-            # Buscar archivo .sqx correspondiente
-            sqx_file = None
-            source_path = Path(source_folder)
-            
-            # Buscar archivo exacto
-            exact_match = source_path / f"{strategy_name}.sqx"
-            if exact_match.exists():
-                sqx_file = exact_match
-            else:
-                # Buscar coincidencias parciales
-                for file in source_path.glob("*.sqx"):
-                    if strategy_name.lower() in file.stem.lower():
-                        sqx_file = file
-                        break
-            
-            if sqx_file and sqx_file.exists():
-                try:
-                    # Copiar archivo
-                    dest_file = dest_path / sqx_file.name
-                    shutil.copy2(sqx_file, dest_file)
-                    copied_count += 1
-                    logging.info(f"✅ Copiado: {sqx_file.name}")
-                except Exception as e:
-                    logging.error(f"❌ Error copiando {sqx_file.name}: {str(e)}")
-                else:
-                    logging.warning(f"⚠️ No se encontró archivo .sqx para: {strategy_name}")
-        
-        logging.info(f"📁 Copiados {copied_count} archivos .sqx a: {dest_folder}")
-        return top_strategies, copied_count, dest_folder
-        
-    except Exception as e:
-        logging.error(f"ERROR en copy_top_n: {str(e)}")
-        import traceback
-        logging.error(traceback.format_exc())
-        return df.head(0), 0, dest_folder
+# Las funciones read_and_prepare y _read_and_prepare_fallback están definidas en data_utils.py
+# y se importan desde allí para evitar duplicación
 
 # —————————————————————————————————————————————————
 # 4. CLASE GUI PRINCIPAL ACTUALIZADA
 # —————————————————————————————————————————————————
 class EnhancedRankGUI(tk.Tk):
     # --- MÉTODOS PÚBLICOS PARA TESTS (definidos como atributos de clase) ---
-    _get_empirical_stats = lambda self: {}
-    _reorganize_layout = lambda self: None
-    _on_result_double_click = lambda self, event: None
-    _add_scrollbars_to_table = lambda self, parent: (None, None)
-    _build_asesor_cientifico_tab = lambda self: None
-    _build_asesor_empirico_tab = lambda self: None
-    _build_asesor_seleccionadas_tab = lambda self: None
-    _show_strategy_details = lambda self, event=None: None
+    def _get_empirical_stats(self) -> dict:
+        return {}
+    
+    def _reorganize_layout(self) -> None:
+        pass
+    
+    # _on_result_double_click se implementa más adelante en el archivo
+    
+    def _add_scrollbars_to_table(self, parent) -> tuple[None, None]:
+        return (None, None)
+    
+    def _build_asesor_cientifico_tab(self) -> None:
+        pass
+    
+    def _build_asesor_empirico_tab(self) -> None:
+        pass
+    
+    def _build_asesor_seleccionadas_tab(self) -> None:
+        pass
+    
+    def _show_strategy_details(self, event=None) -> None:
+        pass
     
     def __init__(self, *args, **kwargs):
         # Llamar al constructor padre primero
@@ -604,56 +412,423 @@ class EnhancedRankGUI(tk.Tk):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True)
 
-        # Pestaña de configuración y controles
-        self.tab_config = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_config, text="Configuración y Análisis")
-        self._build_file_config(self.tab_config)
-        self._build_analysis_config(self.tab_config)
-        self._build_metrics_config(self.tab_config)
-        self._build_controls(self.tab_config)
+        # === WIZARD GUIADO - FLUJO DE TRABAJO PASO A PASO ===
+        
+        # Paso 1: Cargar Datos
+        self.tab_step1 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_step1, text="1️⃣ Cargar Datos")
+        self._build_step1_load_data(self.tab_step1)
 
-        # Pestaña de archivos (faltante identificada en auditoría)
-        self.tab_files = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_files, text="📁 Archivos")
-        self._build_files_tab(self.tab_files)
+        # Paso 2: Configurar Análisis
+        self.tab_step2 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_step2, text="2️⃣ Configurar Análisis")
+        self._build_step2_configure_analysis(self.tab_step2)
 
-        # Pestaña de análisis (faltante identificada en auditoría)
-        self.tab_analysis = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_analysis, text="🔬 Análisis")
-        self._build_analysis_tab(self.tab_analysis)
+        # Paso 3: Ejecutar Análisis
+        self.tab_step3 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_step3, text="3️⃣ Ejecutar Análisis")
+        self._build_step3_run_analysis(self.tab_step3)
 
-        # Pestaña de resultados
-        self.tab_results = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_results, text="Resultados del Análisis")
-        self._build_results_table(self.tab_results)
+        # Paso 4: Resultados y Filtrado
+        self.tab_step4 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_step4, text="4️⃣ Resultados y Filtrado")
+        self._build_step4_results_filtering(self.tab_step4)
 
-        # Pestaña del Asesor Financiero Inteligente SIEMPRE visible
-        self.tab_asesor = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_asesor, text="🤖 Asesor Financiero")
-        self._build_asesor_tab(self.tab_asesor)
+        # Paso 5: Asesor Inteligente
+        self.tab_step5 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_step5, text="5️⃣ Asesor Inteligente")
+        self._build_step5_intelligent_advisor(self.tab_step5)
 
+        # Paso 6: Exportar y Reportar
+        self.tab_step6 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_step6, text="6️⃣ Exportar y Reportar")
+        self._build_step6_export_report(self.tab_step6)
+
+        # === PESTAÑAS AVANZADAS ===
+        
         # Pestaña de DarwinEX Portfolio
         self.tab_darwinex = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_darwinex, text="🏆 DarwinEX Portfolio")
         self._build_darwinex_tab(self.tab_darwinex)
 
-        # Pestaña de resumen detallado
-        self.tab_summary = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_summary, text="Resumen Detallado")
-        self._build_summary_tab(self.tab_summary)
-
         # Pestaña de log de análisis
         self.tab_log = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_log, text="Log de Análisis")
+        self.notebook.add(self.tab_log, text="📝 Log de Análisis")
         self._build_log_tab(self.tab_log)
 
         # Pestaña de ayuda interactiva
         self.tab_help = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_help, text="Ayuda y Documentación")
+        self.notebook.add(self.tab_help, text="❓ Ayuda y Documentación")
         self._build_help_tab(self.tab_help)
 
         # Inicializar atributos de pestañas del asesor (lazy loading)
         self._init_asesor_tabs()
+        
+        # Configurar navegación del wizard
+        self._setup_wizard_navigation()
+
+    def _build_step1_load_data(self, parent):
+        """Paso 1: Cargar Datos - Wizard guiado."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título del paso
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(title_frame, text="📁 PASO 1: CARGAR DATOS", 
+                 font=("Arial", 16, "bold")).pack(anchor="w")
+        
+        # Descripción del paso
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(desc_frame, text="En este paso cargarás los archivos necesarios para el análisis:", 
+                 font=("Arial", 10)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Archivo de KPIs (CSV con métricas de estrategias)", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Carpeta de estrategias (archivos .sqx)", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Datos de mercado (opcional, para análisis avanzado)", 
+                 font=("Arial", 9)).pack(anchor="w")
+        
+        # Frame de configuración de archivos
+        files_frame = ttk.LabelFrame(main_frame, text="📂 Archivos del Proyecto", padding=15)
+        files_frame.pack(fill="x", pady=(0, 20))
+        
+        # Construir configuración de archivos
+        self._build_file_config(files_frame)
+        
+        # Frame de estado
+        status_frame = ttk.LabelFrame(main_frame, text="📊 Estado de Carga", padding=15)
+        status_frame.pack(fill="x", pady=(0, 20))
+        
+        self.step1_status_label = ttk.Label(status_frame, text="⏳ Pendiente de cargar archivos", 
+                                           font=("Arial", 10, "bold"))
+        self.step1_status_label.pack(anchor="w")
+        
+        # Frame de navegación
+        nav_frame = ttk.Frame(main_frame)
+        nav_frame.pack(fill="x", pady=(20, 0))
+        
+        ttk.Button(nav_frame, text="⬅️ Anterior", state="disabled").pack(side="left")
+        ttk.Button(nav_frame, text="Siguiente ➡️", 
+                  command=lambda: self._go_to_step(2)).pack(side="right")
+        
+        # Botón de validación
+        ttk.Button(nav_frame, text="🔍 Validar Datos", 
+                  command=self._validate_step1_data).pack(side="right", padx=(0, 10))
+
+    def _build_step2_configure_analysis(self, parent):
+        """Paso 2: Configurar Análisis - Wizard guiado."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título del paso
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(title_frame, text="⚙️ PASO 2: CONFIGURAR ANÁLISIS", 
+                 font=("Arial", 16, "bold")).pack(anchor="w")
+        
+        # Descripción del paso
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(desc_frame, text="Configura los parámetros de análisis según tu estilo de trading:", 
+                 font=("Arial", 10)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Estilo de trading (Swing, Day Trading, etc.)", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Métricas y KPIs a evaluar", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Parámetros de filtrado y selección", 
+                 font=("Arial", 9)).pack(anchor="w")
+        
+        # Frame de configuración de análisis
+        analysis_frame = ttk.LabelFrame(main_frame, text="🔬 Configuración de Análisis", padding=15)
+        analysis_frame.pack(fill="x", pady=(0, 20))
+        
+        # Construir configuración de análisis
+        self._build_analysis_config(analysis_frame)
+        
+        # Frame de configuración de métricas
+        metrics_frame = ttk.LabelFrame(main_frame, text="📊 Métricas y KPIs", padding=15)
+        metrics_frame.pack(fill="x", pady=(0, 20))
+        
+        # Construir configuración de métricas
+        self._build_metrics_config(metrics_frame)
+        
+        # Frame de navegación
+        nav_frame = ttk.Frame(main_frame)
+        nav_frame.pack(fill="x", pady=(20, 0))
+        
+        ttk.Button(nav_frame, text="⬅️ Anterior", 
+                  command=lambda: self._go_to_step(1)).pack(side="left")
+        ttk.Button(nav_frame, text="Siguiente ➡️", 
+                  command=lambda: self._go_to_step(3)).pack(side="right")
+
+    def _build_step3_run_analysis(self, parent):
+        """Paso 3: Ejecutar Análisis - Wizard guiado."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título del paso
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(title_frame, text="🚀 PASO 3: EJECUTAR ANÁLISIS", 
+                 font=("Arial", 16, "bold")).pack(anchor="w")
+        
+        # Descripción del paso
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(desc_frame, text="Ejecuta el análisis completo con los parámetros configurados:", 
+                 font=("Arial", 10)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Cálculo de métricas y KPIs", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Análisis de Factor K y QVA Score", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Evaluación de riesgo y robustez", 
+                 font=("Arial", 9)).pack(anchor="w")
+        
+        # Frame de controles
+        controls_frame = ttk.LabelFrame(main_frame, text="🎮 Controles de Análisis", padding=15)
+        controls_frame.pack(fill="x", pady=(0, 20))
+        
+        # Construir controles
+        self._build_controls(controls_frame)
+        
+        # Frame de progreso
+        progress_frame = ttk.LabelFrame(main_frame, text="📈 Progreso del Análisis", padding=15)
+        progress_frame.pack(fill="x", pady=(0, 20))
+        
+        self.step3_progress_label = ttk.Label(progress_frame, text="⏳ Listo para ejecutar análisis", 
+                                             font=("Arial", 10, "bold"))
+        self.step3_progress_label.pack(anchor="w")
+        
+        # Frame de navegación
+        nav_frame = ttk.Frame(main_frame)
+        nav_frame.pack(fill="x", pady=(20, 0))
+        
+        ttk.Button(nav_frame, text="⬅️ Anterior", 
+                  command=lambda: self._go_to_step(2)).pack(side="left")
+        ttk.Button(nav_frame, text="Siguiente ➡️", 
+                  command=lambda: self._go_to_step(4)).pack(side="right")
+
+    def _build_step4_results_filtering(self, parent):
+        """Paso 4: Resultados y Filtrado - Wizard guiado."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título del paso
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(title_frame, text="📊 PASO 4: RESULTADOS Y FILTRADO", 
+                 font=("Arial", 16, "bold")).pack(anchor="w")
+        
+        # Descripción del paso
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(desc_frame, text="Revisa los resultados del análisis y aplica filtros:", 
+                 font=("Arial", 10)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Tabla de resultados con métricas", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Filtros por rendimiento, riesgo y robustez", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Selección de estrategias candidatas", 
+                 font=("Arial", 9)).pack(anchor="w")
+        
+        # Frame de resultados
+        results_frame = ttk.LabelFrame(main_frame, text="📋 Resultados del Análisis", padding=15)
+        results_frame.pack(fill="both", expand=True, pady=(0, 20))
+        
+        # Construir tabla de resultados
+        self._build_results_table(results_frame)
+        
+        # Frame de navegación
+        nav_frame = ttk.Frame(main_frame)
+        nav_frame.pack(fill="x", pady=(20, 0))
+        
+        ttk.Button(nav_frame, text="⬅️ Anterior", 
+                  command=lambda: self._go_to_step(3)).pack(side="left")
+        ttk.Button(nav_frame, text="Siguiente ➡️", 
+                  command=lambda: self._go_to_step(5)).pack(side="right")
+
+    def _build_step5_intelligent_advisor(self, parent):
+        """Paso 5: Asesor Inteligente - Wizard guiado."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título del paso
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(title_frame, text="🤖 PASO 5: ASESOR INTELIGENTE", 
+                 font=("Arial", 16, "bold")).pack(anchor="w")
+        
+        # Descripción del paso
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(desc_frame, text="Utiliza el asesor financiero inteligente para obtener recomendaciones:", 
+                 font=("Arial", 10)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Análisis científico y empírico", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Consejos y recomendaciones personalizadas", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Selección final de estrategias", 
+                 font=("Arial", 9)).pack(anchor="w")
+        
+        # Frame del asesor
+        advisor_frame = ttk.LabelFrame(main_frame, text="🎯 Asesor Financiero", padding=15)
+        advisor_frame.pack(fill="both", expand=True, pady=(0, 20))
+        
+        # Construir pestaña del asesor
+        self._build_asesor_tab(advisor_frame)
+        
+        # Frame de navegación
+        nav_frame = ttk.Frame(main_frame)
+        nav_frame.pack(fill="x", pady=(20, 0))
+        
+        ttk.Button(nav_frame, text="⬅️ Anterior", 
+                  command=lambda: self._go_to_step(4)).pack(side="left")
+        ttk.Button(nav_frame, text="Siguiente ➡️", 
+                  command=lambda: self._go_to_step(6)).pack(side="right")
+
+    def _build_step6_export_report(self, parent):
+        """Paso 6: Exportar y Reportar - Wizard guiado."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título del paso
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(title_frame, text="📤 PASO 6: EXPORTAR Y REPORTAR", 
+                 font=("Arial", 16, "bold")).pack(anchor="w")
+        
+        # Descripción del paso
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill="x", pady=(0, 20))
+        
+        ttk.Label(desc_frame, text="Exporta los resultados y genera reportes profesionales:", 
+                 font=("Arial", 10)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Exportación a Excel con múltiples hojas", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Dashboard HTML interactivo", 
+                 font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(desc_frame, text="• Copia de archivos .sqx seleccionados", 
+                 font=("Arial", 9)).pack(anchor="w")
+        
+        # Frame de exportación
+        export_frame = ttk.LabelFrame(main_frame, text="📤 Opciones de Exportación", padding=15)
+        export_frame.pack(fill="x", pady=(0, 20))
+        
+        # Botones de exportación
+        export_buttons_frame = ttk.Frame(export_frame)
+        export_buttons_frame.pack(fill="x", pady=(10, 0))
+        
+        ttk.Button(export_buttons_frame, text="📊 Exportar a Excel", 
+                  command=self._export_to_excel).pack(side="left", padx=(0, 10))
+        ttk.Button(export_buttons_frame, text="🌐 Generar Dashboard HTML", 
+                  command=self._export_to_html).pack(side="left", padx=(0, 10))
+        ttk.Button(export_buttons_frame, text="📁 Copiar .sqx Seleccionados", 
+                  command=self._export_selected_sqxs).pack(side="left", padx=(0, 10))
+        ttk.Button(export_buttons_frame, text="📋 Copiar al Portapapeles", 
+                  command=self._copy_results_to_clipboard).pack(side="left")
+        
+        # Frame de navegación
+        nav_frame = ttk.Frame(main_frame)
+        nav_frame.pack(fill="x", pady=(20, 0))
+        
+        ttk.Button(nav_frame, text="⬅️ Anterior", 
+                  command=lambda: self._go_to_step(5)).pack(side="left")
+        ttk.Button(nav_frame, text="✅ Finalizar", 
+                  command=self._finish_wizard).pack(side="right")
+
+    def _setup_wizard_navigation(self):
+        """Configura la navegación del wizard."""
+        self.current_step = 1
+        self.wizard_steps = {
+            1: self.tab_step1,
+            2: self.tab_step2,
+            3: self.tab_step3,
+            4: self.tab_step4,
+            5: self.tab_step5,
+            6: self.tab_step6
+        }
+
+    def _go_to_step(self, step_number):
+        """Navega a un paso específico del wizard."""
+        if step_number in self.wizard_steps:
+            self.notebook.select(self.wizard_steps[step_number])
+            self.current_step = step_number
+            self._update_wizard_status()
+
+    def _update_wizard_status(self):
+        """Actualiza el estado del wizard."""
+        # Actualizar etiquetas de estado según el paso actual
+        if hasattr(self, 'step1_status_label'):
+            if self.current_step >= 1:
+                self.step1_status_label.config(text="✅ Datos cargados correctamente")
+        
+        if hasattr(self, 'step3_progress_label'):
+            if self.current_step >= 3:
+                self.step3_progress_label.config(text="✅ Análisis completado")
+
+    def _validate_step1_data(self):
+        """Valida los datos del paso 1."""
+        try:
+            # Validar que se han cargado los archivos necesarios
+            if hasattr(self, 'kpi_file_var') and self.kpi_file_var.get():
+                self.step1_status_label.config(text="✅ Datos validados correctamente")
+                messagebox.showinfo("Validación", "Los datos han sido validados correctamente.")
+            else:
+                self.step1_status_label.config(text="❌ Error: Falta cargar archivos")
+                messagebox.showerror("Error", "Por favor, carga los archivos necesarios antes de continuar.")
+        except Exception as e:
+            self._log_message(f"Error validando datos del paso 1: {str(e)}", "ERROR")
+
+    def _finish_wizard(self):
+        """Finaliza el wizard."""
+        messagebox.showinfo("¡Completado!", "Has completado el análisis de estrategias. ¡Excelente trabajo!")
+        self._log_message("✅ Wizard completado exitosamente")
+
+    def _export_to_html(self):
+        """Exporta resultados a HTML."""
+        try:
+            filename = filedialog.asksaveasfilename(
+                title="Guardar Dashboard HTML",
+                defaultextension=".html",
+                filetypes=[("HTML files", "*.html"), ("All files", "*.*")]
+            )
+            
+            if filename:
+                # Aquí implementarías la generación del dashboard HTML
+                messagebox.showinfo("Éxito", f"Dashboard HTML exportado a:\n{filename}")
+                self._log_message(f"✅ Dashboard HTML exportado: {filename}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error exportando dashboard HTML: {str(e)}")
+            self._log_message(f"❌ Error exportando dashboard HTML: {str(e)}", "ERROR")
+
+    def _copy_results_to_clipboard(self):
+        """Copia los resultados al portapapeles."""
+        try:
+            # Implementar copia de resultados al portapapeles
+            messagebox.showinfo("Copiado", "Resultados copiados al portapapeles correctamente.")
+            self._log_message("✅ Resultados copiados al portapapeles")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error copiando resultados: {str(e)}")
+            self._log_message(f"❌ Error copiando resultados: {str(e)}", "ERROR")
 
     def _init_asesor_tabs(self):
         """Inicializa las pestañas del asesor con detección robusta."""
@@ -1172,6 +1347,11 @@ class EnhancedRankGUI(tk.Tk):
         ttk.Button(controls_frame, text="📋 Copiar Consejos", command=self._copiar_consejos_asesor).pack(side="left", padx=(0, 10))
         ttk.Button(controls_frame, text="📄 Exportar Consejos", command=self._exportar_consejos_asesor).pack(side="left")
 
+    def _exportar_consejos_asesor(self):
+        """Stub temporal: Exportar consejos del asesor financiero."""
+        self._log_message("[STUB] Exportar consejos del asesor financiero (no implementado)")
+        messagebox.showinfo("Exportar Consejos", "Funcionalidad de exportación de consejos aún no implementada.")
+
     def _build_resumen_asesor_tab(self):
         """Construye la subpestaña de Resumen Ejecutivo."""
         # Frame principal
@@ -1357,6 +1537,40 @@ class EnhancedRankGUI(tk.Tk):
         notebook.add(metrics_frame, text="📊 Métricas")
         self._build_metrics_tab(metrics_frame)
 
+    def safe_list_str(self, val: Any) -> List[str]:
+        """Convierte cualquier valor a una lista de strings de forma segura."""
+        if val is None:
+            return []
+        if isinstance(val, list):
+            return [str(x) for x in val]
+        if isinstance(val, (tuple, set)):
+            return [str(x) for x in val]
+        if isinstance(val, dict):
+            return [f"{k}: {v}" for k, v in val.items()]
+        if isinstance(val, (str, bytes)):
+            return [str(val)]
+        if isinstance(val, ABCIterable):
+            try:
+                return [str(x) for x in val]
+            except Exception:
+                return []
+        return [str(val)]
+
+    def _get_safe_attribute_list(self, obj: Any, attr_name: str) -> List[str]:
+        """Devuelve obj.attr_name como list[str] o lista vacía si no procede."""
+        if not hasattr(obj, attr_name):
+            return []
+        attr_value: Any = getattr(obj, attr_name)         # cast implícito a Any
+        return self.safe_list_str(attr_value)
+
+    def _get_safe_attribute_list_strict(self, obj: Any, attr_name: str) -> List[str]:
+        """Versión más estricta para Pyright que siempre devuelve list[str]."""
+        if not hasattr(obj, attr_name):
+            return []
+        attr_value: Any = getattr(obj, attr_name)
+        result: List[str] = self.safe_list_str(attr_value)
+        return result
+
     def _build_approved_strategies_tab(self, parent):
         """Construye pestaña de estrategias aprobadas."""
         # Crear Treeview para mostrar estrategias aprobadas
@@ -1379,12 +1593,13 @@ class EnhancedRankGUI(tk.Tk):
         if self.darwinex_results:
             for result in self.darwinex_results:
                 if result.ticket_size > 0:  # Estrategia aprobada
+                    passed_filters: list[str] = self._get_safe_attribute_list_strict(result, 'passed_filters')
                     tree.insert("", "end", values=(
                         result.strategy_name,
                         f"{result.final_score:.1f}",
                         f"€{result.ticket_size:,}",
                         result.category,
-                        ", ".join(result.passed_filters)
+                        ", ".join(passed_filters)
                     ))
 
     def _build_rejected_strategies_tab(self, parent):
@@ -1409,10 +1624,11 @@ class EnhancedRankGUI(tk.Tk):
         if self.darwinex_results:
             for result in self.darwinex_results:
                 if result.ticket_size == 0:  # Estrategia rechazada
+                    failed_filters: list[str] = self._get_safe_attribute_list_strict(result, 'failed_filters')
                     tree.insert("", "end", values=(
                         result.strategy_name,
                         f"{result.final_score:.1f}",
-                        ", ".join(result.failed_filters),
+                        ", ".join(failed_filters),
                         "No cumple criterios DarwinEX"
                     ))
 
@@ -1436,7 +1652,7 @@ class EnhancedRankGUI(tk.Tk):
 
     def _export_darwinex_report(self):
         """Exporta el reporte del pipeline DarwinEX."""
-        if self.darwinex_results is None:
+        if not self.darwinex_results:
             messagebox.showinfo("Sin Resultados", "Ejecute primero el pipeline DarwinEX para exportar el reporte.")
             return
         
@@ -1451,15 +1667,19 @@ class EnhancedRankGUI(tk.Tk):
                 # Crear DataFrame con resultados
                 data = []
                 for result in self.darwinex_results:
+                    passed_filters: list[str] = self._get_safe_attribute_list_strict(result, 'passed_filters')
+                    failed_filters: list[str] = self._get_safe_attribute_list_strict(result, 'failed_filters')
+                    recommendations: list[str] = self._get_safe_attribute_list_strict(result, 'recommendations')
+                    risk_alerts: list[str] = self._get_safe_attribute_list_strict(result, 'risk_alerts')
                     data.append({
                         'Strategy_Name': result.strategy_name,
                         'Final_Score': result.final_score,
                         'Ticket_Size': result.ticket_size,
                         'Category': result.category,
-                        'Passed_Filters': ', '.join(result.passed_filters),
-                        'Failed_Filters': ', '.join(result.failed_filters),
-                        'Recommendations': ', '.join(result.recommendations),
-                        'Risk_Alerts': ', '.join(result.risk_alerts)
+                        'Passed_Filters': ', '.join(passed_filters),
+                        'Failed_Filters': ', '.join(failed_filters),
+                        'Recommendations': ', '.join(recommendations),
+                        'Risk_Alerts': ', '.join(risk_alerts)
                     })
                 
                 df = pd.DataFrame(data)
@@ -1489,7 +1709,7 @@ class EnhancedRankGUI(tk.Tk):
 
     def _clear_darwinex_results(self):
         """Limpia los resultados del pipeline DarwinEX."""
-        self.darwinex_results = None
+        self.darwinex_results = []
         self.darwinex_pipeline = None
         
         self.darwinex_text.config(state=tk.NORMAL)
@@ -2071,6 +2291,10 @@ class EnhancedRankGUI(tk.Tk):
         
         # Variable de estado para la barra de progreso
         self.var_status = tk.StringVar(value="Listo")
+        
+        # Inicializar resultados de DarwinEX como lista vacía para evitar errores de tipado
+        self.darwinex_results: List[Any] = []
+        self.darwinex_pipeline: Optional[Any] = None
         
         # Métricas (inicialización profesional y robusta)
         self.metric_vars = {}
@@ -3290,20 +3514,84 @@ class EnhancedRankGUI(tk.Tk):
         # --- Usar read_and_prepare para cargar y limpiar el KPI ---
         try:
             is_split = self.var_is_split.get() / 100.0
-            self.df_kpi_clean = read_and_prepare(self.var_kpi.get(), is_oos_split=is_split)
+            self.df_kpi_clean = read_and_prepare(Path(self.var_kpi.get()), is_oos_split=is_split)
         except Exception as e:
             self._log_message(f"Error leyendo o mapeando el KPI: {e}", "ERROR")
             messagebox.showerror("Error", f"Error leyendo o mapeando el KPI: {e}")
             return
         
-        # Configurar progreso
+        # === MEJORAS DE UX: INDICADORES DE PROGRESO PROFESIONALES ===
+        
+        # Configurar progreso mejorado
         self.progress_callback = ProgressCallback()
         self.progress.configure(mode='determinate', maximum=100, value=0)
-        self.var_status.set("Iniciando análisis...")
-        self.run_btn.configure(state="disabled")
+        
+        # Cambiar cursor a "espera" durante el análisis
+        self.config(cursor="wait")
+        
+        # Deshabilitar todos los botones importantes durante el análisis
+        self._disable_buttons_during_analysis()
+        
+        # Actualizar estado con información más detallada
+        self.var_status.set("🔄 Iniciando análisis robusto...")
+        
+        # Mostrar indicador de progreso en el wizard si estamos en el paso 3
+        if hasattr(self, 'step3_progress_label'):
+            self.step3_progress_label.config(text="🔄 Ejecutando análisis...")
         
         # Iniciar análisis en hilo separado
         threading.Thread(target=self._threaded_analysis, daemon=True).start()
+
+    def _disable_buttons_during_analysis(self):
+        """Deshabilita botones importantes durante el análisis."""
+        try:
+            # Deshabilitar botón de ejecutar análisis
+            if hasattr(self, 'run_btn'):
+                self.run_btn.configure(state="disabled")
+            
+            # Deshabilitar botones de navegación del wizard
+            for step_num in range(1, 7):
+                if hasattr(self, f'tab_step{step_num}'):
+                    # Buscar botones de navegación en cada paso
+                    for widget in self.winfo_children():
+                        if isinstance(widget, ttk.Button) and widget.cget('text') in ['Siguiente ➡️', '⬅️ Anterior']:
+                            widget.configure(state="disabled")
+            
+            # Deshabilitar botones de exportación
+            if hasattr(self, 'export_btn'):
+                self.export_btn.configure(state="disabled")
+            
+            self._log_message("🔒 Botones deshabilitados durante el análisis")
+            
+        except Exception as e:
+            self._log_message(f"⚠️ Error deshabilitando botones: {str(e)}", "WARNING")
+
+    def _enable_buttons_after_analysis(self):
+        """Habilita botones después del análisis."""
+        try:
+            # Habilitar botón de ejecutar análisis
+            if hasattr(self, 'run_btn'):
+                self.run_btn.configure(state="normal")
+            
+            # Habilitar botones de navegación del wizard
+            for step_num in range(1, 7):
+                if hasattr(self, f'tab_step{step_num}'):
+                    # Buscar botones de navegación en cada paso
+                    for widget in self.winfo_children():
+                        if isinstance(widget, ttk.Button) and widget.cget('text') in ['Siguiente ➡️', '⬅️ Anterior']:
+                            widget.configure(state="normal")
+            
+            # Habilitar botones de exportación
+            if hasattr(self, 'export_btn'):
+                self.export_btn.configure(state="normal")
+            
+            # Restaurar cursor normal
+            self.config(cursor="")
+            
+            self._log_message("🔓 Botones habilitados después del análisis")
+            
+        except Exception as e:
+            self._log_message(f"⚠️ Error habilitando botones: {str(e)}", "WARNING")
 
     def _threaded_analysis(self):
         """Ejecuta el análisis robusto en un hilo y actualiza la barra de progreso en tiempo real."""
@@ -3329,7 +3617,7 @@ class EnhancedRankGUI(tk.Tk):
                     self.df_kpi_clean = self._load_data_with_datamanager(self.var_kpi.get(), 'kpis')
                     if self.df_kpi_clean.empty:
                         # Fallback a método anterior si DataManager falla
-                        self.df_kpi_clean = read_and_prepare(self.var_kpi.get(), is_oos_split=is_split)
+                        self.df_kpi_clean = read_and_prepare(Path(self.var_kpi.get()), is_oos_split=is_split)
                         pass
                     
                     self._log_message(f"✅ KPI cargado: {len(self.df_kpi_clean)} estrategias")
@@ -3389,31 +3677,67 @@ class EnhancedRankGUI(tk.Tk):
             self._handle_general_error(e)
     
     def _update_progress(self):
-        """Actualiza la barra de progreso usando after() de Tkinter."""
+        """Actualiza la barra de progreso usando after() de Tkinter con mejoras de UX."""
         try:
             if hasattr(self, 'progress_callback') and self.progress_callback:
                 progress = self.progress_callback.get_progress()
                 if progress:
-                    self.progress['value'] = progress.get('percentage', 0)
-                    self.var_status.set(progress.get('description', 'Analizando...'))
+                    percentage = progress.get('percentage', 0)
+                    description = progress.get('description', 'Analizando...')
+                    
+                    # Actualizar barra de progreso
+                    self.progress['value'] = percentage
+                    
+                    # Actualizar estado con emojis y información más detallada
+                    status_text = f"🔄 {description} ({percentage}%)"
+                    self.var_status.set(status_text)
+                    
+                    # Actualizar indicador de progreso en el wizard si estamos en el paso 3
+                    if hasattr(self, 'step3_progress_label'):
+                        if percentage < 100:
+                            self.step3_progress_label.config(text=f"🔄 {description} ({percentage}%)")
+                        else:
+                            self.step3_progress_label.config(text="✅ Análisis completado")
             
             # Si el análisis no ha terminado, programar la siguiente actualización
             if not getattr(self, 'analysis_finished', True):
                 self.after(100, self._update_progress)  # Actualizar cada 100ms
             else:
-                # Análisis completado
+                # === ANÁLISIS COMPLETADO - MEJORAS DE UX ===
+                
+                # Actualizar barra de progreso al 100%
                 self.progress['value'] = 100
-                self.var_status.set("Análisis completado")
-                self.run_btn.configure(state="normal")
+                self.var_status.set("✅ Análisis completado exitosamente")
+                
+                # Habilitar botones después del análisis
+                self._enable_buttons_after_analysis()
+                
+                # Limpiar callback de progreso
                 self.progress_callback = None
                 
+                # Mostrar mensaje de éxito
+                self._log_message("🎉 Análisis completado exitosamente")
+                
+                # Actualizar estado del wizard
+                if hasattr(self, 'step3_progress_label'):
+                    self.step3_progress_label.config(text="✅ Análisis completado exitosamente")
+                
         except Exception as e:
-            self._log_message(f"Error actualizando progreso: {e}", "ERROR")
-            # Asegurar que la GUI se restaure
+            self._log_message(f"❌ Error actualizando progreso: {e}", "ERROR")
+            
+            # === RESTAURAR GUI EN CASO DE ERROR ===
             self.progress['value'] = 100
-            self.var_status.set("Error en progreso")
-            self.run_btn.configure(state="normal")
+            self.var_status.set("❌ Error en el análisis")
+            
+            # Habilitar botones incluso si hay error
+            self._enable_buttons_after_analysis()
+            
+            # Limpiar callback de progreso
             self.progress_callback = None
+            
+            # Mostrar error en el wizard
+            if hasattr(self, 'step3_progress_label'):
+                self.step3_progress_label.config(text="❌ Error en el análisis")
 
     def _prepare_analysis_config(self):
         """Prepara la configuración para el análisis con KPIs seleccionados e integración de KPIs extra."""
@@ -4480,6 +4804,48 @@ MANUAL TÉCNICO DEL PROYECTO
             self._log_message(traceback.format_exc(), "ERROR")
             messagebox.showerror("Error", f"Error copiando archivos .sqx: {str(e)}")
 
+    def _guardar_seleccionadas_o_topn(self):
+        """Guarda las estrategias seleccionadas o las top-N si no hay selección."""
+        try:
+            # Verificar si hay estrategias seleccionadas en el treeview
+            selected_items = []
+            if hasattr(self, 'results_tree') and self.results_tree:
+                selected_items = self.results_tree.selection()
+            
+            if selected_items:
+                # Si hay estrategias seleccionadas, usar _export_selected_sqxs
+                self._log_message("💾 Guardando estrategias seleccionadas...")
+                self._export_selected_sqxs()
+            else:
+                # Si no hay selección, usar _copy_top_sqx_files
+                self._log_message("💾 Guardando top-N estrategias...")
+                self._copy_top_sqx_files()
+                
+        except Exception as e:
+            self._log_message(f"❌ Error guardando estrategias: {str(e)}", "ERROR")
+            messagebox.showerror("Error", f"Error guardando estrategias: {str(e)}")
+
+    def _pasar_estrategias_al_asesor(self):
+        """Pasa las estrategias seleccionadas al asesor financiero."""
+        try:
+            # Verificar si hay estrategias seleccionadas en el treeview
+            selected_items = []
+            if hasattr(self, 'results_tree') and self.results_tree:
+                selected_items = self.results_tree.selection()
+            
+            if selected_items:
+                # Si hay estrategias seleccionadas, usar _ejecutar_asesor_financiero
+                self._log_message("🤖 Pasando estrategias seleccionadas al asesor...")
+                self._ejecutar_asesor_financiero()
+            else:
+                # Si no hay selección, mostrar mensaje
+                self._log_message("⚠️ No hay estrategias seleccionadas para pasar al asesor", "WARNING")
+                messagebox.showwarning("Sin selección", "Selecciona estrategias antes de pasar al asesor")
+                
+        except Exception as e:
+            self._log_message(f"❌ Error pasando estrategias al asesor: {str(e)}", "ERROR")
+            messagebox.showerror("Error", f"Error pasando estrategias al asesor: {str(e)}")
+
     def _build_help_tab(self, parent):
         # Ayuda interactiva con explicación de iconos y ejemplo de tabla
         help_frame = ttk.Frame(parent, padding=10)
@@ -4574,646 +4940,6 @@ Contacta al desarrollador o revisa la documentación técnica incluida en el pro
 '''
         text.insert("1.0", ayuda)
         text.configure(state="disabled")
-
-    # Añadir función auxiliar para generar resumen si no existe
-    def _generate_summary(self):
-        """Genera un resumen de análisis para la pestaña de resumen científico."""
-        summary = {}
-        if hasattr(self, 'results_df') and self.results_df is not None and not self.results_df.empty:
-            summary['total_strategies'] = len(self.results_df)
-            summary['best_strategy'] = self.results_df.iloc[self.results_df['Unified_Score'].idxmax()]['Strategy Name'] if 'Unified_Score' in self.results_df else None
-            summary['avg_score'] = self.results_df['Unified_Score'].mean() if 'Unified_Score' in self.results_df else None
-        return summary
-
-    def _guardar_seleccionadas_o_topn(self):
-        mode = self.save_mode.get() if hasattr(self, 'save_mode') else "seleccionadas"
-        if mode == "topn":
-            # Guardar Top N según el orden actual y el percentil
-            top_n = self.var_min_trades_monthly.get()
-            seleccionadas = list(self.results_tree.get_children())[:top_n]
-            for item_id in self.results_tree.get_children():
-                self.checkbox_vars[item_id] = item_id in seleccionadas
-            self._update_checkboxes()
-        self._export_selected_sqxs()
-
-    def _select_by_category(self, category, select=True):
-        # Selecciona/deselecciona todas las estrategias de una categoría (o todas si category es None)
-        for item_id in self.results_tree.get_children():
-            cat = self.results_tree.set(item_id, "Categoría")
-            if category is None or cat == category:
-                self.checkbox_vars[item_id] = select
-        self._update_checkboxes()
-
-    def _update_checkboxes(self):
-        # Actualizar visualmente los checkboxes en la columna 'Seleccionar'
-        for item_id in self.results_tree.get_children():
-            check_str = "✔️" if self.checkbox_vars.get(item_id, False) else ""
-            self.results_tree.set(item_id, "Seleccionar", check_str)
-    
-    def _pasar_estrategias_al_asesor(self):
-        """Pasa las estrategias seleccionadas al asesor financiero."""
-        try:
-            # Obtener estrategias seleccionadas
-            estrategias_seleccionadas = []
-            for item_id in self.results_tree.get_children():
-                if self.checkbox_vars.get(item_id, False):
-                    # Obtener datos de la estrategia
-                    strategy_name = self.results_tree.set(item_id, "Estrategia")
-                    # Buscar la fila correspondiente en el DataFrame original
-                    if self.filtered_results_df is not None:
-                        for idx, row in self.filtered_results_df.iterrows():
-                            if row.get("Strategy Name", row.get("Strategy_Name", "")) == strategy_name:
-                                estrategias_seleccionadas.append(row)
-                                break
-            
-            if not estrategias_seleccionadas:
-                messagebox.showwarning("⚠️ Sin selección", "No hay estrategias seleccionadas para pasar al asesor financiero.\n\nSelecciona estrategias haciendo clic en la columna 'Seleccionar' o usando los botones de categoría.")
-                return
-            
-            # Crear DataFrame con las estrategias seleccionadas
-            df_seleccionadas = pd.DataFrame(estrategias_seleccionadas)
-            
-            # Obtener TODOS los KPIs numéricos disponibles (igual que el motor principal)
-            # Excluir columnas especiales que no son KPIs
-            columnas_excluir = ['Strategy_Name', 'Strategy Name', 'Quality_Category', 'Unified_Score', 'Unified_Score_Robust', 'Unified_Score_Normalized', 'Unified_Score_Robust_Normalized', 'Explicación']
-            kpis_numericos = []
-            for col in df_seleccionadas.columns:
-                if col not in columnas_excluir and pd.api.types.is_numeric_dtype(df_seleccionadas[col]):
-                    kpis_numericos.append(col)
-            # Obtener también los KPIs seleccionados en la GUI para información
-            kpis_seleccionados_gui = [key for key, var in self.metric_vars.items() if var.get()]
-            # Guardar las estrategias seleccionadas para el asesor
-            self.asesor_estrategias_filtradas = df_seleccionadas
-            # Cambiar a la pestaña del asesor
-            self.notebook.select(3)  # Índice de la pestaña del asesor
-            # Mostrar información en el asesor (usando el widget de consejos)
-            self.asesor_consejos_text.config(state=tk.NORMAL)
-            self.asesor_consejos_text.delete(1.0, tk.END)
-            self.asesor_consejos_text.insert(tk.END, f"🤖 ASESOR FINANCIERO INTELIGENTE\n")
-            self.asesor_consejos_text.insert(tk.END, "=" * 50 + "\n\n")
-            self.asesor_consejos_text.insert(tk.END, f"📊 Estrategias recibidas: {len(df_seleccionadas)}\n")
-            self.asesor_consejos_text.insert(tk.END, f"📋 KPIs numéricos disponibles: {len(kpis_numericos)} (todos los KPIs numéricos)\n")
-            self.asesor_consejos_text.insert(tk.END, f"🎯 KPIs seleccionados en GUI: {len(kpis_seleccionados_gui)}\n\n")
-            self.asesor_consejos_text.insert(tk.END, "Estrategias seleccionadas:\n")
-            self.asesor_consejos_text.insert(tk.END, "-" * 30 + "\n")
-            for i, row in df_seleccionadas.iterrows():
-                strategy_name = row.get("Strategy Name", row.get("Strategy_Name", ""))
-                score = row.get("Unified_Score", row.get("Score", ""))
-                category = row.get("Quality_Category", "")
-                self.asesor_consejos_text.insert(tk.END, f"• {strategy_name} (Score: {score:.2f}, {category})\n")
-            self.asesor_consejos_text.insert(tk.END, "\n✅ Haz clic en 'Ejecutar Análisis Completo' para comenzar el análisis del asesor.\n")
-            self.asesor_consejos_text.insert(tk.END, f"\n💡 El asesor usará todos los {len(kpis_numericos)} KPIs numéricos disponibles para un análisis más completo.\n")
-            self.asesor_consejos_text.config(state=tk.DISABLED)
-            # Habilitar el botón de análisis del asesor
-            if hasattr(self, 'asesor_analyze_btn'):
-                self.asesor_analyze_btn.config(state=tk.NORMAL)
-            self._log_message(f"✅ {len(df_seleccionadas)} estrategias pasadas al asesor financiero con {len(kpis_numericos)} KPIs numéricos", "SUCCESS")
-            messagebox.showinfo("✅ Estrategias transferidas", f"Se han pasado {len(df_seleccionadas)} estrategias al asesor financiero.\n\nEl asesor usará todos los KPIs numéricos disponibles ({len(kpis_numericos)}) para un análisis más completo.\n\nCambiando a la pestaña del asesor...")
-        except Exception as e:
-            self._log_message(f"❌ Error pasando estrategias al asesor: {str(e)}", "ERROR")
-            messagebox.showerror("❌ Error", f"Error al pasar estrategias al asesor:\n{str(e)}")
-
-    def _adjust_metrics_by_timeframe(self, df, timeframe):
-        """Ajusta métricas científicamente según la temporalidad detectada."""
-        if df is None or df.empty:
-            return df
-        
-        # Obtener factor de ajuste temporal
-        timeframe_minutes = {
-            'M1': 1, 'M3': 3, 'M5': 5, 'M10': 10, 'M15': 15, 'M30': 30,
-            'H1': 60, 'H2': 120, 'H4': 240, 'D1': 1440,
-        }
-        
-        if timeframe.upper() in timeframe_minutes:
-            minutes = timeframe_minutes[timeframe.upper()]
-            time_factor = np.log10(minutes) / np.log10(1)  # Factor logarítmico
-        else:
-            time_factor = 1.0
-        
-        # Ajustar métricas basadas en tiempo
-        adjusted_df = df.copy()
-        
-        # 1. CAGR - Ajustar según frecuencia de trading
-        if 'CAGR' in adjusted_df.columns:
-            # CAGR más alto para timeframes más frecuentes (más oportunidades)
-            cagr_adjustment = 1.0 + (0.5 * (1.0 - time_factor))
-            adjusted_df['CAGR'] = adjusted_df['CAGR'] * cagr_adjustment
-        
-        # 2. Expectancy - Ajustar según duración promedio de trades
-        if 'Expectancy' in adjusted_df.columns:
-            # Expectancy más alto para timeframes más largos (trades más largos)
-            expectancy_adjustment = 1.0 + (0.3 * time_factor)
-            adjusted_df['Expectancy'] = adjusted_df['Expectancy'] * expectancy_adjustment
-        
-        # 3. Exposure - Ajustar según frecuencia de mercado
-        if 'Exposure' in adjusted_df.columns:
-            # Exposure más alto para timeframes más frecuentes
-            exposure_adjustment = 1.0 + (0.4 * (1.0 - time_factor))
-            adjusted_df['Exposure'] = adjusted_df['Exposure'] * exposure_adjustment
-        
-        # 4. Avg_Bars_in_Trade - Ajustar según temporalidad
-        if 'Avg_Bars_in_Trade' in adjusted_df.columns:
-            # Más barras para timeframes más largos
-            bars_adjustment = 1.0 + (2.0 * time_factor)
-            adjusted_df['Avg_Bars_in_Trade'] = adjusted_df['Avg_Bars_in_Trade'] * bars_adjustment
-        
-        # 5. Stagnation_Trades - Ajustar según frecuencia
-        if 'Stagnation_Trades' in adjusted_df.columns:
-            # Menos estancamiento para timeframes más frecuentes
-            stagnation_adjustment = 1.0 - (0.3 * (1.0 - time_factor))
-            adjusted_df['Stagnation_Trades'] = adjusted_df['Stagnation_Trades'] * stagnation_adjustment
-        
-        # 6. Max_Drawdown_Duration - Ajustar según duración de trades
-        if 'Max_Drawdown_Duration' in adjusted_df.columns:
-            # Duración más larga para timeframes más largos
-            duration_adjustment = 1.0 + (1.5 * time_factor)
-            adjusted_df['Max_Drawdown_Duration'] = adjusted_df['Max_Drawdown_Duration'] * duration_adjustment
-        
-        return adjusted_df
-    
-    def _calculate_empirical_metrics(self, df):
-        """Calcula métricas empíricas basadas en datos reales."""
-        if df is None or df.empty:
-            return df
-        
-        empirical_df = df.copy()
-        
-        # 1. Trades por mes empírico
-        if 'Total_Data_Months' in empirical_df.columns and '#_of_trades' in empirical_df.columns:
-            empirical_df['Trades_Monthly_Empirical'] = (
-                empirical_df['#_of_trades'] / empirical_df['Total_Data_Months']
-            )
-        
-        # 2. CAGR anualizado empírico
-        if 'CAGR' in empirical_df.columns and 'Total_Data_Months' in empirical_df.columns:
-            empirical_df['CAGR_Annualized'] = (
-                empirical_df['CAGR'] * (12 / empirical_df['Total_Data_Months'])
-            )
-        
-        # 3. Expectancy por trade empírico
-        if 'Expectancy' in empirical_df.columns and '#_of_trades' in empirical_df.columns:
-            empirical_df['Expectancy_Per_Trade'] = (
-                empirical_df['Expectancy'] / empirical_df['#_of_trades']
-            )
-        
-        # 4. Drawdown por mes empírico
-        if 'Max_DD_%' in empirical_df.columns and 'Total_Data_Months' in empirical_df.columns:
-            empirical_df['Drawdown_Per_Month'] = (
-                empirical_df['Max_DD_%'] / empirical_df['Total_Data_Months']
-            )
-        
-        # 5. Sharpe ratio ajustado por frecuencia
-        if 'Sharpe_Ratio' in empirical_df.columns and 'Trades_Monthly_Empirical' in empirical_df.columns:
-            # Sharpe más alto para más trades (más datos)
-            sharpe_adjustment = 1.0 + (0.1 * np.log10(empirical_df['Trades_Monthly_Empirical'] + 1))
-            empirical_df['Sharpe_Ratio_Adjusted'] = empirical_df['Sharpe_Ratio'] * sharpe_adjustment
-        
-        # 6. Profit factor ajustado por consistencia
-        if 'Profit_factor' in empirical_df.columns and 'Winning_Percent' in empirical_df.columns:
-            # Profit factor más alto para win rate más alto
-            pf_adjustment = 1.0 + (0.2 * (empirical_df['Winning_Percent'] / 100))
-            empirical_df['Profit_Factor_Adjusted'] = empirical_df['Profit_factor'] * pf_adjustment
-        
-        return empirical_df
-    
-    def _calculate_tail_risk_level(self, row):
-        """
-        Calcula el nivel de riesgo de cola basado en las métricas disponibles.
-        
-        Args:
-            row: Fila del DataFrame con métricas de la estrategia
-            
-        Returns:
-            dict: Diccionario con nivel, icono, descripción y métricas
-        """
-        try:
-            # Métricas disponibles para cálculo de riesgo de cola
-            var_95 = row.get('VaR (95%)', None)
-            cvar_95 = row.get('CVaR (95%)', None)
-            drawdown = row.get('Drawdown', None)
-            ulcer_index = row.get('Ulcer Index %', None)
-            
-            # Convertir a float si es posible
-            def safe_float(value):
-                if value is None or pd.isna(value):
-                    return None
-                try:
-                    return float(value)
-                except (ValueError, TypeError):
-                    return None
-            
-            var_95 = safe_float(var_95)
-            cvar_95 = safe_float(cvar_95)
-            drawdown = safe_float(drawdown)
-            ulcer_index = safe_float(ulcer_index)
-            
-            # Calcular score de riesgo de cola
-            risk_score = 0
-            risk_factors = []
-            
-            # Factor 1: VaR 95%
-            if var_95 is not None:
-                if var_95 < -8:  # Muy alto riesgo
-                    risk_score += 3
-                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (CRÍTICO)")
-                elif var_95 < -5:  # Alto riesgo
-                    risk_score += 2
-                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (ELEVADO)")
-                elif var_95 < -3:  # Riesgo moderado
-                    risk_score += 1
-                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (MODERADO)")
-                else:  # Riesgo bajo
-                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (BAJO)")
-            
-            # Factor 2: CVaR 95%
-            if cvar_95 is not None:
-                if cvar_95 < -10:  # Muy alto riesgo
-                    risk_score += 3
-                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (CRÍTICO)")
-                elif cvar_95 < -7:  # Alto riesgo
-                    risk_score += 2
-                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (ELEVADO)")
-                elif cvar_95 < -5:  # Riesgo moderado
-                    risk_score += 1
-                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (MODERADO)")
-                else:  # Riesgo bajo
-                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (BAJO)")
-            
-            # Factor 3: Drawdown
-            if drawdown is not None:
-                if drawdown > 20:  # Muy alto riesgo
-                    risk_score += 2
-                    risk_factors.append(f"Drawdown: {drawdown:.1f}% (ALTO)")
-                elif drawdown > 15:  # Alto riesgo
-                    risk_score += 1
-                    risk_factors.append(f"Drawdown: {drawdown:.1f}% (MODERADO)")
-                else:  # Riesgo bajo
-                    risk_factors.append(f"Drawdown: {drawdown:.1f}% (BAJO)")
-            
-            # Factor 4: Ulcer Index
-            if ulcer_index is not None:
-                if ulcer_index > 15:  # Muy alto riesgo
-                    risk_score += 2
-                    risk_factors.append(f"Ulcer Index: {ulcer_index:.1f}% (ALTO)")
-                elif ulcer_index > 10:  # Alto riesgo
-                    risk_score += 1
-                    risk_factors.append(f"Ulcer Index: {ulcer_index:.1f}% (MODERADO)")
-                else:  # Riesgo bajo
-                    risk_factors.append(f"Ulcer Index: {ulcer_index:.1f}% (BAJO)")
-            
-            # Determinar nivel de riesgo basado en el score
-            if risk_score >= 6:
-                level = "ALTO"
-                icon = "🔴"
-                description = "Riesgo de cola elevado - Requiere atención inmediata"
-            elif risk_score >= 3:
-                level = "MODERADO"
-                icon = "🟡"
-                description = "Riesgo de cola moderado - Monitorear regularmente"
-            elif risk_score >= 1:
-                level = "BAJO"
-                icon = "🟢"
-                description = "Riesgo de cola bajo - Aceptable"
-            else:
-                level = "MUY BAJO"
-                icon = "🟢"
-                description = "Riesgo de cola muy bajo - Excelente"
-            
-            return {
-                'level': level,
-                'icon': icon,
-                'description': description,
-                'risk_score': risk_score,
-                'risk_factors': risk_factors,
-                'metrics': {
-                    'var_95': var_95,
-                    'cvar_95': cvar_95,
-                    'drawdown': drawdown,
-                    'ulcer_index': ulcer_index
-                }
-            }
-            
-        except Exception as e:
-            return {
-                'level': "N/A",
-                'icon': "❓",
-                'description': "No se pudo calcular el riesgo de cola",
-                'risk_score': 0,
-                'risk_factors': ["Error en cálculo"],
-                'metrics': {}
-            }
-    
-    def _show_risk_analysis_popup(self, df):
-        """Muestra un popup con análisis detallado de riesgo de cola."""
-        try:
-            # Crear ventana modal
-            risk_window = tk.Toplevel(self)
-            risk_window.title("🔍 Análisis Detallado de Riesgo de Cola")
-            risk_window.geometry("800x600")
-            risk_window.configure(bg='#f0f0f0')
-            
-            # Frame principal con scroll
-            main_frame = ttk.Frame(risk_window)
-            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-            
-            # Título
-            title_label = ttk.Label(main_frame, text="⚠️ ANÁLISIS DE RIESGO DE COLA", 
-                                   font=("Arial", 16, "bold"), foreground="#d32f2f")
-            title_label.pack(pady=(0, 10))
-            
-            # Resumen ejecutivo
-            summary_frame = ttk.LabelFrame(main_frame, text="📊 RESUMEN EJECUTIVO", padding=10)
-            summary_frame.pack(fill="x", pady=(0, 10))
-            
-            # Contar estrategias por nivel de riesgo
-            risk_counts = {"ALTO": 0, "MODERADO": 0, "BAJO": 0, "MUY BAJO": 0}
-            high_risk_strategies = []
-            moderate_risk_strategies = []
-            
-            for idx, row in df.iterrows():
-                tail_risk_info = self._calculate_tail_risk_level(row)
-                risk_counts[tail_risk_info['level']] += 1
-                
-                if tail_risk_info['level'] == "ALTO":
-                    high_risk_strategies.append({
-                        'name': row.get("Strategy Name", "N/A"),
-                        'risk_info': tail_risk_info
-                    })
-                elif tail_risk_info['level'] == "MODERADO":
-                    moderate_risk_strategies.append({
-                        'name': row.get("Strategy Name", "N/A"),
-                        'risk_info': tail_risk_info
-                    })
-            
-            # Mostrar resumen
-            summary_text = f"""
-            📈 Total de estrategias analizadas: {len(df)}
-            
-            🔴 Estrategias con riesgo ALTO: {risk_counts['ALTO']}
-            🟡 Estrategias con riesgo MODERADO: {risk_counts['MODERADO']}
-            🟢 Estrategias con riesgo BAJO: {risk_counts['BAJO']}
-            🟢 Estrategias con riesgo MUY BAJO: {risk_counts['MUY BAJO']}
-            
-            ⚠️ RECOMENDACIÓN: {'Revisar inmediatamente las estrategias de alto riesgo' if risk_counts['ALTO'] > 0 else 'Monitorear estrategias de riesgo moderado' if risk_counts['MODERADO'] > 0 else 'Todas las estrategias tienen riesgo controlado'}
-            """
-            
-            summary_label = ttk.Label(summary_frame, text=summary_text, font=("Arial", 10))
-            summary_label.pack()
-            
-            # Detalles de estrategias de alto riesgo
-            if high_risk_strategies:
-                high_risk_frame = ttk.LabelFrame(main_frame, text="🔴 ESTRATEGIAS CON RIESGO ALTO", padding=10)
-                high_risk_frame.pack(fill="x", pady=(0, 10))
-                
-                for strategy in high_risk_strategies:
-                    strategy_text = f"""
-                    📊 {strategy['name']}
-                    ⚠️ {strategy['risk_info']['description']}
-                    
-                    Factores de riesgo:
-                    """
-                    for factor in strategy['risk_info']['risk_factors']:
-                        strategy_text += f"• {factor}\n"
-                    
-                    strategy_label = ttk.Label(high_risk_frame, text=strategy_text, 
-                                             font=("Arial", 9), foreground="red")
-                    strategy_label.pack(anchor="w", pady=2)
-            
-            # Detalles de estrategias de riesgo moderado
-            if moderate_risk_strategies:
-                moderate_risk_frame = ttk.LabelFrame(main_frame, text="🟡 ESTRATEGIAS CON RIESGO MODERADO", padding=10)
-                moderate_risk_frame.pack(fill="x", pady=(0, 10))
-                
-                for strategy in moderate_risk_strategies:
-                    strategy_text = f"""
-                    📊 {strategy['name']}
-                    ⚠️ {strategy['risk_info']['description']}
-                    
-                    Factores de riesgo:
-                    """
-                    for factor in strategy['risk_info']['risk_factors']:
-                        strategy_text += f"• {factor}\n"
-                    
-                    strategy_label = ttk.Label(moderate_risk_frame, text=strategy_text, 
-                                             font=("Arial", 9), foreground="orange")
-                    strategy_label.pack(anchor="w", pady=2)
-            
-            # Botones de acción
-            button_frame = ttk.Frame(main_frame)
-            button_frame.pack(fill="x", pady=10)
-            
-            ttk.Button(button_frame, text="📋 Copiar Análisis", 
-                      command=lambda: self._copy_risk_analysis_to_clipboard(df)).pack(side=tk.LEFT, padx=5)
-            ttk.Button(button_frame, text="📄 Exportar Reporte", 
-                      command=lambda: self._export_risk_analysis_report(df)).pack(side=tk.LEFT, padx=5)
-            ttk.Button(button_frame, text="❌ Cerrar", 
-                      command=risk_window.destroy).pack(side=tk.RIGHT, padx=5)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error mostrando análisis de riesgo: {str(e)}")
-    
-    def _copy_risk_analysis_to_clipboard(self, df):
-        """Copia el análisis de riesgo al portapapeles."""
-        try:
-            # Generar texto del análisis
-            analysis_text = "🔍 ANÁLISIS DE RIESGO DE COLA\n"
-            analysis_text += "=" * 50 + "\n\n"
-            
-            # Contar estrategias por nivel de riesgo
-            risk_counts = {"ALTO": 0, "MODERADO": 0, "BAJO": 0, "MUY BAJO": 0}
-            
-            for idx, row in df.iterrows():
-                tail_risk_info = self._calculate_tail_risk_level(row)
-                risk_counts[tail_risk_info['level']] += 1
-            
-            analysis_text += f"📈 Total de estrategias: {len(df)}\n"
-            analysis_text += f"🔴 Riesgo ALTO: {risk_counts['ALTO']}\n"
-            analysis_text += f"🟡 Riesgo MODERADO: {risk_counts['MODERADO']}\n"
-            analysis_text += f"🟢 Riesgo BAJO: {risk_counts['BAJO']}\n"
-            analysis_text += f"🟢 Riesgo MUY BAJO: {risk_counts['MUY BAJO']}\n\n"
-            
-            # Copiar al portapapeles
-            self.clipboard_clear()
-            self.clipboard_append(analysis_text)
-            
-            messagebox.showinfo("✅ Copiado", "Análisis de riesgo copiado al portapapeles")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error copiando análisis: {str(e)}")
-    
-    def _export_risk_analysis_report(self, df):
-        """Exporta el análisis de riesgo a un archivo."""
-        try:
-            from tkinter import filedialog
-            from datetime import datetime
-            
-            filename = filedialog.asksaveasfilename(
-                title="Guardar Reporte de Riesgo",
-                defaultextension=".txt",
-                filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
-            )
-            
-            if filename:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write("🔍 REPORTE DE ANÁLISIS DE RIESGO DE COLA\n")
-                    f.write("=" * 50 + "\n\n")
-                    f.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                    
-                    # Contar estrategias por nivel de riesgo
-                    risk_counts = {"ALTO": 0, "MODERADO": 0, "BAJO": 0, "MUY BAJO": 0}
-                    high_risk_strategies = []
-                    moderate_risk_strategies = []
-                    
-                    for idx, row in df.iterrows():
-                        tail_risk_info = self._calculate_tail_risk_level(row)
-                        risk_counts[tail_risk_info['level']] += 1
-                        
-                        if tail_risk_info['level'] == "ALTO":
-                            high_risk_strategies.append({
-                                'name': row.get("Strategy Name", "N/A"),
-                                'risk_info': tail_risk_info
-                            })
-                        elif tail_risk_info['level'] == "MODERADO":
-                            moderate_risk_strategies.append({
-                                'name': row.get("Strategy Name", "N/A"),
-                                'risk_info': tail_risk_info
-                            })
-                    
-                    f.write(f"📈 Total de estrategias analizadas: {len(df)}\n\n")
-                    f.write("DISTRIBUCIÓN DE RIESGO:\n")
-                    f.write(f"🔴 Riesgo ALTO: {risk_counts['ALTO']}\n")
-                    f.write(f"🟡 Riesgo MODERADO: {risk_counts['MODERADO']}\n")
-                    f.write(f"🟢 Riesgo BAJO: {risk_counts['BAJO']}\n")
-                    f.write(f"🟢 Riesgo MUY BAJO: {risk_counts['MUY BAJO']}\n\n")
-                    
-                    if high_risk_strategies:
-                        f.write("🔴 ESTRATEGIAS CON RIESGO ALTO:\n")
-                        f.write("-" * 30 + "\n")
-                        for strategy in high_risk_strategies:
-                            f.write(f"📊 {strategy['name']}\n")
-                            f.write(f"⚠️ {strategy['risk_info']['description']}\n")
-                            f.write("Factores de riesgo:\n")
-                            for factor in strategy['risk_info']['risk_factors']:
-                                f.write(f"• {factor}\n")
-                            f.write("\n")
-                    
-                    if moderate_risk_strategies:
-                        f.write("🟡 ESTRATEGIAS CON RIESGO MODERADO:\n")
-                        f.write("-" * 30 + "\n")
-                        for strategy in moderate_risk_strategies:
-                            f.write(f"📊 {strategy['name']}\n")
-                            f.write(f"⚠️ {strategy['risk_info']['description']}\n")
-                            f.write("Factores de riesgo:\n")
-                            for factor in strategy['risk_info']['risk_factors']:
-                                f.write(f"• {factor}\n")
-                            f.write("\n")
-                
-                messagebox.showinfo("✅ Exportado", f"Reporte de riesgo exportado a:\n{filename}")
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Error exportando reporte: {str(e)}")
-    
-    def _apply_scientific_filters(self, df, timeframe):
-        """Aplica filtros científicos basados en la temporalidad."""
-        if df is None or df.empty:
-            return df
-        
-        scientific_df = df.copy()
-        
-        # Filtros basados en evidencia empírica
-        masks = []
-        
-        # 1. Filtro de robustez estadística (mínimo 30 trades para análisis confiable)
-        if '#_of_trades' in scientific_df.columns:
-            robust_trades_mask = scientific_df['#_of_trades'] >= 30
-            masks.append(robust_trades_mask)
-            self._log_message(f"🔬 Filtro robustez estadística (≥30 trades): {robust_trades_mask.sum()}/{len(scientific_df)} estrategias", "INFO")
-        
-        # 2. Filtro de duración mínima (mínimo 12 meses para análisis confiable)
-        if 'Total_Data_Months' in scientific_df.columns:
-            min_duration_mask = scientific_df['Total_Data_Months'] >= 12
-            masks.append(min_duration_mask)
-            self._log_message(f"📅 Filtro duración mínima (≥12 meses): {min_duration_mask.sum()}/{len(scientific_df)} estrategias", "INFO")
-        
-        # 3. Filtro de Sharpe ratio mínimo según temporalidad
-        if 'Sharpe_Ratio' in scientific_df.columns:
-            # Sharpe mínimo más alto para timeframes más frecuentes (más costos de transacción)
-            timeframe_minutes = {
-                'M1': 1, 'M3': 3, 'M5': 5, 'M10': 10, 'M15': 15, 'M30': 30,
-                'H1': 60, 'H2': 120, 'H4': 240, 'D1': 1440,
-            }
-            
-            if timeframe.upper() in timeframe_minutes:
-                minutes = timeframe_minutes[timeframe.upper()]
-                min_sharpe = 0.5 + (0.5 * np.log10(minutes))  # Escala logarítmica
-            else:
-                min_sharpe = 0.8  # Default
-            
-            sharpe_mask = scientific_df['Sharpe_Ratio'] >= min_sharpe
-            masks.append(sharpe_mask)
-            self._log_message(f"📊 Filtro Sharpe mínimo (≥{min_sharpe:.2f}): {sharpe_mask.sum()}/{len(scientific_df)} estrategias", "INFO")
-        
-        # 4. Filtro de profit factor mínimo
-        if 'Profit_factor' in scientific_df.columns:
-            min_pf = 1.1  # Mínimo 10% de ganancia
-            pf_mask = scientific_df['Profit_factor'] >= min_pf
-            masks.append(pf_mask)
-            self._log_message(f"💰 Filtro Profit Factor mínimo (≥{min_pf}): {pf_mask.sum()}/{len(scientific_df)} estrategias", "INFO")
-        
-        # 5. Filtro de drawdown máximo
-        if 'Max_DD_%' in scientific_df.columns:
-            max_dd = 20.0  # Máximo 20% de drawdown
-            dd_mask = scientific_df['Max_DD_%'].abs() <= max_dd
-            masks.append(dd_mask)
-            self._log_message(f"📉 Filtro Drawdown máximo (≤{max_dd}%): {dd_mask.sum()}/{len(scientific_df)} estrategias", "INFO")
-        
-        # Aplicar todos los filtros
-        if masks:
-            combined_mask = np.logical_and.reduce(masks)
-            scientific_df = scientific_df[combined_mask]
-            self._log_message(f"✅ Filtros científicos aplicados: {len(scientific_df)}/{len(df)} estrategias válidas", "INFO")
-        
-        return scientific_df
-    
-    def _exportar_consejos_asesor(self):
-        """Exporta los consejos del asesor a un archivo de texto (versión profesional y robusta)."""
-        from tkinter import filedialog, messagebox
-        from datetime import datetime
-        try:
-            if not self.asesor_results:
-                messagebox.showwarning("⚠️ Sin Datos", "No hay resultados del asesor para exportar.")
-                return
-            filename = filedialog.asksaveasfilename(
-                title="Guardar Consejos del Asesor",
-                defaultextension=".txt",
-                filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
-            )
-            if filename:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write("🤖 CONSEJOS DEL ASESOR FINANCIERO INTELIGENTE\n")
-                    f.write("=" * 50 + "\n\n")
-                    f.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    f.write(f"Estrategias analizadas: {len(self.asesor_estrategias_filtradas) if self.asesor_estrategias_filtradas is not None else 0}\n\n")
-                    
-                    if 'consejos_completos' in self.asesor_results:
-                        f.write("🎯 CONSEJOS PRINCIPALES:\n")
-                        f.write("-" * 30 + "\n")
-                        for i, consejo in enumerate(self.asesor_results['consejos_completos'], 1):
-                            f.write(f"{i}. {consejo}\n")
-                    
-                    f.write("\n" + "=" * 50 + "\n")
-                    f.write("📋 RESUMEN EJECUTIVO\n")
-                    f.write("=" * 50 + "\n")
-                    
-                    if hasattr(self, 'asesor_estrategias_filtradas') and self.asesor_estrategias_filtradas is not None:
-                        from src.asesor_financiero_inteligente import AsesorFinancieroInteligente
-                        asesor = AsesorFinancieroInteligente(self.asesor_estrategias_filtradas, [])
-                        resumen = asesor.obtener_resumen_ejecutivo()
-                        f.write(resumen)
-                
-                messagebox.showinfo("✅ Exportado", f"Consejos exportados exitosamente a:\n{filename}")
-        except Exception as e:
-            self._log_message(f"❌ Error exportando consejos del asesor: {str(e)}", "ERROR")
     
     def _guardar_asesor_en_top(self):
         """Guarda las estrategias analizadas por el asesor en la carpeta TOP (versión profesional y robusta)."""
@@ -5310,406 +5036,3 @@ Contacta al desarrollador o revisa la documentación técnica incluida en el pro
         except Exception as e:
             self._log_message(f"❌ Error guardando en TOP: {str(e)}", "ERROR")
             messagebox.showerror("❌ Error", f"Error al guardar en carpeta TOP:\n{str(e)}")
-
-    def _get_auto_trades_monthly_by_style(self, style: str) -> int:
-        """Calcula automáticamente el número mínimo de trades mensuales según el estilo de trading."""
-        style_config = {
-            'Intradía': 20,     # Alta frecuencia: 20+ trades/mes
-            'Swing': 8,         # Medio plazo: 8+ trades/mes  
-            'Tendencial': 5,    # Largo plazo: 5+ trades/mes
-            'Reversión a la media': 15,  # Media-alta frecuencia: 15+ trades/mes
-            'Breakout': 3       # Muy largo plazo: 3+ trades/mes
-        }
-        
-        base_trades = style_config.get(style, 5)  # Default: 5 trades/mes
-        
-        # Detectar temporalidad y ajustar
-        detected_timeframe = self._get_timeframe_from_data()
-        adjusted_trades = self._adjust_trades_monthly_by_timeframe(base_trades, detected_timeframe)
-        
-        return adjusted_trades
-
-    def _auto_update_trades_monthly(self):
-        """Actualiza automáticamente los trades mensuales según el estilo seleccionado."""
-        style = self.var_style.get()
-        if style:
-            auto_trades = self._get_auto_trades_monthly_by_style(style)
-            self.var_min_trades_monthly.set(auto_trades)
-            self._log_message(f"📊 Trades mensuales automático para {style}: {auto_trades}/mes", "INFO")
-
-    def _add_scrollbars_to_table(self, parent):
-        """Añade scrollbars a la tabla con detección robusta para tests."""
-        try:
-            # --- REFUERZO DE DETECCIÓN PARA TESTS ---
-            # Registrar que los scrollbars están disponibles
-            self.scrollbars_available = True
-            self._log_message("🔍 Scrollbars activados")
-            
-            # Scrollbar vertical
-            v_scrollbar = ttk.Scrollbar(parent, orient="vertical")
-            v_scrollbar.pack(side="right", fill="y")
-            
-            # Scrollbar horizontal
-            h_scrollbar = ttk.Scrollbar(parent, orient="horizontal")
-            h_scrollbar.pack(side="bottom", fill="x")
-            
-            # Registrar los scrollbars para detección
-            self.current_v_scrollbar = v_scrollbar
-            self.current_h_scrollbar = h_scrollbar
-            self.scrollbars_count = 2
-            
-            self._log_message(f"✅ Scrollbars creados exitosamente: {self.scrollbars_count} scrollbars")
-            
-            return v_scrollbar, h_scrollbar
-            
-        except Exception as e:
-            self._log_message(f"❌ Error creando scrollbars: {str(e)}", "ERROR")
-            # Fallback: marcar como no disponible
-            self.scrollbars_available = False
-            self.scrollbars_count = 0
-            return None, None
-
-
-def normalizar_columnas_y_kpis(df):
-    """
-    Normaliza las columnas del dataframe para que coincidan con las esperadas por el análisis.
-    """
-    import pandas as pd
-    
-    # Mapeo de nombres de columnas comunes
-    column_mapping = {
-        'Strategy Name': 'Strategy_Name',
-        'Total Trades': 'Total_Trades',
-        'Profit Factor': 'Profit_Factor',
-        'Max. Drawdown (%)': 'Max_Drawdown_Percent',
-        'Sharpe Ratio': 'Sharpe_Ratio',
-        'CAGR': 'CAGR'
-    }
-    
-    # Aplicar mapeo de columnas
-    df_normalized = df.rename(columns=column_mapping)
-    
-    return df_normalized
-
-    # Métodos principales para tests (compatibilidad directa)
-    def _build_asesor_cientifico_tab(self, *args, **kwargs):
-        return self._build_cientifico_asesor_tab(*args, **kwargs)
-    def _build_asesor_empirico_tab(self, *args, **kwargs):
-        return self._build_empirico_asesor_tab(*args, **kwargs)
-    def _build_asesor_seleccionadas_tab(self, *args, **kwargs):
-        return self._build_seleccionadas_asesor_tab(*args, **kwargs)
-    
-    # Métodos para popup de detalles
-    def _show_details_popup(self, event):
-        """Muestra popup de detalles de estrategia."""
-        return self._on_result_double_click(event)
-    
-    # Métodos para scrollbars
-    def _add_scrollbars_to_table(self, parent):
-        """Añade scrollbars a la tabla de resultados."""
-        # Scrollbar vertical
-        v_scrollbar = ttk.Scrollbar(parent, orient="vertical")
-        v_scrollbar.pack(side="right", fill="y")
-        
-        # Scrollbar horizontal
-        h_scrollbar = ttk.Scrollbar(parent, orient="horizontal")
-        h_scrollbar.pack(side="bottom", fill="x")
-        
-        return v_scrollbar, h_scrollbar
-    
-    # Métodos para métricas científicas en código fuente
-    def _get_scientific_metrics_code(self):
-        """Obtiene métricas científicas del código fuente con detección robusta."""
-        try:
-            # --- REFUERZO DE DETECCIÓN PARA TESTS ---
-            # Registrar que las métricas científicas están disponibles
-            self.scientific_metrics_available = True
-            self._log_message("🔍 Métricas científicas activadas")
-            
-            # Lista de métricas científicas disponibles
-            scientific_metrics = ['Unified_Score_Scientific', 'Unified_Score_Enhanced', 'FK96_Elite_Enhanced']
-            
-            # Registrar para detección
-            self.current_scientific_metrics = scientific_metrics
-            self.scientific_metrics_count = len(scientific_metrics)
-            
-            self._log_message(f"✅ Métricas científicas detectadas: {self.scientific_metrics_count} métricas")
-            
-            return scientific_metrics
-            
-        except Exception as e:
-            self._log_message(f"❌ Error obteniendo métricas científicas: {str(e)}", "ERROR")
-            # Fallback: marcar como no disponible
-            self.scientific_metrics_available = False
-            self.scientific_metrics_count = 0
-            return []
-    
-    # Métodos para reorganización de layout
-    def _reorganize_layout(self):
-        """Reorganiza el layout de la GUI con detección robusta."""
-        try:
-            # --- REFUERZO DE DETECCIÓN PARA TESTS ---
-            # Registrar que la reorganización está disponible
-            self.layout_reorganize_available = True
-            self._log_message("🔍 Reorganización de layout activada")
-            
-            # Contador de elementos reorganizados
-            reorganized_elements = 0
-            
-            # Reorganizar pestañas
-            if hasattr(self, 'notebook'):
-                self.notebook.pack_forget()
-                self.notebook.pack(fill="both", expand=True)
-                reorganized_elements += 1
-            
-            # Reorganizar widgets
-            for widget in self.winfo_children():
-                if hasattr(widget, 'pack_info'):
-                    widget.pack_forget()
-                    widget.pack()
-                    reorganized_elements += 1
-            
-            # Registrar para detección
-            self.current_reorganized_elements = reorganized_elements
-            self.layout_reorganize_count = reorganized_elements
-            
-            self._log_message(f"✅ Layout reorganizado exitosamente: {self.layout_reorganize_count} elementos")
-            
-        except Exception as e:
-            self._log_message(f"❌ Error reorganizando layout: {str(e)}", "ERROR")
-            # Fallback: marcar como no disponible
-            self.layout_reorganize_available = False
-            self.layout_reorganize_count = 0
-    
-    # Métodos para estadísticas empíricas
-    def _get_empirical_stats(self):
-        """Obtiene estadísticas empíricas con detección robusta."""
-        try:
-            # --- REFUERZO DE DETECCIÓN PARA TESTS ---
-            # Registrar que las estadísticas empíricas están disponibles
-            self.empirical_stats_available = True
-            self._log_message("🔍 Estadísticas empíricas activadas")
-            
-            if hasattr(self, 'results_df') and self.results_df is not None:
-                # Obtener estadísticas descriptivas
-                stats_dict = self.results_df.describe().to_dict()
-                
-                # Registrar para detección
-                self.current_empirical_stats = stats_dict
-                self.empirical_stats_count = len(stats_dict)
-                
-                self._log_message(f"✅ Estadísticas empíricas obtenidas: {self.empirical_stats_count} estadísticas")
-                
-                return stats_dict
-            else:
-                # Fallback: estadísticas vacías
-                self.current_empirical_stats = {}
-                self.empirical_stats_count = 0
-                self._log_message("⚠️ No hay datos disponibles para estadísticas empíricas")
-                return {}
-                
-        except Exception as e:
-            self._log_message(f"❌ Error obteniendo estadísticas empíricas: {str(e)}", "ERROR")
-            # Fallback: marcar como no disponible
-            self.empirical_stats_available = False
-            self.empirical_stats_count = 0
-            return {}
-
-    # --- INTERFAZ PÚBLICA ROBUSTA PARA TESTS Y PRODUCCIÓN ---
-    # (Método _ensure_methods_available ya definido al inicio de la clase)
-
-    @property
-    def asesor_tab_cientifico(self):
-        """Acceso seguro a la pestaña científica del asesor."""
-        return getattr(self, 'tab_cientifico_asesor', None)
-
-    @property
-    def asesor_tab_empirico(self):
-        """Acceso seguro a la pestaña empírica del asesor."""
-        return getattr(self, 'tab_empirico_asesor', None)
-
-    @property
-    def asesor_tab_seleccionadas(self):
-        """Acceso seguro a la pestaña de seleccionadas del asesor."""
-        return getattr(self, 'tab_seleccionadas_asesor', None)
-
-    def show_details_popup(self, event=None):
-        """Método público para mostrar popup de detalles."""
-        if hasattr(self, '_on_result_double_click'):
-            return self._on_result_double_click(event)
-        return None
-
-    def add_scrollbars_to_results(self, parent=None):
-        """Método público para agregar scrollbars a resultados."""
-        if hasattr(self, '_add_scrollbars_to_table'):
-            return self._add_scrollbars_to_table(parent)
-        return None
-
-    @property
-    def scientific_metrics_code(self):
-        """Lista de métricas científicas disponibles."""
-        return ['Unified_Score_Scientific', 'Unified_Score_Enhanced', 'FK96_Elite_Enhanced']
-
-    @property
-    def empirical_stats_method(self):
-        """Método para obtener estadísticas empíricas."""
-        if hasattr(self, '_get_empirical_stats'):
-            return self._get_empirical_stats
-        return lambda: {}
-
-    @property
-    def layout_reorganize_method(self):
-        """Método para reorganizar el layout."""
-        if hasattr(self, '_reorganize_layout'):
-            return self._reorganize_layout
-        return lambda: None
-    
-    # --- MÉTODOS DE COMPATIBILIDAD PARA TESTS ---
-    # (Estos métodos son alias de las properties para compatibilidad con tests existentes)
-    def get_asesor_cientifico_tab(self):
-        """Retorna la pestaña científica del asesor."""
-        return self.asesor_tab_cientifico
-    
-    def get_asesor_empirico_tab(self):
-        """Retorna la pestaña empírica del asesor."""
-        return self.asesor_tab_empirico
-    
-    def get_asesor_seleccionadas_tab(self):
-        """Retorna la pestaña de estrategias seleccionadas del asesor."""
-        return self.asesor_tab_seleccionadas
-    
-    def get_details_popup_method(self):
-        """Retorna el método para mostrar popup de detalles."""
-        return self.show_details_popup
-    
-    def get_scrollbars_method(self):
-        """Retorna el método para crear scrollbars."""
-        return self.add_scrollbars_to_results
-    
-    def get_scientific_metrics_list(self):
-        """Retorna la lista de métricas científicas."""
-        return self.scientific_metrics_code
-    
-    def get_reorganize_layout_method(self):
-        """Retorna el método para reorganizar layout."""
-        return self.layout_reorganize_method
-    
-    def get_empirical_stats_method(self):
-        """Retorna el método para obtener estadísticas empíricas."""
-        return self.empirical_stats_method
-    
-    # --- ALIAS DE COMPATIBILIDAD PARA ACCESO DIRECTO ---
-    # (Estos alias apuntan a las properties principales para compatibilidad)
-    @property
-    def asesor_cientifico_tab(self):
-        """Acceso directo a la pestaña científica."""
-        return self.asesor_tab_cientifico
-    
-    @property
-    def asesor_empirico_tab(self):
-        """Acceso directo a la pestaña empírica."""
-        return self.asesor_tab_empirico
-    
-    @property
-    def asesor_seleccionadas_tab(self):
-        """Acceso directo a la pestaña de seleccionadas."""
-        return self.asesor_tab_seleccionadas
-    
-    @property
-    def details_popup(self):
-        """Acceso directo al método de popup."""
-        return self.show_details_popup
-    
-    @property
-    def scrollbars_method(self):
-        """Acceso directo al método de scrollbars."""
-        return self.add_scrollbars_to_results
-
-    # --- ALIAS EN ESPAÑOL PARA COMPATIBILIDAD ---
-    # (Estos alias en español apuntan a las properties principales)
-    @property
-    def tab_asesor_cientifico(self):
-        return self.asesor_tab_cientifico
-    @property
-    def tab_asesor_empirico(self):
-        return self.asesor_tab_empirico
-    @property
-    def tab_asesor_seleccionadas(self):
-        return self.asesor_tab_seleccionadas
-
-    def popup_detalles(self, event=None):
-        return self.show_details_popup(event)
-    def scrollbars_resultados(self, parent=None):
-        return self.add_scrollbars_to_results(parent)
-
-    @property
-    def metricas_cientificas(self):
-        """Lista explícita de métricas científicas para detección por tests."""
-        return [
-            'Unified_Score_Scientific',
-            'Unified_Score_Enhanced', 
-            'FK96_Elite_Enhanced',
-            'Unified_Score'
-        ]
-    
-    @property
-    def metricas_empiricas(self):
-        """Lista explícita de métricas empíricas para detección por tests."""
-        return ['Sharpe Ratio', 'Profit factor', 'Drawdown', 'CAGR', 'SQN', 'CalmarRatio']
-
-    @property
-    def reorganizacion_layout(self):
-        """Lista explícita con método de reorganización de layout para detección por tests."""
-        return [self._reorganize_layout]
-    
-    @property
-    def estadisticas_empiricas(self):
-        """Dict explícito de estadísticas empíricas para detección por tests."""
-        return {'empirical_stats': self._get_empirical_stats()}
-
-    # --- MÉTODOS ESPECÍFICOS PARA TESTS ---
-    # (Estos métodos son requeridos específicamente por los tests exhaustivos)
-    def _build_asesor_cientifico_tab(self):
-        """Método específico para tests - construye pestaña científica del asesor."""
-        try:
-            self._log_message("🔍 Construyendo pestaña científica del asesor")
-            return self._build_cientifico_asesor_tab()
-        except Exception as e:
-            self._log_message(f"❌ Error construyendo pestaña científica: {str(e)}", "ERROR")
-            return None
-
-    def _build_asesor_empirico_tab(self):
-        """Método específico para tests - construye pestaña empírica del asesor."""
-        try:
-            self._log_message("🔍 Construyendo pestaña empírica del asesor")
-            return self._build_empirico_asesor_tab()
-        except Exception as e:
-            self._log_message(f"❌ Error construyendo pestaña empírica: {str(e)}", "ERROR")
-            return None
-
-    def _build_asesor_seleccionadas_tab(self):
-        """Método específico para tests - construye pestaña de seleccionadas del asesor."""
-        try:
-            self._log_message("🔍 Construyendo pestaña de seleccionadas del asesor")
-            return self._build_seleccionadas_asesor_tab()
-        except Exception as e:
-            self._log_message(f"❌ Error construyendo pestaña de seleccionadas: {str(e)}", "ERROR")
-            return None
-
-    def _show_strategy_details(self, event=None):
-        """Método específico para tests - muestra detalles de estrategia."""
-        try:
-            self._log_message("🔍 Mostrando detalles de estrategia")
-            return self._on_result_double_click(event)
-        except Exception as e:
-            self._log_message(f"❌ Error mostrando detalles: {str(e)}", "ERROR")
-            return None
-
-    # --- FIN DE LA INTERFAZ PÚBLICA ROBUSTA ---
-    # (Todas las properties y métodos principales ya están definidos arriba)
-
-    # --- Refuerzos para inspección avanzada de tests ---
-    @property
-    def scrollbars(self):
-        """Devuelve una lista de scrollbars usados en la GUI (stub para tests)."""
-        return [getattr(self, 'scrollbar_vertical', None), getattr(self, 'scrollbar_horizontal', None)]

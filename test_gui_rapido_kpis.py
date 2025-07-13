@@ -15,9 +15,9 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath('src'))
 
 try:
-    from data_manager import DataManager
-    from core_engine_enhanced import UnifiedEvaluatorEnhanced
-    from gui_enhanced_rank import EnhancedRankGUI
+    from src.data.data_manager import DataManager
+    from src.core.integration_layer import UnifiedEvaluatorEnhanced, ExtraKPIManager, ConfigManagerEnhanced
+    from src.gui.gui_enhanced_rank import EnhancedRankGUI
 except ImportError as e:
     print(f"Error importando módulos: {e}")
     sys.exit(1)
@@ -103,7 +103,6 @@ def test_gui_rapido_kpis():
         
         # 6. Verificar KPIs extra por estilo
         print("\n📊 Paso 6: Verificando KPIs extra por estilo...")
-        from core_engine_enhanced import ExtraKPIManager, ConfigManagerEnhanced
         
         config_manager = ConfigManagerEnhanced()
         extra_kpi_manager = ExtraKPIManager(config_manager)

@@ -20,7 +20,7 @@ from datetime import datetime
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
-    from core_engine_enhanced import (
+    from src.core.integration_layer import (
         run_complete_analysis_with_gui_integration,
         FactorKElite96Enhanced,
         UnifiedEvaluatorEnhanced

@@ -135,8 +135,8 @@ class AdvancedAnalysisEnhanced:
             'Drawdown Trades %': 'DD_Trades_Percent',
             'New Peak Trades %': 'New_Peak_Trades_Percent',
             'Avg. Bars in Trade': 'Avg_Bars_in_Trade',
-            'Avg. Stagnation Trades': 'Avg_Stagnation_Trades',
-            'Stagnation (Trades)': 'Max_Stagnation_Trades',
+                    'Avg. Stagnation Trades': 'Avg_Stagnation',
+        'Stagnation (Trades)': 'Stagnation',
             'Avg. MAE - Profit/loss': 'Avg_MAE',
             'Avg. MFE - Profit/loss': 'Avg_MFE'
         }

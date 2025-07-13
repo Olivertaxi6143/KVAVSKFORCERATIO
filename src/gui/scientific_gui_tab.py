@@ -26,7 +26,7 @@ from pathlib import Path
 import json
 
 # Importar módulos científicos
-from src.scientific_analysis import (
+from src.analysis.scientific_analysis import (
     ScientificAnalysisFilter,
     ScientificVisualizationManager,
     create_scientific_analysis_filter,
@@ -424,7 +424,21 @@ class ScientificAnalysisTab(ttk.Frame):
                 
                 # Mostrar métricas específicas según el tipo de análisis
                 if analysis_type == "predictability" and "predictability_score" in result:
-                    results_text += f"🎯 Score de Predictibilidad: {result['predictability_score']:.3f}\n"
+                    predictability_score = result['predictability_score']
+                    results_text += f"🎯 Score de Predictibilidad: {predictability_score:.3f}\n"
+                    
+                    # Interpretación de la predictibilidad
+                    interpretation = self._interpret_predictability_score(predictability_score)
+                    results_text += f"📊 Interpretación: {interpretation['level']}\n"
+                    results_text += f"💡 Recomendación: {interpretation['recommendation']}\n"
+                    
+                    # Detalles adicionales si están disponibles
+                    if 'predictability_details' in result:
+                        details = result['predictability_details']
+                        results_text += f"📈 Consistencia IS/OOS: {details.get('is_oos_consistency', 0):.1f}%\n"
+                        results_text += f"🛡️ Robustez Temporal: {details.get('temporal_robustness', 0):.1f}%\n"
+                        results_text += f"🔍 Detección Sobreajuste: {details.get('overfitting_detection', 0):.1f}%\n"
+                        results_text += f"⚖️ Estabilidad: {details.get('stability_score', 0):.1f}%\n"
                 
                 if analysis_type == "robustness" and "stability_score" in result:
                     results_text += f"🛡️ Score de Estabilidad: {result['stability_score']:.3f}\n"
@@ -604,6 +618,40 @@ class ScientificAnalysisTab(ttk.Frame):
         self.viz_label.config(text="Seleccione un tipo de visualización para comenzar")
         
         messagebox.showinfo("Limpiado", "Resultados científicos limpiados")
+
+    def _interpret_predictability_score(self, score: float) -> dict:
+        """
+        Interpreta el score de predictibilidad y proporciona recomendaciones amigables y lógicas.
+        Args:
+            score: Score de predictibilidad (0-100)
+        Returns:
+            Dict con nivel y recomendación
+        """
+        if score >= 90:
+            return {
+                "level": "🟢 EXCELENTE",
+                "recommendation": "Muy alta predictibilidad. Estrategia sobresaliente para trading real."
+            }
+        elif score >= 80:
+            return {
+                "level": "🟡 BUENA",
+                "recommendation": "Buena predictibilidad. Confiable, pero monitoree su rendimiento."
+            }
+        elif score >= 70:
+            return {
+                "level": "🟠 ACEPTABLE",
+                "recommendation": "Aceptable. Úsela con precaución y valide regularmente."
+            }
+        elif score >= 60:
+            return {
+                "level": "🔴 BAJA",
+                "recommendation": "Baja predictibilidad. Requiere validación adicional antes de operar."
+            }
+        else:
+            return {
+                "level": "⚫ MUY BAJA",
+                "recommendation": "No recomendable para trading real sin mejoras significativas."
+            }
 
 
 def create_scientific_tab(parent, data_manager, filtered_strategies_df: pd.DataFrame) -> ScientificAnalysisTab:

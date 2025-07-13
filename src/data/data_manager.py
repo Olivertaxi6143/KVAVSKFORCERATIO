@@ -45,16 +45,8 @@ logger = logging.getLogger(__name__)
 class DataManager:
     """
     Gestor centralizado de datos para el sistema de análisis cuantitativo.
-    
-    Integra datos de múltiples fuentes:
-        pass
-    - Archivos CSV de StrategyQuant
-    - Reportes PDF de portafolios
-    - Datos de mercado (DATOSMQL5.csv)
-    - KPIs históricos (DatabankExport_M1.csv)
-    
-    Proporciona una interfaz unificada para acceso a datos validados y limpios.
-    Preserva los datos reales sin cocinamiento para cálculos precisos.
+    - 'Stagnation': periodo de estancamiento (tiempo o trades sin nuevo máximo de equity).
+    - 'Stagnation_Trades': número máximo de operaciones consecutivas en estancamiento (si la fuente lo provee).
     """
     
     def __init__(self, config: Optional[Dict] = None):
@@ -161,7 +153,9 @@ class DataManager:
             'CVaR (95%)': 'CVaR_95pct',
             'Sortino Ratio': 'Sortino_Ratio',
             'RecoveryFactor': 'RecoveryFactor',
-            'Stagnation (Trades)': 'Stagnation_Trades',
+            'Stagnation (Trades)': 'Stagnation',
+            'Max Stagnation Trades': 'Stagnation_Trades',
+            'Stagnation_Trades': 'Stagnation_Trades',
             'New Peak Trades %': 'New_Peak_Trades_pct',
             'Drawdown Trades %': 'Drawdown_Trades_pct',
             # Datos de mercado
@@ -196,7 +190,7 @@ class DataManager:
             if os.path.exists(default_kpis):
                 success = self.load_kpis_data(default_kpis)
                 if success and self._kpis_data is not None:
-                    self.logger.info(f"✅ Datos por defecto cargados automáticamente: {len(self._kpis_data)} registros")
+                    self.logger.info(f"[OK] Datos por defecto cargados automáticamente: {len(self._kpis_data)} registros")
                     return
             
             self.logger.info("⚠️ No se encontraron datos para carga automática")
@@ -410,7 +404,7 @@ class DataManager:
             for old_name, new_name in self.COLUMN_MAPPINGS.items():
                 if old_name in df_normalized.columns:
                     df_normalized[new_name] = df_normalized[old_name]
-                    self.logger.info(f"Mapeada columna: '{old_name}' → '{new_name}'")
+                    self.logger.info(f"Mapeada columna: '{old_name}' -> '{new_name}'")
             
             # Normalizar nombres restantes
             normalized_columns = []
@@ -551,10 +545,10 @@ class DataManager:
     def _clean_data_basic(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Limpieza básica preservando datos reales.
-        
+
         Args:
             df: DataFrame original
-            
+
         Returns:
             DataFrame limpio
         """
@@ -570,11 +564,27 @@ class DataManager:
             # Rellenar valores faltantes solo en columnas numéricas
             numeric_columns = df_cleaned.select_dtypes(include=[np.number]).columns
             for col in numeric_columns:
-                null_count = df_cleaned[col].isnull().sum()
-                if null_count > 0:
-                    # Usar mediana para preservar distribución
-                    median_val = df_cleaned[col].median()
-                    df_cleaned[col].fillna(median_val, inplace=True)
+                # Validar que la columna existe y es numérica
+                if col in df_cleaned.columns:
+                    try:
+                        # Verificar si hay valores nulos usando método seguro
+                        null_mask = df_cleaned[col].isnull()
+                        if isinstance(null_mask, pd.Series):
+                            null_count = int(null_mask.sum())
+                        else:
+                            null_count = 0
+                        
+                        if null_count > 0:
+                            # Usar mediana para preservar distribución
+                            try:
+                                median_val = float(df_cleaned[col].median())
+                                df_cleaned[col].fillna(median_val, inplace=True)
+                            except (ValueError, TypeError):
+                                # Si no se puede calcular mediana, usar 0
+                                df_cleaned[col].fillna(0.0, inplace=True)
+                    except Exception as e:
+                        self.logger.warning(f"Error procesando columna {col}: {e}")
+                        continue
             
             self.logger.info("Limpieza básica completada")
             return df_cleaned
@@ -1120,6 +1130,8 @@ class DataManager:
             Diccionario con análisis completo de calidad de datos
         """
         try:
+            self.logger.info(f"[DEBUG] DataFrame shape: {df.shape}")
+            self.logger.info(f"[DEBUG] DataFrame dtypes: {df.dtypes}")
             if numeric_columns is None:
                 numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
             

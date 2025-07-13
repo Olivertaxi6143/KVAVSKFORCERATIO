@@ -112,7 +112,7 @@ class ConfigManagerEnhanced:
         return {}
 
 # Importar DataManager actual
-from src.data_manager import DataManager
+from src.data.data_manager import DataManager
 
 
 class ScientificAnalysisFilter:

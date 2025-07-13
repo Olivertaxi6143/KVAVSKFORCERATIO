@@ -15,7 +15,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath('src'))
 
 try:
-    from core_engine_enhanced import (
+    from src.core.integration_layer import (
         UnifiedEvaluatorEnhanced,
         QVAScorerEnhanced,
         ExtraKPIManager,

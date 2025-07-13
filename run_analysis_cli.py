@@ -1,7 +1,7 @@
 import sys
 import pandas as pd
 from src.data_manager import DataManager
-from src.core_engine_enhanced import run_complete_analysis_with_gui_integration
+from src.core.integration_layer import run_complete_analysis_with_gui_integration
 import traceback
 
 # Rutas de ejemplo (ajusta si es necesario)

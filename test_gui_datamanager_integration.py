@@ -22,8 +22,8 @@ from unittest.mock import Mock, patch
 sys.path.append('src')
 
 # Importar módulos necesarios
-from gui_enhanced_rank import EnhancedRankGUI
-from data_manager import DataManager, create_data_manager
+from src.gui.gui_enhanced_rank import EnhancedRankGUI
+from src.data.data_manager import DataManager, create_data_manager
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)

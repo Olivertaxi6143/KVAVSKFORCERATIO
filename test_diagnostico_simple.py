@@ -69,7 +69,7 @@ def test_core_engine():
     print("-" * 50)
     
     try:
-        from src.core_engine_enhanced import run_complete_analysis_with_gui_integration
+        from src.core.integration_layer import run_complete_analysis_with_gui_integration
         
         config = {
             "trading_style": "General",

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src'
 
 from src.gui_enhanced_rank import EnhancedRankGUI
 from src.data_manager import DataManager
-from src.core_engine_enhanced import run_complete_analysis_with_gui_integration
+from src.core.integration_layer import run_complete_analysis_with_gui_integration
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)

@@ -53,7 +53,7 @@ def main():
     # PASO 3: Test Core Engine
     print("\n3️⃣ Probando Core Engine...")
     try:
-        from src.core_engine_enhanced import run_complete_analysis_with_gui_integration
+        from src.core.integration_layer import run_complete_analysis_with_gui_integration
         
         config = {
             "trading_style": "General",

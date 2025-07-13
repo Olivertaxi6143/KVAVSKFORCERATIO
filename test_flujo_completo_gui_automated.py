@@ -67,8 +67,8 @@ def test_gui_flow_1_file_structure():
     """Test 1: Verificar estructura de archivos."""
     try:
         required_files = [
-            'src/gui_enhanced_rank.py',
-            'src/core_engine_enhanced.py',
+            'src/gui/gui_enhanced_rank.py',
+            'src/core/integration_layer.py',
             'src/logger_config.py'
         ]
         missing_files = []
@@ -87,18 +87,18 @@ def test_gui_flow_2_module_imports():
         import tkinter as tk
         from tkinter import ttk
         try:
-            from src.core_engine_enhanced import run_complete_analysis_with_gui_integration
+            from src.core.integration_layer import run_complete_analysis_with_gui_integration        
         except ImportError:
             try:
-                from core_engine_enhanced import run_complete_analysis_with_gui_integration
+                from core.integration_layer import run_complete_analysis_with_gui_integration        
             except ImportError:
                 def run_complete_analysis_with_gui_integration(*args, **kwargs):
                     return pd.DataFrame(), {"status": "stub", "message": "Core engine no disponible"}
         try:
-            from src.gui_enhanced_rank import EnhancedRankGUI
+            from src.gui.gui_enhanced_rank import EnhancedRankGUI
         except ImportError:
             try:
-                from gui_enhanced_rank import EnhancedRankGUI
+                from gui.gui_enhanced_rank import EnhancedRankGUI
             except ImportError:
                 assert False, "No se pudo importar EnhancedRankGUI"
     except Exception as e:
@@ -107,7 +107,7 @@ def test_gui_flow_2_module_imports():
 def test_gui_flow_3_gui_creation():
     """Test 3: Verificar creación de GUI."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         # Crear GUI en modo headless
         gui = EnhancedRankGUI()
@@ -138,7 +138,7 @@ def test_gui_flow_3_gui_creation():
 def test_gui_flow_4_configuration_setup():
     """Test 4: Verificar configuración de la GUI."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -163,7 +163,7 @@ def test_gui_flow_4_configuration_setup():
 def test_gui_flow_5_data_validation():
     """Test 5: Verificar validación de datos."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -195,7 +195,7 @@ def test_gui_flow_5_data_validation():
 def test_gui_flow_6_analysis_simulation():
     """Test 6: Simular análisis completo."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -234,7 +234,7 @@ def test_gui_flow_6_analysis_simulation():
 def test_gui_flow_7_strategy_selection():
     """Test 7: Verificar selección de estrategias."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -275,7 +275,7 @@ def test_gui_flow_7_strategy_selection():
 def test_gui_flow_8_advisor_integration():
     """Test 8: Verificar integración con asesor financiero."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -328,7 +328,7 @@ def test_gui_flow_8_advisor_integration():
 def test_gui_flow_9_export_functionality():
     """Test 9: Verificar funcionalidad de exportación."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -365,7 +365,7 @@ def test_gui_flow_9_export_functionality():
         if hasattr(gui, '_copy_top_sqx_files'):
             try:
                 # Simular datos de estrategias seleccionadas
-                selected_strategies = ['test_strategy_1', 'test_strategy_2', 'test_strategy_3']
+                selected_strategies = ['test_strategy_1', 'test_strategy_2', 'test_strategy_3']    
                 
                 # Crear carpeta de destino con formato correcto
                 dest_folder = f"{test_config['dest_folder']}/top_{len(selected_strategies)}_M1_NDX_UP_MQL4_136_STOP"
@@ -382,7 +382,7 @@ def test_gui_flow_9_export_functionality():
                     safe_print(f"✅ Exportación: Archivos exportados a {dest_folder}")
                 else:
                     safe_print("⚠️ Exportación")
-                    
+                
             except Exception as e:
                 safe_print(f"⚠️ Error en exportación: {str(e)}")
         
@@ -400,7 +400,7 @@ def test_gui_flow_9_export_functionality():
 def test_gui_flow_10_complete_workflow():
     """Test 10: Simular flujo de trabajo completo."""
     try:
-        from src.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         

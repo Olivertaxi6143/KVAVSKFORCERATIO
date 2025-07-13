@@ -19,7 +19,7 @@ import numpy as np
 
 try:
     from data_manager import DataManager
-    from core_engine_enhanced import (
+    from src.core.integration_layer import (
         FactorKElite96Enhanced, 
         UnifiedEvaluatorEnhanced,
         run_complete_analysis_with_gui_integration,

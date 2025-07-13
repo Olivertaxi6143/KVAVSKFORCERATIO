@@ -69,6 +69,32 @@ from src.logger_config import (
 )
 from src.data.data_manager import DataManager
 
+# Importar módulos modulares
+from src.core.market_regime_analyzer import (
+    HiddenMarkovModelAnalyzer,
+    MarketRegimeDetector,
+    MarketRegimeDetectorEnhanced,
+    RegimeType,
+    RegimeAnalysisResult
+)
+from src.core.predictability_analyzer import (
+    PredictabilityAnalyzer,
+    WalkForwardAnalyzer,
+    NullSimulationAnalyzer,
+    PredictabilityLevel,
+    PredictabilityResult
+)
+from src.core.robustness_analyzer import (
+    RobustnessAnalyzer,
+    StressTestGenerator,
+    AdvancedDataProcessor,
+    RobustnessLevel,
+    RobustnessResult
+)
+
+# Importar DarwinEXPipeline para integración
+from src.analysis.darwinex_pipeline import DarwinEXPipeline, PipelineResult
+
 warnings.filterwarnings("ignore")
 
 # Función auxiliar para conversiones robustas de máscaras booleanas
@@ -374,7 +400,7 @@ class ConfigManagerEnhanced:
                 "Sharpe_Ratio": {"enabled": True, "weight": 1.0, "description": "Ratio de Sharpe"},
                 "CalmarRatio": {"enabled": True, "weight": 1.0, "description": "Ratio de Calmar"},
                 "Max_DD_%": {"enabled": True, "weight": 1.0, "description": "Máximo Drawdown (%)"},
-                "Stagnation_Trades": {"enabled": True, "weight": 1.0, "description": "Operaciones de Estancamiento"},
+                "Stagnation": {"enabled": True, "weight": 1.0, "description": "Operaciones de Estancamiento"},
                 "#_of_trades": {"enabled": True, "weight": 1.0, "description": "Número de Operaciones"},
                 "Avg_Bars_in_Trade": {"enabled": True, "weight": 1.0, "description": "Promedio de Barras por Operación"},
                 "Ulcer_Index_%": {"enabled": True, "weight": 1.0, "description": "Índice de Úlcera (%)"},
@@ -429,7 +455,7 @@ class ConfigManagerEnhanced:
                         "Winning_Percent": 1.3,
                         "Profit_factor": 1.2,
                         "Max_Consec_Losses": 1.4,
-                        "Stagnation_Trades": 1.3
+                        "Stagnation": 1.3
                     },
                     "component_weights": {
                         "profitability": 0.35,
@@ -445,7 +471,7 @@ class ConfigManagerEnhanced:
                         "Sharpe_Ratio": 1.3,
                         "Max_DD_%": 1.4,
                         "RecoveryFactor": 1.2,
-                        "Stagnation_Trades": 1.1
+                        "Stagnation": 1.1
                     },
                     "component_weights": {
                         "profitability": 0.4,
@@ -461,7 +487,7 @@ class ConfigManagerEnhanced:
                         "CalmarRatio": 1.3,
                         "Max_DD_%": 1.5,
                         "RecoveryFactor": 1.4,
-                        "Stagnation_Trades": 1.2
+                        "Stagnation": 1.2
                     },
                     "component_weights": {
                         "profitability": 0.45,
@@ -477,7 +503,7 @@ class ConfigManagerEnhanced:
                         "CalmarRatio": 1.4,
                         "Max_DD_%": 1.6,
                         "RecoveryFactor": 1.5,
-                        "Stagnation_Trades": 1.1
+                        "Stagnation": 1.1
                     },
                     "component_weights": {
                         "profitability": 0.5,
@@ -1117,8 +1143,8 @@ class FactorKElite96Enhanced:
                 consistency_metrics.append(np.minimum(trades / 100, 1))  # Normalizar a [0,1]
             
             # Stagnation Trades
-            if 'Stagnation_Trades' in df.columns:
-                stagnation = pd.to_numeric(df['Stagnation_Trades'], errors='coerce').fillna(0)
+            if 'Stagnation' in df.columns:
+                stagnation = pd.to_numeric(df['Stagnation'], errors='coerce').fillna(0)
                 consistency_metrics.append(1 / (1 + stagnation))  # Menor es mejor
             
             # Max Consecutive Losses
@@ -1512,64 +1538,9 @@ class FactorKElite96Enhanced:
             self.logger.error(f"Error generando resumen de análisis: {e}")
             return {'error': str(e)} 
 
-class HiddenMarkovModelAnalyzer:
-    """Analizador de Hidden Markov Models para detección de regímenes."""
-    
-    def __init__(self, n_states: int = 3, random_state: int = 42):
-        self.n_states = n_states
-        self.random_state = random_state
-        self.model = None
-        self.logger = setup_logger("kforce")
-    
-    def fit_hmm(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """Ajusta un modelo HMM a los datos."""
-        try:
-            # Implementación simplificada para evitar dependencias adicionales
-            # En una implementación real, usarías hmmlearn o similar
-            
-            # Simular estados aleatorios para demostración
-            np.random.seed(self.random_state)
-            states = np.random.randint(0, self.n_states, size=len(data))
-            
-            return {
-                'n_states': self.n_states,
-                'states': states,
-                'transition_matrix': np.eye(self.n_states),
-                'emission_means': _safe_values(data.mean()),
-                'emission_covars': _safe_values(data.cov())
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error ajustando HMM: {e}")
-            return {'error': str(e)}
-
-class StressTestGenerator:
-    """Generador de pruebas de estrés para validación de modelos."""
-    
-    def __init__(self, random_state: int = 42):
-        self.random_state = random_state
-        self.logger = setup_logger("kforce")
-    
-    def generate_synthetic_strategies(self, n_strategies: int = 100) -> pd.DataFrame:
-        """Genera estrategias sintéticas para pruebas de estrés."""
-        try:
-            np.random.seed(self.random_state)
-            
-            # Generar datos sintéticos
-            data = {
-                'Strategy_Name': [f'Stress_Test_{i+1}' for i in range(n_strategies)],
-                'Sharpe_Ratio': np.random.normal(1.5, 0.5, n_strategies),
-                'Max_DD_%': np.random.uniform(-30, -5, n_strategies),
-                'CAGR': np.random.normal(15, 10, n_strategies),
-                'Profit_factor': np.random.uniform(1.1, 3.0, n_strategies),
-                'Winning_Percent': np.random.uniform(40, 80, n_strategies)
-            }
-            
-            return pd.DataFrame(data)
-            
-        except Exception as e:
-            self.logger.error(f"Error generando estrategias sintéticas: {e}")
-            return pd.DataFrame()
+# Clases eliminadas - movidas a módulos modulares:
+# - HiddenMarkovModelAnalyzer -> market_regime_analyzer.py
+# - StressTestGenerator -> robustness_analyzer.py
 
 class DataDriftDetector:
     """Detector de drift en los datos para validación temporal."""
@@ -2048,8 +2019,8 @@ class QVAScorerEnhanced:
             penalty = pd.Series(1.0, index=df.index)
             
             # Penalización por operaciones de estancamiento
-            if 'Stagnation_Trades' in df.columns:
-                stagnation = pd.to_numeric(df['Stagnation_Trades'], errors='coerce').fillna(0)
+            if 'Stagnation' in df.columns:
+                stagnation = pd.to_numeric(df['Stagnation'], errors='coerce').fillna(0)
                 stagnation_penalty = 1 / (1 + stagnation / 10)
                 penalty = penalty * stagnation_penalty
             
@@ -2165,6 +2136,15 @@ class UnifiedEvaluatorEnhanced:
         self.factor_k = FactorKElite96Enhanced(progress_callback=progress_callback)
         self.qva_scorer = QVAScorerEnhanced(self.factor_k.config_manager, progress_callback=progress_callback)
     
+    def _normalize_series(self, series: pd.Series) -> pd.Series:
+        """Normaliza una serie a rango [0, 1], robusto a NaN y valores constantes."""
+        series = series.fillna(0.5)
+        min_score = series.min()
+        max_score = series.max()
+        if max_score > min_score:
+            return (series - min_score) / (max_score - min_score)
+        return pd.Series(0.5, index=series.index)
+
     def evaluate_strategies_unified(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Evalúa estrategias usando el sistema unificado.
@@ -2242,14 +2222,8 @@ class UnifiedEvaluatorEnhanced:
             if 'FK96_Elite_Enhanced_Normalized' in df_fk.columns:
                 fk_scores = df_fk['FK96_Elite_Enhanced_Normalized'].fillna(0.5)
             elif 'FK96_Elite_Enhanced' in df_fk.columns:
-                # Normalizar FK96_Elite_Enhanced si no está normalizado
                 fk_raw = df_fk['FK96_Elite_Enhanced'].fillna(0.5)
-                min_score = fk_raw.min()
-                max_score = fk_raw.max()
-                if max_score > min_score:
-                    fk_scores = (fk_raw - min_score) / (max_score - min_score)
-                else:
-                    fk_scores = pd.Series(0.5, index=df_fk.index)
+                fk_scores = self._normalize_series(fk_raw)
             else:
                 fk_scores = pd.Series(0.5, index=df_fk.index)
             
@@ -2276,11 +2250,10 @@ class UnifiedEvaluatorEnhanced:
                 qva_robust_scores * 0.4
             )
             
-            # Normalizar scores unificados
+            # Normalizar scores unificados usando el nuevo método
             unified_score = df_fk['Unified_Score']
             unified_score_robust = df_fk['Unified_Score_Robust']
 
-            # Asegurar que sean Series
             if isinstance(unified_score, pd.DataFrame):
                 unified_score = unified_score.iloc[:, 0]
             if not isinstance(unified_score, pd.Series):
@@ -2290,8 +2263,8 @@ class UnifiedEvaluatorEnhanced:
             if not isinstance(unified_score_robust, pd.Series):
                 unified_score_robust = pd.Series(unified_score_robust, index=df_fk.index)
 
-            df_fk['Unified_Score_Normalized'] = self._normalize_scores(unified_score)
-            df_fk['Unified_Score_Robust_Normalized'] = self._normalize_scores(unified_score_robust)
+            df_fk['Unified_Score_Normalized'] = self._normalize_series(unified_score)
+            df_fk['Unified_Score_Robust_Normalized'] = self._normalize_series(unified_score_robust)
             
             # Aplicar mejoras científicas después de calcular Unified_Score
             if hasattr(self.factor_k, 'scientific_improvements_enabled') and self.factor_k.scientific_improvements_enabled:
@@ -2308,24 +2281,6 @@ class UnifiedEvaluatorEnhanced:
         except Exception as e:
             self.logger.error(f"Error en evaluación unificada: {e}")
             raise
-    
-    def _normalize_scores(self, scores: pd.Series) -> pd.Series:
-        """Normaliza scores a rango [0, 1]."""
-        try:
-            if scores.empty or scores.isna().all():
-                return pd.Series(0.5, index=scores.index)
-            
-            min_score = scores.min()
-            max_score = scores.max()
-            
-            if max_score > min_score:
-                return (scores - min_score) / (max_score - min_score)
-            else:
-                return pd.Series(0.5, index=scores.index)
-                
-        except Exception as e:
-            self.logger.warning(f"Error normalizando scores: {e}")
-            return pd.Series(0.5, index=scores.index)
     
     def _apply_scientific_improvements_to_unified(self, df: pd.DataFrame) -> pd.DataFrame:
         """Aplica mejoras científicas al Unified_Score después de su cálculo."""
@@ -2648,6 +2603,23 @@ def run_complete_analysis_with_gui_integration(file_path: str, config: Optional[
                 logger.warning(f"No se pudo asignar régimen de mercado: {e}")
         # --- FIN NUEVO ---
         
+        # --- NUEVO: Integración DarwinEX Pipeline ---
+        if config and config.get('darwin_ex_pipeline', False):
+            try:
+                logger.info("🚀 Aplicando pipeline DarwinEX...")
+                darwin_pipeline = DarwinEXPipelineEnhanced(config_manager=factor_k.config_manager)
+                results, darwin_report = darwin_pipeline.run_pipeline_analysis(results)
+                
+                # Añadir resumen del pipeline al summary general
+                if 'darwin_ex_pipeline' not in summary:
+                    summary['darwin_ex_pipeline'] = {}
+                summary['darwin_ex_pipeline'].update(darwin_report)
+                
+                logger.info("✅ Pipeline DarwinEX aplicado exitosamente")
+            except Exception as e:
+                logger.warning(f"⚠️ Error aplicando pipeline DarwinEX: {e}")
+        # --- FIN NUEVO ---
+        
         # MEJORAS CIENTÍFICAS: Log de resumen
         if config and config.get('scientific_improvements', False):
             logger.info("🔬 Resumen de mejoras científicas aplicadas:")
@@ -2655,6 +2627,14 @@ def run_complete_analysis_with_gui_integration(file_path: str, config: Optional[
             logger.info("   • Análisis HMM (Hidden Markov Models)")
             logger.info("   • Mejora científica de scores")
             logger.info("   • Predictividad IS/OOS empírica")
+        
+        # NUEVO: Log de integración DarwinEX
+        if config and config.get('darwin_ex_pipeline', False):
+            logger.info("🚀 Resumen de integración DarwinEX aplicada:")
+            logger.info("   • Pipeline de 6 filtros DarwinEX")
+            logger.info("   • Análisis de asignación de capital")
+            logger.info("   • Evaluación de riesgo y recomendaciones")
+            logger.info("   • Compatibilidad con análisis existente")
         
         return results, summary
         
@@ -2949,270 +2929,6 @@ class CorrelationFilter:
             if not isinstance(df, pd.DataFrame):
                 df = pd.DataFrame(df)
             return df, []
-
-
-class MarketRegimeDetector:
-    """
-    Detector de regímenes de mercado usando clustering y análisis de características.
-    """
-    
-    def __init__(self, config: Optional[Dict] = None):
-        """
-        Inicializa el detector de regímenes de mercado.
-        
-        Args:
-            config: Configuración opcional
-        """
-        self.config = config or {}
-        self.logger = setup_logger("kforce")
-        self.n_clusters = self.config.get('n_clusters', 3)
-        self.random_state = self.config.get('random_state', 42)
-        self.feature_columns = self.config.get('feature_columns', [])
-        
-    def extract_market_features(self, market_data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Extrae características del mercado para detección de regímenes.
-        
-        Args:
-            market_data: DataFrame con datos de mercado
-            
-        Returns:
-            DataFrame con características extraídas
-        """
-        try:
-            self.logger.info("Extrayendo características de mercado")
-            
-            # Asegurar que features_df es un DataFrame de pandas
-            features_df: pd.DataFrame = market_data.copy()
-            
-            # Características básicas de volatilidad
-            if 'Close' in features_df.columns:
-                # Retornos
-                features_df['returns'] = features_df['Close'].pct_change()
-                features_df['log_returns'] = np.log(features_df['Close'] / features_df['Close'].shift(1))
-                
-                # Volatilidad
-                features_df['volatility'] = features_df['returns'].rolling(window=20).std()
-                features_df['volatility_ma'] = features_df['volatility'].rolling(window=50).mean()
-                
-                # RSI
-                close_data = features_df['Close']
-                if isinstance(close_data, pd.Series):
-                    close_series = close_data
-                elif isinstance(close_data, pd.DataFrame):
-                    close_series = close_data.iloc[:, 0]
-                else:
-                    close_series = pd.Series(close_data)
-                features_df['rsi'] = self._calculate_rsi(close_series)
-                
-                # Bandas de Bollinger
-                bb_ma = features_df['Close'].rolling(window=20).mean()
-                bb_std = features_df['Close'].rolling(window=20).std()
-                features_df['bb_upper'] = bb_ma + 2 * bb_std
-                features_df['bb_lower'] = bb_ma - 2 * bb_std
-                features_df['bb_position'] = (features_df['Close'] - features_df['bb_lower']) / (features_df['bb_upper'] - features_df['bb_lower'])
-                
-                # Momentum
-                features_df['momentum_5'] = features_df['Close'] / features_df['Close'].shift(5) - 1
-                features_df['momentum_20'] = features_df['Close'] / features_df['Close'].shift(20) - 1
-                
-                # Tendencia
-                features_df['trend_20'] = features_df['Close'].rolling(window=20).mean() / features_df['Close'].rolling(window=50).mean() - 1
-            
-                # ATR (Average True Range)
-                if 'High' in features_df.columns and 'Low' in features_df.columns:
-                    high = features_df['High']
-                    low = features_df['Low']
-                    close = features_df['Close']
-                    
-                    tr1 = high - low
-                    tr2 = abs(high - close.shift())
-                    tr3 = abs(low - close.shift())
-                    
-                    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-                    features_df['atr'] = tr.rolling(window=14).mean()
-                
-                # Volumen (si está disponible)
-                if 'Volume' in features_df.columns:
-                    features_df['volume_ma'] = features_df['Volume'].rolling(window=20).mean()
-                    features_df['volume_ratio'] = features_df['Volume'] / features_df['volume_ma']
-            
-            # Rellenar NaN de forma simple - asegurar que es DataFrame
-            if isinstance(features_df, pd.DataFrame):
-                # type: ignore[attr-defined] - Pyright no reconoce fillna en DataFrame
-                features_df = features_df.fillna(0)
-            
-            # Asegurar que tenemos al menos 2 características válidas
-            feature_cols = [col for col in features_df.columns if col not in ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume']]
-            
-            if len(feature_cols) < 2:
-                self.logger.warning(f"Solo se generaron {len(feature_cols)} características válidas. Añadiendo características básicas...")
-                # Añadir características básicas adicionales
-                if 'Close' in features_df.columns:
-                    features_df['price_change'] = features_df['Close'].diff()
-                    features_df['price_change_pct'] = features_df['Close'].pct_change()
-                    # Característica simple sin división compleja
-                    # type: ignore[operator] - Pyright no reconoce operación con Series
-                    features_df['price_level'] = features_df['Close'] / 100.0  # Normalizar precio
-            
-            self.logger.info(f"Características extraídas: {len([col for col in features_df.columns if col not in ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume']])} columnas")
-            
-            return features_df
-            
-        except Exception as e:
-            self.logger.error(f"Error extrayendo características: {e}")
-            return market_data
-    
-    def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
-        """Calcula el RSI (Relative Strength Index)."""
-        try:
-            # Asegurar que prices es una Series
-            if not isinstance(prices, pd.Series):
-                prices = pd.Series(prices)
-            
-            delta = prices.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
-            return pd.Series(rsi)  # Asegurar retorno de Series
-        except Exception:
-            return pd.Series([np.nan] * len(prices))
-    
-    def detect_regimes(self, features_df: pd.DataFrame) -> Tuple[np.ndarray, Dict]:
-        """
-        Detecta regímenes de mercado usando clustering.
-        
-        Args:
-            features_df: DataFrame con características de mercado
-            
-        Returns:
-            Tuple con etiquetas de regímenes y información del clustering
-        """
-        try:
-            self.logger.info("Detectando regímenes de mercado")
-            
-            # Seleccionar características para clustering
-            feature_cols = [col for col in features_df.columns if col not in ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume']]
-            
-            if len(feature_cols) < 2:
-                self.logger.warning("Insuficientes características para clustering")
-                return np.zeros(len(features_df)), {}
-            
-            # Preparar datos
-            X = features_df[feature_cols].fillna(0)
-            
-            # Normalizar
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
-            
-            # Clustering
-            kmeans = KMeans(n_clusters=self.n_clusters, random_state=self.random_state, n_init='auto')
-            regime_labels = kmeans.fit_predict(X_scaled)
-            
-            # Información del clustering
-            cluster_info = {
-                'n_clusters': self.n_clusters,
-                'feature_columns': feature_cols,
-                'centroids': kmeans.cluster_centers_,
-                'inertia': kmeans.inertia_,
-                'regime_mapping': self._map_clusters_to_regimes(kmeans.cluster_centers_, feature_cols)
-            }
-            
-            self.logger.info(f"Regímenes detectados: {self.n_clusters} clusters")
-            
-            return regime_labels, cluster_info
-            
-        except Exception as e:
-            self.logger.error(f"Error detectando regímenes: {e}")
-            return np.zeros(len(features_df)), {}
-    
-    def _map_clusters_to_regimes(self, centroids: np.ndarray, feature_names: List[str]) -> Dict[int, str]:
-        """Mapea clusters a tipos de régimen."""
-        regime_mapping = {}
-        
-        for i, centroid in enumerate(centroids):
-            regime_type = self._classify_regime_by_centroid(centroid, feature_names)
-            regime_mapping[i] = regime_type
-        
-        return regime_mapping
-    
-    def _classify_regime_by_centroid(self, centroid: np.ndarray, feature_names: List[str]) -> str:
-        """Clasifica un régimen basándose en su centroide."""
-        try:
-            # Crear diccionario de características
-            features = dict(zip(feature_names, centroid))
-            
-            # Lógica de clasificación
-            volatility = features.get('volatility', 0)
-            rsi = features.get('rsi', 50)
-            momentum = features.get('momentum_20', 0)
-            trend = features.get('trend_20', 0)
-            
-            if volatility > 0.02:  # Alta volatilidad
-                if rsi > 70:
-                    return "Bear Market"
-                elif rsi < 30:
-                    return "Bull Market"
-                else:
-                    return "High Volatility"
-            elif momentum > 0.05 and trend > 0.02:
-                return "Bull Market"
-            elif momentum < -0.05 and trend < -0.02:
-                return "Bear Market"
-            else:
-                return "Sideways Market"
-                
-        except Exception:
-            return "Unknown"
-    
-    def analyze_strategy_performance_by_regime(self, strategies_df: pd.DataFrame, 
-                                             regime_labels: np.ndarray) -> Dict[str, pd.DataFrame]:
-        """
-        Analiza el rendimiento de estrategias por régimen de mercado.
-        
-        Args:
-            strategies_df: DataFrame con estrategias
-            regime_labels: Etiquetas de regímenes
-            
-        Returns:
-            Diccionario con análisis por régimen
-        """
-        try:
-            self.logger.info("Analizando rendimiento por régimen")
-            
-            # Añadir etiquetas de régimen al DataFrame
-            analysis_df = strategies_df.copy()
-            analysis_df['market_regime'] = regime_labels[:len(analysis_df)]
-            
-            # Análisis por régimen
-            regime_analysis = {}
-            
-            for regime_id in np.unique(regime_labels):
-                regime_data = analysis_df[analysis_df['market_regime'] == regime_id]
-                
-                if len(regime_data) > 0:
-                    # Calcular estadísticas por régimen
-                    regime_stats = {
-                        'count': len(regime_data),
-                        'avg_profit_factor': regime_data['Profit_factor'].mean() if 'Profit_factor' in regime_data.columns else 0,
-                        'avg_sharpe': regime_data['Sharpe_Ratio'].mean() if 'Sharpe_Ratio' in regime_data.columns else 0,
-                        'avg_max_dd': regime_data['Max_DD_%'].mean() if 'Max_DD_%' in regime_data.columns else 0,
-                        'best_strategy': regime_data.loc[pd.Series(regime_data['Profit_factor']).idxmax(), 'Strategy_Name'] if 'Profit_factor' in regime_data.columns else 'N/A'
-                    }
-                    
-                    regime_analysis[f"regime_{regime_id}"] = {
-                        'data': regime_data,
-                        'stats': regime_stats
-                    }
-            
-            self.logger.info(f"Análisis completado para {len(regime_analysis)} regímenes")
-            
-            return regime_analysis
-            
-        except Exception as e:
-            self.logger.error(f"Error analizando rendimiento por régimen: {e}")
-            return {}
 
 
 class AdvancedPerformanceOptimizer:
@@ -3762,988 +3478,7 @@ def predictividad_is_oos_empirica(df, is_oos_split=0.75):
 
 # ... existing code ...
 
-class RobustnessAnalyzer:
-    """Analizador de robustez para evaluar la estabilidad de las estrategias."""
-    
-    def __init__(self, progress_callback=None):
-        self.progress_callback = progress_callback
-        self.logger = setup_logger("kforce")
-        
-    def analyze_stability_metrics(self, df: pd.DataFrame) -> Dict[str, float]:
-        """Analiza métricas de estabilidad de las estrategias."""
-        try:
-            self.logger.info("Iniciando análisis de robustez...")
-            
-            stability_metrics = {}
-            
-            # Análisis de estabilidad del Sharpe Ratio
-            if 'Sharpe_Ratio' in df.columns:
-                stability_metrics['sharpe_stability'] = self._calculate_sharpe_stability(df)
-            
-            # Análisis de estabilidad del Drawdown
-            if 'Max_DD_%' in df.columns:
-                stability_metrics['drawdown_stability'] = self._calculate_drawdown_stability(df)
-            
-            # Análisis de consistencia de retornos
-            if 'CAGR' in df.columns:
-                stability_metrics['return_consistency'] = self._calculate_return_consistency(df)
-            
-            # Análisis de correlación entre métricas
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
-            if len(numeric_cols) > 1:
-                # Calcular correlación entre columnas numéricas
-                numeric_data = df[numeric_cols].astype(float)
-                correlation_matrix = numeric_data.corr(method='pearson') if isinstance(numeric_data, pd.DataFrame) else pd.DataFrame()
-                if not correlation_matrix.empty:
-                    # Excluir la diagonal (autocorrelación)
-                    mask = ~np.eye(len(correlation_matrix), dtype=bool)
-                    mean_corr = float(np.abs(correlation_matrix.values[mask]).mean())
-                    stability_metrics['metric_correlation'] = mean_corr
-                else:
-                    stability_metrics['metric_correlation'] = 0.0
-            else:
-                stability_metrics['metric_correlation'] = 0.0
-            
-            self.logger.info("Análisis de robustez completado")
-            return stability_metrics
-            
-        except Exception as e:
-            self.logger.error(f"Error en análisis de robustez: {e}")
-            return {}
-    
-    def _calculate_sharpe_stability(self, df: pd.DataFrame) -> float:
-        """Calcula la estabilidad del Sharpe Ratio."""
-        try:
-            sharpe_values = pd.to_numeric(df['Sharpe_Ratio'], errors='coerce').dropna()
-            if not isinstance(sharpe_values, pd.Series):
-                sharpe_values = pd.Series(sharpe_values)
-            if len(sharpe_values) < 2:
-                return 0.0
-            
-            # Calcular coeficiente de variación (menor = más estable)
-            sharpe_mean = float(sharpe_values.mean()) if len(sharpe_values) > 0 else 0.0
-            sharpe_std = float(sharpe_values.std()) if len(sharpe_values) > 0 else 0.0
-            cv = sharpe_std / abs(sharpe_mean) if sharpe_mean != 0 else 0
-            stability = max(0, 1 - cv)  # Convertir a métrica de estabilidad
-            return float(stability)
-        except Exception as e:
-            self.logger.warning(f"Error calculando estabilidad Sharpe: {e}")
-            return 0.0
-    
-    def _calculate_drawdown_stability(self, df: pd.DataFrame) -> float:
-        """Calcula la estabilidad del Drawdown."""
-        try:
-            dd_values = pd.to_numeric(df['Max_DD_%'], errors='coerce').dropna()
-            if not isinstance(dd_values, pd.Series):
-                dd_values = pd.Series(dd_values)
-            if len(dd_values) < 2:
-                return 0.0
-            
-            # Calcular estabilidad basada en la dispersión del drawdown
-            dd_std = float(dd_values.std()) if len(dd_values) > 0 else 0.0
-            dd_mean = abs(float(dd_values.mean())) if len(dd_values) > 0 else 0.0
-            stability = max(0, 1 - (dd_std / dd_mean)) if dd_mean > 0 else 0
-            return float(stability)
-        except Exception as e:
-            self.logger.warning(f"Error calculando estabilidad Drawdown: {e}")
-            return 0.0
-    
-    def _calculate_return_consistency(self, df: pd.DataFrame) -> float:
-        """Calcula la consistencia de retornos."""
-        try:
-            cagr_values = pd.to_numeric(df['CAGR'], errors='coerce').dropna()
-            if not isinstance(cagr_values, pd.Series):
-                cagr_values = pd.Series(cagr_values)
-            if len(cagr_values) < 2:
-                return 0.0
-            
-            # Calcular consistencia basada en la variabilidad de CAGR
-            cagr_std = float(cagr_values.std()) if len(cagr_values) > 0 else 0.0
-            cagr_mean = abs(float(cagr_values.mean())) if len(cagr_values) > 0 else 0.0
-            consistency = max(0, 1 - (cagr_std / cagr_mean)) if cagr_mean > 0 else 0
-            return float(consistency)
-        except Exception as e:
-            self.logger.warning(f"Error calculando consistencia retornos: {e}")
-            return 0.0
-
-
-class WalkForwardAnalyzer:
-    """Analizador de Walk-Forward para validación temporal."""
-    
-    def __init__(self, n_folds: int = 5, progress_callback=None):
-        self.n_folds = n_folds
-        self.progress_callback = progress_callback
-        self.logger = setup_logger("kforce")
-        
-    def perform_walk_forward_analysis(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Realiza análisis de walk-forward en los datos."""
-        try:
-            self.logger.info("Iniciando análisis Walk-Forward...")
-            
-            # Identificar columnas IS/OOS
-            is_cols = [col for col in df.columns if '(IS)' in col]
-            oos_cols = [col for col in df.columns if '(OOS)' in col]
-            
-            if not is_cols or not oos_cols:
-                self.logger.warning("No se encontraron columnas IS/OOS para análisis walk-forward")
-                return {}
-            
-            results = {
-                'fold_results': [],
-                'overall_metrics': {},
-                'predictability_score': 0.0
-            }
-            
-            # Realizar análisis por cada par IS/OOS
-            for is_col, oos_col in zip(is_cols, oos_cols):
-                fold_result = self._analyze_single_pair(df, is_col, oos_col)
-                results['fold_results'].append(fold_result)
-            
-            # Calcular métricas generales
-            if results['fold_results']:
-                results['overall_metrics'] = self._calculate_overall_metrics(results['fold_results'])
-                results['predictability_score'] = self._calculate_predictability_score(results['fold_results'])
-            
-            self.logger.info("Análisis Walk-Forward completado")
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"Error en análisis Walk-Forward: {e}")
-            return {}
-    
-    def _analyze_single_pair(self, df: pd.DataFrame, is_col: str, oos_col: str) -> Dict[str, Any]:
-        """Analiza un par específico de columnas IS/OOS."""
-        try:
-            is_values = pd.to_numeric(df[is_col], errors='coerce').dropna()
-            oos_values = pd.to_numeric(df[oos_col], errors='coerce').dropna()
-            
-            if len(is_values) < 2 or len(oos_values) < 2:
-                return {'error': 'Datos insuficientes'}
-            
-            # Calcular correlación
-            if len(is_values) == len(oos_values) and len(is_values) > 1:
-                try:
-                    # Convertir a numpy arrays de forma segura
-                    is_array = is_values.to_numpy() if hasattr(is_values, 'to_numpy') else np.array(is_values)
-                    oos_array = oos_values.to_numpy() if hasattr(oos_values, 'to_numpy') else np.array(oos_values)
-                    
-                    # Verificar que los arrays sean compatibles
-                    if len(is_array) == len(oos_array) and len(is_array) > 1:
-                        # Convertir a float arrays para evitar problemas de tipado
-                        is_float_array = is_array.astype(float)
-                        oos_float_array = oos_array.astype(float)
-                        correlation_matrix = np.corrcoef(is_float_array, oos_float_array)
-                        correlation = float(correlation_matrix[0, 1]) if correlation_matrix.shape == (2, 2) else 0.0
-                    else:
-                        correlation = 0.0
-                except Exception:
-                    correlation = 0.0
-            else:
-                correlation = 0
-            
-            # Calcular R²
-            r_squared = self._calculate_r_squared(is_values.tolist(), oos_values.tolist())
-            
-            # Calcular p-value (simplificado)
-            p_value = self._calculate_p_value(is_values.tolist())
-            
-            return {
-                'is_column': is_col,
-                'oos_column': oos_col,
-                'correlation': float(correlation),
-                'r_squared': float(r_squared),
-                'p_value': float(p_value),
-                'sample_size': len(is_values)
-            }
-            
-        except Exception as e:
-            self.logger.warning(f"Error analizando par {is_col}/{oos_col}: {e}")
-            return {'error': str(e)}
-    
-    def _calculate_r_squared(self, x: List[float], y: List[float]) -> float:
-        """Calcula R² entre dos series."""
-        try:
-            if len(x) != len(y) or len(x) < 2:
-                return 0.0
-            
-            x_mean = np.mean(x)
-            y_mean = np.mean(y)
-            
-            numerator = sum((x[i] - x_mean) * (y[i] - y_mean) for i in range(len(x)))
-            denominator_x = sum((x[i] - x_mean) ** 2 for i in range(len(x)))
-            denominator_y = sum((y[i] - y_mean) ** 2 for i in range(len(y)))
-            
-            if denominator_x == 0 or denominator_y == 0:
-                return 0.0
-            
-            correlation = numerator / (denominator_x * denominator_y) ** 0.5
-            return float(correlation ** 2)
-            
-        except Exception:
-            return 0.0
-    
-    def _calculate_p_value(self, values: List[float]) -> float:
-        """Calcula p-value simplificado."""
-        try:
-            if len(values) < 2:
-                return 1.0
-            
-            # Test t simple para determinar si la media es significativamente diferente de 0
-            mean_val = np.mean(values)
-            std_val = np.std(values, ddof=1)
-            
-            if std_val == 0:
-                return 1.0
-            
-            t_stat = mean_val / (std_val / np.sqrt(len(values)))
-            # Aproximación simple del p-value
-            p_value = 2 * (1 - float(norm.cdf(abs(t_stat))))
-            return float(p_value)
-            
-        except Exception:
-            return 1.0
-    
-    def _calculate_overall_metrics(self, fold_results: List[Dict]) -> Dict[str, float]:
-        """Calcula métricas generales del análisis walk-forward."""
-        try:
-            valid_results = [r for r in fold_results if 'error' not in r]
-            
-            if not valid_results:
-                return {}
-            
-            correlations = [r['correlation'] for r in valid_results]
-            r_squareds = [r['r_squared'] for r in valid_results]
-            p_values = [r['p_value'] for r in valid_results]
-            
-            return {
-                'mean_correlation': float(np.mean(correlations)),
-                'mean_r_squared': float(np.mean(r_squareds)),
-                'mean_p_value': float(np.mean(p_values)),
-                'significant_pairs': sum(1 for p in p_values if p < 0.05),
-                'total_pairs': len(valid_results)
-            }
-            
-        except Exception as e:
-            self.logger.warning(f"Error calculando métricas generales: {e}")
-            return {}
-    
-    def _calculate_predictability_score(self, fold_results: List[Dict]) -> float:
-        """Calcula score de predictibilidad basado en los resultados."""
-        try:
-            valid_results = [r for r in fold_results if 'error' not in r]
-            
-            if not valid_results:
-                return 0.0
-            
-            # Score basado en correlación y significancia
-            scores = []
-            for result in valid_results:
-                correlation = abs(result['correlation'])
-                p_value = result['p_value']
-                
-                # Penalizar por p-value alto
-                significance_factor = 1.0 if p_value < 0.05 else 0.5
-                score = correlation * significance_factor
-                scores.append(score)
-            
-            return float(np.mean(scores)) if scores else 0.0
-            
-        except Exception as e:
-            self.logger.warning(f"Error calculando score de predictibilidad: {e}")
-            return 0.0
-
-
-class NullSimulationAnalyzer:
-    """Analizador de simulación nula para validar significancia estadística."""
-    
-    def __init__(self, n_simulations: int = 100, progress_callback=None):
-        self.n_simulations = n_simulations
-        self.progress_callback = progress_callback
-        self.logger = setup_logger("kforce")
-        
-    def perform_null_simulation(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Realiza simulación nula para validar significancia estadística."""
-        try:
-            self.logger.info("Iniciando simulación nula...")
-            
-            # Identificar métricas clave
-            key_metrics = ['Profit_Factor', 'CAGR', 'Sharpe_Ratio', 'Max_DD_%']
-            available_metrics = [m for m in key_metrics if m in df.columns]
-            
-            if not available_metrics:
-                self.logger.warning("No se encontraron métricas clave para simulación nula")
-                return {}
-            
-            results = {
-                'metric_results': {},
-                'overall_significance': 0.0,
-                'simulation_count': self.n_simulations
-            }
-            
-            # Simular para cada métrica
-            for metric in available_metrics:
-                metric_result = self._simulate_metric(df, metric)
-                results['metric_results'][metric] = metric_result
-            
-            # Calcular significancia general
-            if results['metric_results']:
-                results['overall_significance'] = self._calculate_overall_significance(results['metric_results'])
-            
-            self.logger.info("Simulación nula completada")
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"Error en simulación nula: {e}")
-            return {}
-    
-    def _simulate_metric(self, df: pd.DataFrame, metric: str) -> Dict[str, Any]:
-        """Simula una métrica específica."""
-        try:
-            values = pd.to_numeric(df[metric], errors='coerce').dropna()
-            
-            if len(values) < 2:
-                return {'error': 'Datos insuficientes'}
-            
-            # Asegurar que values sea una Serie antes de calcular estadísticas
-            if not isinstance(values, pd.Series):
-                values = pd.Series(values)
-            
-            original_mean = float(values.mean()) if len(values) > 0 else 0.0
-            original_std = float(values.std()) if len(values) > 0 else 0.0
-            
-            # Simular distribuciones nulas
-            null_means = []
-            for _ in range(self.n_simulations):
-                # Permutar valores para crear distribución nula
-                shuffled_values = np.random.permutation(values.to_numpy() if hasattr(values, 'to_numpy') else np.array(values))
-                null_means.append(shuffled_values.mean())
-            
-            null_means = np.array(null_means)
-            
-            # Calcular p-value
-            if len(null_means) > 0:
-                p_value = float(np.mean(null_means >= original_mean) if original_mean > 0 else np.mean(null_means <= original_mean))
-            else:
-                p_value = 1.0
-            
-            # Calcular percentiles
-            if len(null_means) > 0:
-                percentiles = np.percentile(null_means.astype(np.float64), [5, 25, 50, 75, 95])
-            else:
-                percentiles = [0.0, 0.0, 0.0, 0.0, 0.0]
-            
-            return {
-                'original_mean': float(original_mean),
-                'original_std': float(original_std),
-                'null_mean': float(null_means.mean()) if len(null_means) > 0 else 0.0,
-                'null_std': float(null_means.std()) if len(null_means) > 0 else 0.0,
-                'p_value': float(p_value),
-                'significant': p_value < 0.05,
-                'percentiles': percentiles.tolist(),
-                'sample_size': len(values)
-            }
-            
-        except Exception as e:
-            self.logger.warning(f"Error simulando métrica {metric}: {e}")
-            return {'error': str(e)}
-    
-    def _calculate_overall_significance(self, metric_results: Dict[str, Dict]) -> float:
-        """Calcula significancia general basada en todas las métricas."""
-        try:
-            significant_count = 0
-            total_count = 0
-            
-            for metric, result in metric_results.items():
-                if 'error' not in result:
-                    total_count += 1
-                    if result.get('significant', False):
-                        significant_count += 1
-            
-            if total_count == 0:
-                return 0.0
-            
-            return float(significant_count / total_count)
-            
-        except Exception as e:
-            self.logger.warning(f"Error calculando significancia general: {e}")
-            return 0.0
-
-
-class PredictabilityAnalyzer:
-    """Analizador de predictibilidad para evaluar la calidad predictiva de las métricas."""
-    
-    def __init__(self, progress_callback=None):
-        self.progress_callback = progress_callback
-        self.logger = setup_logger("kforce")
-        
-    def analyze_is_oos_correlations(self, df: pd.DataFrame) -> Dict[str, float]:
-        """Analiza correlaciones IS/OOS para evaluar predictibilidad."""
-        try:
-            self.logger.info("Analizando correlaciones IS/OOS...")
-            
-            # Identificar pares IS/OOS
-            is_cols = [col for col in df.columns if '(IS)' in col]
-            oos_cols = [col for col in df.columns if '(OOS)' in col]
-            
-            correlations = {}
-            
-            for is_col in is_cols:
-                base_name = is_col.replace(' (IS)', '').replace('(IS)', '').strip()
-                oos_col = next((c for c in oos_cols if base_name == c.replace(' (OOS)', '').replace('(OOS)', '').strip()), None)
-                
-                if oos_col:
-                    correlation = self._calculate_correlation(df, is_col, oos_col)
-                    correlations[base_name] = correlation
-            
-            self.logger.info("Análisis de correlaciones IS/OOS completado")
-            return correlations
-            
-        except Exception as e:
-            self.logger.error(f"Error analizando correlaciones IS/OOS: {e}")
-            return {}
-    
-    def _calculate_correlation(self, df: pd.DataFrame, col1: str, col2: str) -> float:
-        """Calcula correlación entre dos columnas."""
-        try:
-            values1 = pd.to_numeric(df[col1], errors='coerce').dropna()
-            values2 = pd.to_numeric(df[col2], errors='coerce').dropna()
-            
-            if len(values1) < 2 or len(values2) < 2:
-                return 0.0
-            
-            # Alinear series si tienen diferentes longitudes
-            min_len = min(len(values1), len(values2))
-            values1 = values1[:min_len]
-            values2 = values2[:min_len]
-            
-            # Convertir a numpy arrays de forma segura
-            values1_array = values1.to_numpy() if hasattr(values1, 'to_numpy') else np.array(values1)
-            values2_array = values2.to_numpy() if hasattr(values2, 'to_numpy') else np.array(values2)
-            # Convertir a float arrays para evitar problemas de tipado
-            values1_float_array = values1_array.astype(float)
-            values2_float_array = values2_array.astype(float)
-            correlation = np.corrcoef(values1_float_array, values2_float_array)[0, 1]
-            return float(correlation) if not np.isnan(correlation) else 0.0
-            
-        except Exception as e:
-            self.logger.warning(f"Error calculando correlación {col1}/{col2}: {e}")
-            return 0.0
-    
-    def analyze_outliers_and_distribution(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Analiza outliers y distribución de los datos."""
-        try:
-            self.logger.info("Analizando outliers y distribución...")
-            
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
-            analysis_results = {}
-            
-            for col in numeric_cols:
-                values = pd.to_numeric(df[col], errors='coerce').dropna()
-                
-                if len(values) < 2:
-                    continue
-                
-                # Asegurar que values sea una Serie antes de calcular estadísticas
-                if not isinstance(values, pd.Series):
-                    values = pd.Series(values)
-                
-                # Estadísticas básicas
-                mean_val = float(values.mean()) if len(values) > 0 else 0.0
-                std_val = float(values.std()) if len(values) > 0 else 0.0
-                median_val = float(values.median()) if len(values) > 0 else 0.0
-                
-                # Detectar outliers usando IQR
-                q1 = float(values.quantile(0.25))
-                q3 = float(values.quantile(0.75))
-                iqr = q3 - q1
-                lower_bound = q1 - 1.5 * iqr
-                upper_bound = q3 + 1.5 * iqr
-                
-                outliers = values[(values < lower_bound) | (values > upper_bound)]
-                outlier_percentage = len(outliers) / len(values) * 100
-                
-                # Asimetría y curtosis
-                skewness = float(values.skew()) if len(values) > 0 else 0.0
-                kurtosis = float(values.kurtosis()) if len(values) > 0 else 0.0
-                
-                analysis_results[col] = {
-                    'mean': float(mean_val),
-                    'std': float(std_val),
-                    'median': float(median_val),
-                    'outlier_count': int(len(outliers)),
-                    'outlier_percentage': float(outlier_percentage),
-                    'skewness': float(skewness),
-                    'kurtosis': float(kurtosis),
-                    'q1': float(q1),
-                    'q3': float(q3),
-                    'iqr': float(iqr)
-                }
-            
-            self.logger.info("Análisis de outliers y distribución completado")
-            return analysis_results
-            
-        except Exception as e:
-            self.logger.error(f"Error analizando outliers y distribución: {e}")
-            return {}
-    
-    def analyze_predictive_quality_metrics(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Analiza métricas de calidad predictiva."""
-        try:
-            self.logger.info("Analizando métricas de calidad predictiva...")
-            
-            # Identificar métricas clave
-            key_metrics = ['Profit_Factor', 'CAGR', 'Sharpe_Ratio', 'Max_DD_%']
-            available_metrics = [m for m in key_metrics if m in df.columns]
-            
-            quality_metrics = {}
-            
-            for metric in available_metrics:
-                values = pd.to_numeric(df[metric], errors='coerce').dropna()
-                
-                # Asegurar que values sea una Serie antes de calcular estadísticas
-                if not isinstance(values, pd.Series):
-                    values = pd.Series(values)
-                
-                if len(values) < 2:
-                    continue
-                
-                # Calcular métricas de calidad
-                values_mean = float(values.mean())
-                cv = values.std() / abs(values_mean) if values_mean != 0 else 0
-                range_val = values.max() - values.min()
-                median_absolute_deviation = np.median(np.abs(values - values.median()))
-                
-                quality_metrics[metric] = {
-                    'coefficient_of_variation': float(cv),
-                    'range': float(range_val),
-                    'median_absolute_deviation': float(median_absolute_deviation),
-                    'sample_size': len(values),
-                    'quality_score': max(0, 1 - cv)  # Score basado en CV
-                }
-            
-            self.logger.info("Análisis de métricas de calidad predictiva completado")
-            return quality_metrics
-            
-        except Exception as e:
-            self.logger.error(f"Error analizando métricas de calidad predictiva: {e}")
-            return {}
-    
-    def perform_hypothesis_tests(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Realiza tests de hipótesis para validar significancia estadística."""
-        try:
-            self.logger.info("Realizando tests de hipótesis...")
-            
-            # Identificar columnas IS/OOS
-            is_cols = [col for col in df.columns if '(IS)' in col]
-            oos_cols = [col for col in df.columns if '(OOS)' in col]
-            
-            test_results = {}
-            
-            for is_col in is_cols:
-                base_name = is_col.replace(' (IS)', '').replace('(IS)', '').strip()
-                oos_col = next((c for c in oos_cols if base_name == c.replace(' (OOS)', '').replace('(OOS)', '').strip()), None)
-                
-                if oos_col:
-                    test_result = self._perform_paired_test(df, is_col, oos_col)
-                    test_results[base_name] = test_result
-            
-            self.logger.info("Tests de hipótesis completados")
-            return test_results
-            
-        except Exception as e:
-            self.logger.error(f"Error realizando tests de hipótesis: {e}")
-            return {}
-    
-    def _perform_paired_test(self, df: pd.DataFrame, is_col: str, oos_col: str) -> Dict[str, Any]:
-        """Realiza test t pareado entre IS y OOS."""
-        try:
-            is_values = pd.to_numeric(df[is_col], errors='coerce').dropna()
-            oos_values = pd.to_numeric(df[oos_col], errors='coerce').dropna()
-            
-            if len(is_values) < 2 or len(oos_values) < 2:
-                return {'error': 'Datos insuficientes'}
-            
-            # Alinear series
-            min_len = min(len(is_values), len(oos_values))
-            is_values = is_values[:min_len]
-            oos_values = oos_values[:min_len]
-            
-            # Calcular diferencias
-            differences = oos_values - is_values
-            
-            # Test t pareado
-            mean_diff = differences.mean()
-            std_diff = differences.std(ddof=1)
-            
-            if std_diff == 0:
-                return {'error': 'Sin variabilidad en diferencias'}
-            
-            t_stat = mean_diff / (std_diff / np.sqrt(len(differences)))
-            p_value = 2 * (1 - norm.cdf(abs(t_stat)))
-            
-            return {
-                'mean_difference': float(mean_diff),
-                'std_difference': float(std_diff),
-                't_statistic': float(t_stat),
-                'p_value': float(p_value),
-                'significant': p_value < 0.05,
-                'sample_size': len(differences)
-            }
-            
-        except Exception as e:
-            self.logger.warning(f"Error en test pareado {is_col}/{oos_col}: {e}")
-            return {'error': str(e)}
-    
-    def analyze_multivariate_prediction(self, df: pd.DataFrame) -> Dict[str, float]:
-        """Analiza predictibilidad multivariada."""
-        try:
-            self.logger.info("Analizando predictibilidad multivariada...")
-            
-            # Identificar métricas IS
-            is_cols = [col for col in df.columns if '(IS)' in col]
-            
-            if len(is_cols) < 2:
-                return {}
-            
-            # Calcular matriz de correlación entre métricas IS
-            is_data = df[is_cols].apply(pd.to_numeric, errors='coerce')
-            if not is_data.empty:
-                # Asegurar que is_data sea DataFrame antes de calcular correlación
-                if isinstance(is_data, pd.DataFrame):
-                    correlation_matrix = is_data.corr(method='pearson')
-                else:
-                    correlation_matrix = pd.DataFrame()
-            else:
-                correlation_matrix = pd.DataFrame()
-            
-            # Calcular métricas de predictibilidad multivariada
-            mean_correlation = correlation_matrix.values[np.triu_indices_from(correlation_matrix.values, k=1)].mean()
-            max_correlation = correlation_matrix.values[np.triu_indices_from(correlation_matrix.values, k=1)].max()
-            
-            # Calcular determinante de la matriz de correlación (medida de multicolinealidad)
-            try:
-                det_correlation = np.linalg.det(correlation_matrix.values)
-            except:
-                det_correlation = 0.0
-            
-            return {
-                'mean_is_correlation': float(mean_correlation),
-                'max_is_correlation': float(max_correlation),
-                'correlation_determinant': float(det_correlation),
-                'multicollinearity_score': max(0, 1 - abs(det_correlation))
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error analizando predictibilidad multivariada: {e}")
-            return {}
-    
-    def calculate_predictability_metrics(self, df: pd.DataFrame) -> Dict[str, float]:
-        """Calcula métricas generales de predictibilidad."""
-        try:
-            self.logger.info("Calculando métricas de predictibilidad...")
-            
-            # Obtener todos los análisis
-            correlations = self.analyze_is_oos_correlations(df)
-            quality_metrics = self.analyze_predictive_quality_metrics(df)
-            hypothesis_tests = self.perform_hypothesis_tests(df)
-            multivariate_metrics = self.analyze_multivariate_prediction(df)
-            
-            # Calcular métricas agregadas
-            overall_correlation = np.mean(list(correlations.values())) if correlations else 0.0
-            significant_tests = sum(1 for test in hypothesis_tests.values() if test.get('significant', False))
-            total_tests = len(hypothesis_tests)
-            significance_rate = significant_tests / total_tests if total_tests > 0 else 0.0
-            
-            # Calcular score de predictibilidad general
-            predictability_score = (
-                overall_correlation * 0.4 +
-                significance_rate * 0.3 +
-                multivariate_metrics.get('multicollinearity_score', 0) * 0.3
-            )
-            
-            return {
-                'overall_correlation': float(overall_correlation),
-                'significance_rate': float(significance_rate),
-                'significant_tests': significant_tests,
-                'total_tests': total_tests,
-                'predictability_score': float(predictability_score),
-                'multicollinearity_score': multivariate_metrics.get('multicollinearity_score', 0)
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error calculando métricas de predictibilidad: {e}")
-            return {}
-    
-    def generate_scientific_report(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Genera reporte científico completo."""
-        try:
-            self.logger.info("Generando reporte científico...")
-            
-            # Realizar todos los análisis
-            correlations = self.analyze_is_oos_correlations(df)
-            outliers_analysis = self.analyze_outliers_and_distribution(df)
-            quality_metrics = self.analyze_predictive_quality_metrics(df)
-            hypothesis_tests = self.perform_hypothesis_tests(df)
-            multivariate_metrics = self.analyze_multivariate_prediction(df)
-            predictability_metrics = self.calculate_predictability_metrics(df)
-            
-            # Generar recomendaciones
-            recommendations = self._generate_recommendation(predictability_metrics)
-            
-            report = {
-                'correlations': correlations,
-                'outliers_analysis': outliers_analysis,
-                'quality_metrics': quality_metrics,
-                'hypothesis_tests': hypothesis_tests,
-                'multivariate_metrics': multivariate_metrics,
-                'predictability_metrics': predictability_metrics,
-                'recommendations': recommendations,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            self.logger.info("Reporte científico generado exitosamente")
-            return report
-            
-        except Exception as e:
-            self.logger.error(f"Error generando reporte científico: {e}")
-            return {}
-    
-    def _generate_recommendation(self, summary: Dict[str, float]) -> str:
-        """Genera recomendación basada en las métricas de predictibilidad."""
-        try:
-            predictability_score = summary.get('predictability_score', 0)
-            significance_rate = summary.get('significance_rate', 0)
-            overall_correlation = summary.get('overall_correlation', 0)
-            
-            if predictability_score >= 0.8 and significance_rate >= 0.7:
-                return "Excelente predictibilidad. Los modelos muestran alta confiabilidad."
-            elif predictability_score >= 0.6 and significance_rate >= 0.5:
-                return "Buena predictibilidad. Los modelos son confiables con algunas reservas."
-            elif predictability_score >= 0.4 and significance_rate >= 0.3:
-                return "Predictibilidad moderada. Se recomienda validación adicional."
-            else:
-                return "Baja predictibilidad. Se requiere análisis más profundo y validación."
-                
-        except Exception as e:
-            self.logger.warning(f"Error generando recomendación: {e}")
-            return "No se pudo generar recomendación debido a errores en el análisis."
-
-
-def run_robustness_analysis(df: pd.DataFrame, config: Optional[Dict] = None) -> Dict[str, Any]:
-    """Ejecuta análisis de robustez completo."""
-    try:
-        analyzer = RobustnessAnalyzer()
-        return analyzer.analyze_stability_metrics(df)
-    except Exception as e:
-        setup_logger("kforce").error(f"Error en análisis de robustez: {e}")
-        return {}
-
-
-def run_predictability_analysis(df: pd.DataFrame, config: Optional[Dict] = None) -> Dict[str, Any]:
-    """Ejecuta análisis de predictibilidad completo."""
-    try:
-        analyzer = PredictabilityAnalyzer()
-        return analyzer.generate_scientific_report(df)
-    except Exception as e:
-        setup_logger("kforce").error(f"Error en análisis de predictibilidad: {e}")
-        return {}
-
-
-def debug_instrument(threshold=5):
-    """Decorador para instrumentar funciones con debugging."""
-    
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            start_time = time.time()
-            start_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
-            
-            try:
-                result = func(*args, **kwargs)
-                execution_time = time.time() - start_time
-                end_memory = psutil.Process().memory_info().rss / 1024 / 1024
-                memory_used = end_memory - start_memory
-                
-                if execution_time > threshold:
-                    setup_logger("kforce").warning(f"{func.__name__} tardó {execution_time:.2f}s y usó {memory_used:.2f}MB")
-                
-                return result
-            except Exception as e:
-                execution_time = time.time() - start_time
-                setup_logger("kforce").error(f"{func.__name__} falló después de {execution_time:.2f}s: {e}")
-                raise
-                
-        return wrapper
-    return decorator
-
-
-def categorize_quality_by_threshold(score: float, thresholds: Dict[str, float]) -> str:
-    """Categoriza calidad basada en score y umbrales."""
-    try:
-        if score >= thresholds.get('excellent', 0.8):
-            return "Excelente"
-        elif score >= thresholds.get('good', 0.6):
-            return "Buena"
-        elif score >= thresholds.get('fair', 0.4):
-            return "Aceptable"
-        else:
-            return "Pobre"
-    except Exception:
-        return "Desconocida"
-
-
-def predictividad_is_oos_empirica_dict(df: pd.DataFrame, split_ratio: float = 0.75) -> Dict[str, Any]:
-    """
-    Calcula la predictividad IS/OOS de forma empírica y científica.
-    
-    Args:
-        df: DataFrame con datos de estrategias
-        split_ratio: Proporción de datos para IS (default: 0.75)
-        
-    Returns:
-        Dict con métricas de predictividad
-    """
-    try:
-        setup_logger("kforce").info("Calculando predictividad IS/OOS empírica...")
-        
-        # Identificar columnas IS/OOS
-        is_cols = [col for col in df.columns if '(IS)' in col]
-        oos_cols = [col for col in df.columns if '(OOS)' in col]
-        
-        if not is_cols or not oos_cols:
-            return {'error': 'No se encontraron columnas IS/OOS'}
-        
-        results = {
-            'metric_pairs': [],
-            'overall_predictability': 0.0,
-            'significant_metrics': 0,
-            'total_metrics': len(is_cols)
-        }
-        
-        total_correlation = 0.0
-        significant_count = 0
-        
-        for is_col in is_cols:
-            base_name = is_col.replace(' (IS)', '').replace('(IS)', '').strip()
-            oos_col = next((c for c in oos_cols if base_name == c.replace(' (OOS)', '').replace('(OOS)', '').strip()), None)
-            
-            if oos_col:
-                # Calcular correlación
-                is_values = pd.to_numeric(df[is_col], errors='coerce').dropna()
-                oos_values = pd.to_numeric(df[oos_col], errors='coerce').dropna()
-                
-                if len(is_values) >= 2 and len(oos_values) >= 2:
-                    min_len = min(len(is_values), len(oos_values))
-                    # Convertir a numpy arrays de forma segura
-                    is_array = is_values.to_numpy() if hasattr(is_values, 'to_numpy') else np.array(is_values)
-                    oos_array = oos_values.to_numpy() if hasattr(oos_values, 'to_numpy') else np.array(oos_values)
-                    # Convertir a float arrays para evitar problemas de tipado
-                    is_float_array = is_array[:min_len].astype(float)
-                    oos_float_array = oos_array[:min_len].astype(float)
-                    correlation = np.corrcoef(is_float_array, oos_float_array)[0, 1]
-                    
-                    if not np.isnan(correlation):
-                        total_correlation += abs(correlation)
-                        if abs(correlation) > 0.3:  # Umbral de significancia
-                            significant_count += 1
-                        
-                        results['metric_pairs'].append({
-                            'metric': base_name,
-                            'correlation': float(correlation),
-                            'significant': abs(correlation) > 0.3,
-                            'sample_size': min_len
-                        })
-        
-        if results['metric_pairs']:
-            results['overall_predictability'] = total_correlation / len(results['metric_pairs'])
-            results['significant_metrics'] = significant_count
-        
-        setup_logger("kforce").info("Predictividad IS/OOS empírica calculada exitosamente")
-        return results
-        
-    except Exception as e:
-        setup_logger("kforce").error(f"Error calculando predictividad IS/OOS empírica: {e}")
-        return {'error': str(e)}
-
-
-class AdvancedDataProcessor:
-    """Procesador avanzado de datos con optimizaciones de memoria y rendimiento."""
-    
-    def __init__(self, chunk_size: int = 10000, max_workers: int = 4):
-        self.chunk_size = chunk_size
-        self.max_workers = max_workers
-        self.logger = setup_logger("kforce")
-        
-    def process_large_dataset(self, df: pd.DataFrame, func, **kwargs) -> pd.DataFrame:
-        """Procesa datasets grandes en chunks para optimizar memoria."""
-        try:
-            self.logger.info(f"Procesando dataset de {len(df)} filas en chunks...")
-            
-            if len(df) <= self.chunk_size:
-                return func(df, **kwargs)
-            
-            results = []
-            total_chunks = (len(df) + self.chunk_size - 1) // self.chunk_size
-            
-            for i in range(0, len(df), self.chunk_size):
-                chunk = df.iloc[i:i + self.chunk_size]
-                chunk_result = func(chunk, **kwargs)
-                results.append(chunk_result)
-                
-                # Limpiar memoria
-                del chunk
-                gc.collect()
-            
-            # Combinar resultados
-            if results:
-                final_result = pd.concat(results, ignore_index=True)
-                self.logger.info(f"Procesamiento completado: {len(final_result)} filas resultantes")
-                return final_result
-            else:
-                return df
-                
-        except Exception as e:
-            self.logger.error(f"Error procesando dataset grande: {e}")
-            return df
-    
-    def optimize_memory_usage(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Optimiza el uso de memoria del DataFrame."""
-        try:
-            self.logger.info("Optimizando uso de memoria...")
-            
-            # Reducir tipos de datos
-            for col in df.columns:
-                if df[col].dtype == 'object':
-                    # Para columnas de texto, usar category si hay pocos valores únicos
-                    if len(df) > 0 and float(df[col].nunique()) / float(len(df)) < 0.5:
-                        df[col] = df[col].astype('category')
-                elif df[col].dtype == 'float64':
-                    # Para floats, usar float32 si es posible
-                    if bool(df[col].notna().all()):
-                        df[col] = df[col].astype('float32')
-                elif df[col].dtype == 'int64':
-                    # Para ints, usar tipos más pequeños si es posible
-                    if df[col].min() >= 0:
-                        if df[col].max() < 255:
-                            df[col] = df[col].astype('uint8')
-                        elif df[col].max() < 65535:
-                            df[col] = df[col].astype('uint16')
-                        else:
-                            df[col] = df[col].astype('uint32')
-                    else:
-                        if df[col].min() >= -128 and df[col].max() < 127:
-                            df[col] = df[col].astype('int8')
-                        elif df[col].min() >= -32768 and df[col].max() < 32767:
-                            df[col] = df[col].astype('int16')
-                        else:
-                            df[col] = df[col].astype('int32')
-            
-            self.logger.info("Optimización de memoria completada")
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"Error optimizando memoria: {e}")
-            return df
+# Clase eliminada - movida a robustness_analyzer.py
 
 
 class InteractiveVisualizationPreparer:
@@ -5463,93 +4198,14 @@ class ExtraKPIManager:
         return recommendations.get(trading_style, [])
 
 
-class MarketRegimeDetectorEnhanced:
-    """
-    Detector de regímenes de mercado usando clustering y análisis de características.
-    """
-    
-    def __init__(self, config: Optional[Dict] = None):
-        """
-        Inicializa el detector de regímenes de mercado.
-        
-        Args:
-            config: Configuración opcional
-        """
-        self.config = config or {}
-        self.logger = setup_logger("kforce")
-        self.n_clusters = self.config.get('n_clusters', 3)
-        self.random_state = self.config.get('random_state', 42)
-        self.feature_columns = self.config.get('feature_columns', [])
-        
-    def extract_market_features(self, market_data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Extrae características del mercado para detección de regímenes.
-        
-        Args:
-            market_data: DataFrame con datos de mercado
-            
-        Returns:
-            DataFrame con características extraídas
-        """
-        try:
-            self.logger.info("Extrayendo características de mercado")
-            
-            # Asegurar que features_df es un DataFrame de pandas
-            features_df: pd.DataFrame = market_data.copy()
-            
-            # Características básicas de volatilidad
-            if 'Close' in features_df.columns:
-                # Retornos
-                features_df['returns'] = features_df['Close'].pct_change()
-                features_df['log_returns'] = np.log(features_df['Close'] / features_df['Close'].shift(1))
-                
-                # Volatilidad
-                features_df['volatility'] = features_df['returns'].rolling(window=20).std()
-                features_df['volatility_ma'] = features_df['volatility'].rolling(window=50).mean()
-                
-                                # RSI
-                features_df['rsi'] = self._calculate_rsi(features_df['Close'])
-                
-                # Momentum
-                features_df['momentum'] = features_df['Close'] / features_df['Close'].shift(10) - 1
-                features_df['momentum_ma'] = features_df['momentum'].rolling(window=20).mean()
-                
-                # Características de tendencia
-                features_df['trend_20'] = features_df['Close'].rolling(window=20).mean()
-                features_df['trend_50'] = features_df['Close'].rolling(window=50).mean()
-                features_df['trend_strength'] = (features_df['trend_20'] - features_df['trend_50']) / features_df['trend_50']
-                
-                # Características de volumen (si está disponible)
-                if 'Volume' in features_df.columns:
-                    features_df['volume_ma'] = features_df['Volume'].rolling(window=20).mean()
-                    features_df['volume_ratio'] = features_df['Volume'] / features_df['volume_ma']
-                else:
-                    features_df['volume_ratio'] = 1.0
-                
-                # Características de volatilidad adicionales
-                features_df['high_low_ratio'] = features_df['High'] / features_df['Low'] if 'High' in features_df.columns and 'Low' in features_df.columns else 1.0
-                features_df['price_range'] = (features_df['High'] - features_df['Low']) / features_df['Close'] if 'High' in features_df.columns and 'Low' in features_df.columns else 0.0
-                
-                # Limpiar valores NaN
-                features_df = features_df.fillna(method='ffill').fillna(method='bfill').fillna(0)
-                
-                self.logger.info(f"Características extraídas: {list(features_df.columns)}")
-                return features_df
-            else:
-                self.logger.warning("No se encontró columna 'Close' en los datos de mercado")
-                return market_data
-        except Exception as e:
-            self.logger.error(f"Error extrayendo características de mercado: {e}")
-            return market_data
-
-# --- FIN DEL MÓDULO core_engine_enhanced.py ---
-# --- Espacio reservado para futuras ampliaciones y utilidades ---
-
 class DarwinLabsMetrics:
     """
     Sistema predictivo Darwin Labs orientado a objetivos de DarwinEX.
     Predice comportamiento de estrategias y proporciona recomendaciones específicas
     para alcanzar los objetivos de captación de capital de terceros.
+    
+    ⚠️ DEPRECATED: Esta clase será reemplazada por DarwinEXPipeline.
+    Se mantiene por compatibilidad con código existente.
     """
     
     def __init__(self, config_manager: Optional[ConfigManagerEnhanced] = None):
@@ -6004,3 +4660,208 @@ class DarwinLabsMetrics:
         except Exception as e:
             self.logger.error(f"Error aplicando análisis Darwin Labs: {e}")
             return df
+
+
+class DarwinEXPipelineEnhanced:
+    """
+    Pipeline DarwinEX integrado en el core engine.
+    Implementa los 6 filtros según normas específicas de DarwinEX para captación de capital.
+    
+    Reemplaza gradualmente DarwinLabsMetrics con funcionalidad más avanzada.
+    """
+    
+    def __init__(self, config_manager: Optional[ConfigManagerEnhanced] = None):
+        self.config_manager = config_manager or ConfigManagerEnhanced()
+        self.logger = setup_logger("darwin_ex_pipeline_enhanced")
+        self.pipeline = DarwinEXPipeline()
+        
+        self.logger.info("🚀 DarwinEXPipelineEnhanced inicializado")
+    
+    def run_pipeline_analysis(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        """
+        Ejecuta el pipeline completo de 6 filtros DarwinEX.
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            
+        Returns:
+            Tuple (DataFrame con resultados, Dict con reporte completo)
+        """
+        try:
+            self.logger.info("🚀 Ejecutando pipeline DarwinEX completo...")
+            
+            # Ejecutar pipeline
+            pipeline_results = self.pipeline.run_pipeline(df)
+            
+            # Convertir resultados a DataFrame
+            results_df = self._convert_pipeline_results_to_dataframe(pipeline_results, df)
+            
+            # Generar reporte completo
+            pipeline_report = self.pipeline.generate_pipeline_report(pipeline_results)
+            
+            self.logger.info(f"✅ Pipeline DarwinEX completado: {len(pipeline_results)} estrategias analizadas")
+            
+            return results_df, pipeline_report
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en pipeline DarwinEX: {e}")
+            return df, {"error": str(e)}
+    
+    def _convert_pipeline_results_to_dataframe(self, pipeline_results: List[PipelineResult], 
+                                             original_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Convierte resultados del pipeline a DataFrame compatible.
+        
+        Args:
+            pipeline_results: Lista de resultados del pipeline
+            original_df: DataFrame original
+            
+        Returns:
+            DataFrame con resultados del pipeline
+        """
+        try:
+            # Crear DataFrame con resultados
+            results_data = []
+            
+            for result in pipeline_results:
+                # Buscar datos originales de la estrategia
+                strategy_data = original_df[original_df['Strategy_Name'] == result.strategy_name]
+                
+                if len(strategy_data) > 0:
+                    # Combinar datos originales con resultados del pipeline
+                    row_data = strategy_data.iloc[0].to_dict()
+                    
+                    # Añadir resultados del pipeline
+                    row_data.update({
+                        'DarwinEX_Score': result.final_score,
+                        'DarwinEX_Category': result.category,
+                        'DarwinEX_Ticket_Size': result.ticket_size,
+                        'DarwinEX_Passed_Filters': ', '.join(result.passed_filters),
+                        'DarwinEX_Failed_Filters': ', '.join(result.failed_filters),
+                        'DarwinEX_Recommendations': '; '.join(result.recommendations),
+                        'DarwinEX_Risk_Alerts': '; '.join(result.risk_alerts),
+                        'DarwinEX_Total_Filters_Passed': len(result.passed_filters),
+                        'DarwinEX_Total_Filters_Failed': len(result.failed_filters)
+                    })
+                    
+                    results_data.append(row_data)
+            
+            if results_data:
+                results_df = pd.DataFrame(results_data)
+                self.logger.info(f"✅ Convertidos {len(results_df)} resultados a DataFrame")
+                return results_df
+            else:
+                self.logger.warning("⚠️ No se encontraron datos para convertir")
+                return original_df
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error convirtiendo resultados: {e}")
+            return original_df
+    
+    def get_pipeline_summary(self, pipeline_results: List[PipelineResult]) -> Dict[str, Any]:
+        """
+        Genera resumen ejecutivo del pipeline DarwinEX.
+        
+        Args:
+            pipeline_results: Lista de resultados del pipeline
+            
+        Returns:
+            Diccionario con resumen ejecutivo
+        """
+        try:
+            if not pipeline_results:
+                return {"error": "No hay resultados del pipeline"}
+            
+            # Estadísticas básicas
+            total_strategies = len(pipeline_results)
+            passed_all_filters = len([r for r in pipeline_results if len(r.failed_filters) == 0])
+            failed_any_filter = total_strategies - passed_all_filters
+            
+            # Distribución por categoría
+            categories = {}
+            for result in pipeline_results:
+                cat = result.category
+                if cat not in categories:
+                    categories[cat] = 0
+                categories[cat] += 1
+            
+            # Distribución por ticket size
+            ticket_sizes = {}
+            for result in pipeline_results:
+                ticket = result.ticket_size
+                if ticket not in ticket_sizes:
+                    ticket_sizes[ticket] = 0
+                ticket_sizes[ticket] += 1
+            
+            # Filtros más problemáticos
+            failed_filters = {}
+            for result in pipeline_results:
+                for failed_filter in result.failed_filters:
+                    if failed_filter not in failed_filters:
+                        failed_filters[failed_filter] = 0
+                    failed_filters[failed_filter] += 1
+            
+            # Alertas de riesgo más comunes
+            risk_alerts = {}
+            for result in pipeline_results:
+                for alert in result.risk_alerts:
+                    if alert not in risk_alerts:
+                        risk_alerts[alert] = 0
+                    risk_alerts[alert] += 1
+            
+            summary = {
+                "total_strategies": total_strategies,
+                "passed_all_filters": passed_all_filters,
+                "failed_any_filter": failed_any_filter,
+                "success_rate": (passed_all_filters / total_strategies) * 100 if total_strategies > 0 else 0,
+                "categories_distribution": categories,
+                "ticket_sizes_distribution": ticket_sizes,
+                "most_failed_filters": dict(sorted(failed_filters.items(), key=lambda x: x[1], reverse=True)[:5]),
+                "most_common_risk_alerts": dict(sorted(risk_alerts.items(), key=lambda x: x[1], reverse=True)[:5]),
+                "average_score": sum(r.final_score for r in pipeline_results) / total_strategies if total_strategies > 0 else 0,
+                "total_capital_allocation": sum(r.ticket_size for r in pipeline_results)
+            }
+            
+            self.logger.info(f"📊 Resumen pipeline: {passed_all_filters}/{total_strategies} estrategias pasaron todos los filtros")
+            return summary
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error generando resumen: {e}")
+            return {"error": str(e)}
+    
+    def apply_darwin_analysis(self, df: pd.DataFrame, is_development: bool = False) -> pd.DataFrame:
+        """
+        Método de compatibilidad con DarwinLabsMetrics.
+        Aplica análisis DarwinEX y mantiene compatibilidad con código existente.
+        
+        Args:
+            df: DataFrame con datos de estrategias
+            is_development: True si las estrategias están en desarrollo
+            
+        Returns:
+            DataFrame con análisis DarwinEX aplicado
+        """
+        try:
+            self.logger.info("🔄 Aplicando análisis DarwinEX (modo compatibilidad)...")
+            
+            # Ejecutar pipeline
+            results_df, pipeline_report = self.run_pipeline_analysis(df)
+            
+            # Añadir columnas de compatibilidad con DarwinLabsMetrics
+            if 'DarwinEX_Score' in results_df.columns:
+                results_df['Darwin_Score'] = results_df['DarwinEX_Score']
+                results_df['Darwin_Category'] = results_df['DarwinEX_Category']
+                results_df['Darwin_Initial_Ticket'] = results_df['DarwinEX_Ticket_Size']
+                results_df['Darwin_Description'] = results_df['DarwinEX_Category'].apply(
+                    lambda x: f"DarwinEX {x} - Pipeline de 6 filtros"
+                )
+            
+            self.logger.info("✅ Análisis DarwinEX aplicado con compatibilidad")
+            return results_df
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en análisis DarwinEX: {e}")
+            return df
+
+
+# --- FIN DEL MÓDULO core_engine_enhanced.py ---

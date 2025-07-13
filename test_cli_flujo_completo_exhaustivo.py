@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from gui_enhanced_rank import EnhancedRankGUI
 from data_manager import DataManager
-from core_engine_enhanced import FactorKElite96Enhanced, UnifiedEvaluatorEnhanced, ConfigManagerEnhanced
+from src.core.integration_layer import FactorKElite96Enhanced, UnifiedEvaluatorEnhanced, ConfigManagerEnhanced
 from asesor_financiero_inteligente import AsesorFinancieroInteligente
 
 # Variables globales para compartir estado entre tests

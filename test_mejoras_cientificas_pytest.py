@@ -25,12 +25,12 @@ from typing import Dict, Any, Tuple
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
-    from core_engine_enhanced import (
+    from src.core.integration_layer import (
         run_complete_analysis_with_gui_integration,
         FactorKElite96Enhanced,
         UnifiedEvaluatorEnhanced
     )
-    from data_manager import DataManager
+    from src.data.data_manager import DataManager
 except ImportError as e:
     pytest.skip(f"No se pueden importar módulos: {e}", allow_module_level=True)
 

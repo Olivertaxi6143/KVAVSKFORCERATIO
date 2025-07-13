@@ -31,15 +31,17 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
-    from data_manager import DataManager
-    from core_engine_enhanced import (
+    from src.data.data_manager import DataManager
+    from src.core.integration_layer import (
         FactorKElite96Enhanced,
         UnifiedEvaluatorEnhanced,
+        ConfigManagerEnhanced,
+        ExtraKPIManager,
         run_complete_analysis_with_gui_integration,
         ProgressCallback
     )
-    from asesor_financiero_inteligente import ejecutar_analisis_completo
-    from gui_enhanced_rank import read_and_prepare, normalizar_columnas_y_kpis
+    from src.analysis.asesor_financiero_inteligente import ejecutar_analisis_completo
+    from src.gui.gui_enhanced_rank import read_and_prepare, normalizar_columnas_y_kpis
 except ImportError as e:
     print(f"❌ Error importando módulos: {e}")
     sys.exit(1)
@@ -583,7 +585,7 @@ def test_carga_datos_datamanager():
     
     try:
         # Importar DataManager desde src
-        from src.data_manager import DataManager
+        from src.data.data_manager import DataManager
         
         # Crear instancia de DataManager
         dm = DataManager()

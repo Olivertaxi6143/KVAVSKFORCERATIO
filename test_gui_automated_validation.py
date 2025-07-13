@@ -21,10 +21,10 @@ def test_gui_automated():
     try:
         # Importar módulos necesarios
         print("📦 Importando módulos...")
-        from gui_enhanced_rank import EnhancedRankGUI
-        from data_manager import DataManager
-        from core_engine_enhanced import FactorKElite96Enhanced
-        from asesor_financiero_inteligente import AsesorFinancieroInteligente
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.data.data_manager import DataManager
+        from src.core.integration_layer import FactorKElite96Enhanced
+        from src.analysis.asesor_financiero_inteligente import AsesorFinancieroInteligente
         
         print("✅ Módulos importados correctamente")
         
@@ -124,7 +124,7 @@ def test_gui_manual_launch():
     print("=" * 50)
     
     try:
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.gui_enhanced_rank import EnhancedRankGUI
         
         print("🚀 Lanzando GUI...")
         print("💡 La GUI se abrirá en una ventana separada")

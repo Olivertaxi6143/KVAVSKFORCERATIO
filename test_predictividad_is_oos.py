@@ -25,7 +25,7 @@ def test_predictividad_is_oos():
     print(f"📋 Columnas originales: {list(df.columns)[:10]}...")
     
     # Importar la función
-    from src.core_engine_enhanced import predictividad_is_oos_empirica
+    from src.core.integration_layer import predictividad_is_oos_empirica
     
     try:
         # Aplicar la función
@@ -65,7 +65,7 @@ def test_unified_evaluator():
     print(f"📊 Datos originales: {len(df)} filas, {len(df.columns)} columnas")
     
     # Importar el evaluador
-    from src.core_engine_enhanced import UnifiedEvaluatorEnhanced
+    from src.core.integration_layer import UnifiedEvaluatorEnhanced
     
     try:
         # Crear evaluador
@@ -108,7 +108,7 @@ def test_factor_k_enhanced():
     print(f"📊 Datos originales: {len(df)} filas, {len(df.columns)} columnas")
     
     # Importar el evaluador
-    from src.core_engine_enhanced import FactorKElite96Enhanced
+    from src.core.integration_layer import FactorKElite96Enhanced
     
     try:
         # Crear evaluador

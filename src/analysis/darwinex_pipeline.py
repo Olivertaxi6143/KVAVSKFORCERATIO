@@ -7,13 +7,17 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+import logging
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
+
+# Configurar logging básico
+logging.basicConfig(level=logging.INFO)
 
 # Añadir el directorio raíz al path
 sys.path.insert(0, os.path.abspath('.'))
 
-from src.core.core_engine_enhanced import setup_logger
+from src.analysis.predictability_metrics import PredictabilityAnalyzer
 
 @dataclass
 class PipelineResult:
@@ -34,7 +38,8 @@ class DarwinEXPipeline:
     """
     
     def __init__(self):
-        self.logger = setup_logger("darwin_ex_pipeline")
+        self.logger = logging.getLogger("darwin_ex_pipeline")
+        self.predictability_analyzer = PredictabilityAnalyzer()
         
         # Configuración según normas DarwinEX
         self.config = {
@@ -67,7 +72,8 @@ class DarwinEXPipeline:
                 "dd_correlation": {
                     "max_dd_corr": 0.60,  # Correlación < 0.6 con drawdowns INDX
                     "description": "Correlación < 0.6 con drawdowns INDX"
-                }
+                },
+                "max_drawdown": 0.15,  # Umbral de drawdown para el filtro de drawdown propio
             },
             
             # Scoring & sizing según DarwinEX
@@ -128,26 +134,32 @@ class DarwinEXPipeline:
         for idx in df.index:
             strategy_name = df.loc[idx, 'Strategy_Name'] if 'Strategy_Name' in df.columns else f"Strategy_{idx}"
             
-            # Ejecutar filtros
-            filter_results = self._apply_filters(df.loc[idx])
+            # Ejecutar filtros de predictibilidad
+            predictability_results = self._apply_predictability_filters(df.loc[idx])
+            
+            # Ejecutar filtros originales
+            original_results = self._apply_filters(df.loc[idx])
+            
+            # Combinar resultados
+            combined_results = self._combine_filter_results(predictability_results, original_results)
             
             # Calcular score final
-            final_score = self._calculate_score(df.loc[idx], filter_results)
+            final_score = self._calculate_score(df.loc[idx], combined_results)
             
             # Determinar ticket y categoría
             ticket_info = self._determine_ticket_size(final_score)
             
             # Generar recomendaciones
-            recommendations = self._generate_recommendations(filter_results, final_score)
+            recommendations = self._generate_recommendations(combined_results, final_score)
             
             # Generar alertas de riesgo
-            risk_alerts = self._generate_risk_alerts(df.loc[idx], filter_results)
+            risk_alerts = self._generate_risk_alerts(df.loc[idx], combined_results)
             
             # Crear resultado
             result = PipelineResult(
                 strategy_name=strategy_name,
-                passed_filters=filter_results['passed'],
-                failed_filters=filter_results['failed'],
+                passed_filters=combined_results["passed"],
+                failed_filters=combined_results["failed"],
                 final_score=final_score,
                 ticket_size=ticket_info['ticket'],
                 category=ticket_info['category'],
@@ -227,6 +239,222 @@ class DarwinEXPipeline:
             "failed": failed_filters,
             "details": filter_details
         }
+    
+    def _apply_predictability_filters(self, strategy_data: pd.Series) -> Dict[str, Any]:
+        """
+        Aplica filtros de predictibilidad usando datos empíricos reales.
+        Reemplaza los filtros de correlación externa que no son aplicables.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            Resultados de filtros de predictibilidad
+        """
+        try:
+            passed_filters = []
+            failed_filters = []
+            
+            # 1. Filtro de Consistencia IS/OOS (datos reales)
+            if self._check_is_oos_consistency(strategy_data):
+                passed_filters.append("is_oos_consistency")
+            else:
+                failed_filters.append("is_oos_consistency")
+            
+            # 2. Filtro de Robustez Temporal (datos reales)
+            if self._check_temporal_robustness(strategy_data):
+                passed_filters.append("temporal_robustness")
+            else:
+                failed_filters.append("temporal_robustness")
+            
+            # 3. Filtro de Detección de Sobreajuste (datos reales)
+            if self._check_overfitting_detection(strategy_data):
+                passed_filters.append("overfitting_detection")
+            else:
+                failed_filters.append("overfitting_detection")
+            
+            # 4. Filtro de Estabilidad (datos reales)
+            if self._check_stability_score(strategy_data):
+                passed_filters.append("stability_score")
+            else:
+                failed_filters.append("stability_score")
+            
+            # 5. Filtro de Drawdown Propio (mantener original)
+            if self._check_drawdown_filter(strategy_data):
+                passed_filters.append("drawdown_filter")
+            else:
+                failed_filters.append("drawdown_filter")
+            
+            return {
+                "passed": passed_filters,
+                "failed": failed_filters,
+                "total_passed": len(passed_filters),
+                "total_filters": len(passed_filters) + len(failed_filters)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error aplicando filtros de predictibilidad: {e}")
+            return {"passed": [], "failed": [], "total_passed": 0, "total_filters": 0}
+    
+    def _combine_filter_results(self, predictability_results: Dict[str, Any], original_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Combina resultados de filtros de predictibilidad con filtros originales.
+        
+        Args:
+            predictability_results: Resultados de filtros de predictibilidad
+            original_results: Resultados de filtros originales
+            
+        Returns:
+            Resultados combinados
+        """
+        try:
+            # Combinar filtros pasados
+            combined_passed = predictability_results.get("passed", []) + original_results.get("passed", [])
+            
+            # Combinar filtros fallidos
+            combined_failed = predictability_results.get("failed", []) + original_results.get("failed", [])
+            
+            # Combinar detalles si existen
+            combined_details = {}
+            if "details" in original_results:
+                combined_details.update(original_results["details"])
+            
+            return {
+                "passed": combined_passed,
+                "failed": combined_failed,
+                "details": combined_details,
+                "predictability_results": predictability_results,
+                "original_results": original_results
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error combinando resultados de filtros: {e}")
+            return original_results  # Fallback a resultados originales
+    
+    def _check_is_oos_consistency(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica consistencia IS/OOS usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de consistencia
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de consistencia IS/OOS
+            min_consistency = 60.0  # 60% mínimo
+            
+            return metrics.is_oos_consistency >= min_consistency
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando consistencia IS/OOS: {e}")
+            return False
+    
+    def _check_temporal_robustness(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica robustez temporal usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de robustez temporal
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de robustez temporal
+            min_robustness = 50.0  # 50% mínimo
+            
+            return metrics.temporal_robustness >= min_robustness
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando robustez temporal: {e}")
+            return False
+    
+    def _check_overfitting_detection(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica detección de sobreajuste usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de detección de sobreajuste
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de detección de sobreajuste
+            min_overfitting_detection = 70.0  # 70% mínimo (menos sobreajuste)
+            
+            return metrics.overfitting_detection >= min_overfitting_detection
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando detección de sobreajuste: {e}")
+            return False
+    
+    def _check_stability_score(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica score de estabilidad usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de estabilidad
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Umbral mínimo de estabilidad
+            min_stability = 50.0  # 50% mínimo
+            
+            return metrics.stability_score >= min_stability
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando score de estabilidad: {e}")
+            return False
+    
+    def _check_drawdown_filter(self, strategy_data: pd.Series) -> bool:
+        """
+        Verifica filtro de drawdown propio (mantener lógica original).
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si pasa el filtro de drawdown
+        """
+        try:
+            # Usar Max DD % si está disponible
+            if 'Max DD %' in strategy_data:
+                max_dd = abs(self._safe_float(strategy_data['Max DD %']))
+                return max_dd <= self.config["filters"]["max_drawdown"]
+            
+            # Fallback a Drawdown si está disponible
+            elif 'Drawdown' in strategy_data:
+                dd = abs(self._safe_float(strategy_data['Drawdown']))
+                # Si el valor es muy alto (>100), probablemente son puntos monetarios
+                if dd > 100:
+                    return True  # No podemos determinar con seguridad
+                else:
+                    # Interpretar como decimal
+                    dd_percent = dd * 100
+                    return dd_percent <= self.config["filters"]["max_drawdown"]
+            
+            return True  # Si no hay datos de drawdown, pasar
+            
+        except Exception as e:
+            self.logger.error(f"Error verificando filtro de drawdown: {e}")
+            return True  # En caso de error, pasar
     
     def _check_gold_access(self, strategy_data: pd.Series) -> bool:
         """Verifica acceso Gold (D-Score ≥ 70 o top-140 ranking)."""
@@ -508,7 +736,7 @@ class DarwinEXPipeline:
     
     def _calculate_score(self, strategy_data: pd.Series, filter_results: Dict[str, Any]) -> float:
         """
-        Calcula score final según metodología DarwinEX adaptada para estrategias en desarrollo.
+        Calcula score final según metodología DarwinEX con predictibilidad mejorada.
         
         Args:
             strategy_data: Datos de la estrategia
@@ -516,6 +744,25 @@ class DarwinEXPipeline:
             
         Returns:
             Score final (0-100)
+        """
+        try:
+            # Score base original (mantener lógica original)
+            base_score = self._calculate_base_score(strategy_data, filter_results)
+            
+            # Bonus por predictibilidad (nuevo)
+            predictability_bonus = self._calculate_predictability_bonus(strategy_data)
+            
+            # Score final
+            final_score = base_score + predictability_bonus
+            return min(final_score, 100)
+            
+        except Exception as e:
+            self.logger.error(f"Error calculando score: {e}")
+            return 0.0
+    
+    def _calculate_base_score(self, strategy_data: pd.Series, filter_results: Dict[str, Any]) -> float:
+        """
+        Calcula score base original (mantener lógica original).
         """
         try:
             score = 0.0
@@ -583,7 +830,41 @@ class DarwinEXPipeline:
             return min(score, 100)
             
         except Exception as e:
-            self.logger.error(f"Error calculando score: {e}")
+            self.logger.error(f"Error calculando score base: {e}")
+            return 0.0
+    
+    def _calculate_predictability_bonus(self, strategy_data: pd.Series) -> float:
+        """
+        Calcula bonus por predictibilidad usando datos empíricos reales.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            Bonus de predictibilidad (0-20 puntos)
+        """
+        try:
+            # Calcular métricas de predictibilidad
+            predictability_metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            
+            # Bonus basado en predictibilidad general
+            if predictability_metrics.overall_predictability >= 80:
+                bonus = 20  # Excelente predictibilidad
+            elif predictability_metrics.overall_predictability >= 70:
+                bonus = 15  # Buena predictibilidad
+            elif predictability_metrics.overall_predictability >= 60:
+                bonus = 10  # Predictibilidad aceptable
+            elif predictability_metrics.overall_predictability >= 50:
+                bonus = 5   # Predictibilidad básica
+            else:
+                bonus = 0   # Sin bonus
+            
+            self.logger.info(f"Predictibilidad: {predictability_metrics.overall_predictability:.1f}, Bonus: {bonus}")
+            
+            return bonus
+            
+        except Exception as e:
+            self.logger.error(f"Error calculando bonus de predictibilidad: {e}")
             return 0.0
     
     def _determine_ticket_size(self, score: float) -> Dict[str, Any]:
@@ -727,29 +1008,24 @@ class DarwinEXPipeline:
     def generate_pipeline_report(self, results: List[PipelineResult]) -> Dict[str, Any]:
         """
         Genera reporte completo del pipeline DarwinEX.
-        
         Args:
             results: Resultados del pipeline
-            
         Returns:
             Reporte completo
         """
         try:
             # Estadísticas generales
             total_strategies = len(results)
-            passed_pipeline = len([r for r in results if r.ticket_size > 0])
-            rejected_strategies = total_strategies - passed_pipeline
-            
+            passed_strategies = len([r for r in results if r.ticket_size > 0])
+            rejected_strategies = total_strategies - passed_strategies
             # Distribución por categoría
-            categories = {}
+            ticket_categories = {}
             for result in results:
-                if result.category not in categories:
-                    categories[result.category] = 0
-                categories[result.category] += 1
-            
+                if result.category not in ticket_categories:
+                    ticket_categories[result.category] = 0
+                ticket_categories[result.category] += 1
             # Capital total asignado
             total_capital = sum([r.ticket_size for r in results])
-            
             # Análisis de filtros
             filter_analysis = {}
             for filter_name in self.config["filters"].keys():
@@ -760,31 +1036,61 @@ class DarwinEXPipeline:
                     "failed": failed_count,
                     "pass_rate": passed_count / total_strategies if total_strategies > 0 else 0
                 }
-            
             # Estrategias con alertas de riesgo
-            risk_alerts_count = len([r for r in results if len(r.risk_alerts) > 0])
-            
+            risk_alerts_list = [r for r in results if len(r.risk_alerts) > 0]
+            risk_alerts_count = len(risk_alerts_list)
+            # Recomendaciones globales (puede ser vacía)
+            recommendations = []
+            # Top estrategias aprobadas
+            top_strategies = sorted([r for r in results if r.ticket_size > 0], 
+                                    key=lambda x: x.final_score, reverse=True)[:10]
             report = {
                 "summary": {
                     "total_strategies": total_strategies,
-                    "passed_pipeline": passed_pipeline,
+                    "passed_strategies": passed_strategies,
                     "rejected_strategies": rejected_strategies,
-                    "pass_rate": passed_pipeline / total_strategies if total_strategies > 0 else 0,
+                    "pass_rate": passed_strategies / total_strategies if total_strategies > 0 else 0,
                     "total_capital_allocated": total_capital,
                     "risk_alerts_count": risk_alerts_count
                 },
-                "categories": categories,
-                "filter_analysis": filter_analysis,
-                "top_strategies": sorted([r for r in results if r.ticket_size > 0], 
-                                       key=lambda x: x.final_score, reverse=True)[:10],
-                "risk_alerts": [r for r in results if len(r.risk_alerts) > 0]
+                "ticket_categories": ticket_categories,
+                "top_strategies": [
+                    {
+                        "name": r.strategy_name,
+                        "score": r.final_score,
+                        "ticket": r.ticket_size,
+                        "category": r.category
+                    } for r in top_strategies
+                ],
+                "risk_alerts": [
+                    {
+                        "name": r.strategy_name,
+                        "alerts": r.risk_alerts
+                    } for r in risk_alerts_list
+                ],
+                "recommendations": recommendations
             }
-            
             return report
-            
         except Exception as e:
             self.logger.error(f"Error generando reporte: {e}")
             return {}
+
+    def _safe_float(self, value) -> float:
+        """
+        Convierte valor a float de forma segura.
+        
+        Args:
+            value: Valor a convertir
+            
+        Returns:
+            Float convertido o 0.0 si falla
+        """
+        try:
+            if pd.isna(value) or value is None:
+                return 0.0
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
 
 def test_darwin_ex_pipeline():
     """Test del pipeline DarwinEX."""
@@ -828,14 +1134,14 @@ def test_darwin_ex_pipeline():
         # Mostrar resultados
         print("\n📊 RESULTADOS DEL PIPELINE DARWINEX:")
         print(f"   - Total estrategias: {report['summary']['total_strategies']}")
-        print(f"   - Aprobadas: {report['summary']['passed_pipeline']}")
+        print(f"   - Aprobadas: {report['summary']['passed_strategies']}")
         print(f"   - Rechazadas: {report['summary']['rejected_strategies']}")
         print(f"   - Tasa de aprobación: {report['summary']['pass_rate']:.1%}")
         print(f"   - Capital total asignado: €{report['summary']['total_capital_allocated']:,}")
         print(f"   - Alertas de riesgo: {report['summary']['risk_alerts_count']}")
         
         print("\n🏆 DISTRIBUCIÓN POR CATEGORÍA:")
-        for category, count in report['categories'].items():
+        for category, count in report['ticket_categories'].items():
             print(f"   - {category}: {count} estrategias")
         
         print("\n🔍 ANÁLISIS DE FILTROS:")
@@ -844,11 +1150,11 @@ def test_darwin_ex_pipeline():
         
         print("\n⭐ TOP 3 ESTRATEGIAS:")
         for i, strategy in enumerate(report['top_strategies'][:3]):
-            print(f"   {i+1}. {strategy.strategy_name}: Score {strategy.final_score:.1f}, Ticket €{strategy.ticket_size:,}, {strategy.category}")
+            print(f"   {i+1}. {strategy['name']}: Score {strategy['score']:.1f}, Ticket €{strategy['ticket']:,}, {strategy['category']}")
         
         print("\n⚠️ ESTRATEGIAS CON ALERTAS:")
         for strategy in report['risk_alerts']:
-            print(f"   - {strategy.strategy_name}: {', '.join(strategy.risk_alerts)}")
+            print(f"   - {strategy['name']}: {', '.join(strategy['alerts'])}")
         
         print("\n✅ Pipeline DarwinEX completado exitosamente")
         print("🎯 Sistema implementado según normas específicas de DarwinEX")

@@ -85,7 +85,7 @@ def corregir_normalizacion_columnas():
     print("\n3️⃣ Probando con Core Engine...")
     
     try:
-        from src.core_engine_enhanced import FactorKElite96Enhanced
+        from src.core.integration_layer import FactorKElite96Enhanced
         
         config = {
             "trading_style": "General",

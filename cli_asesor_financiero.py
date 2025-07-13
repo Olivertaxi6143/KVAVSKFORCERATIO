@@ -27,7 +27,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
     from data_manager import DataManager
-    from core_engine_enhanced import FactorKElite96Enhanced
+    from src.core.integration_layer import FactorKElite96Enhanced
     from asesor_financiero_inteligente import ejecutar_analisis_completo
 except ImportError as e:
     print(f"❌ Error importando módulos: {e}")

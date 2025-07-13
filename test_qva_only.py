@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import logging
 import pandas as pd
 from src.data_manager import DataManager
-from src.core_engine_enhanced import QVAScorerEnhanced, ConfigManagerEnhanced
+from src.core.integration_layer import QVAScorerEnhanced, ConfigManagerEnhanced
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')

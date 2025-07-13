@@ -84,19 +84,27 @@ class TestTailRiskIntegration:
             'Strategy_Very_Low_Risk': {'level': 'MUY BAJO', 'icon': '🟢'},
             'Strategy_No_Risk_Data': {'level': 'N/A', 'icon': '❓'}
         }
-        
+        # Caso adverso: solo una métrica en alto, el resto bajo
+        adverso = pd.Series({
+            'Strategy Name': 'Strategy_Adverso',
+            'VaR (95%)': -12.0,  # Alto
+            'CVaR (95%)': -6.0,  # Bajo
+            'Drawdown': 8.0,     # Bajo
+            'Ulcer Index %': 5.0 # Bajo
+        })
+        # Debe ser MODERADO, no ALTO
+        risk_info_adv = self.gui._calculate_tail_risk_level(adverso)
+        assert risk_info_adv['level'] == 'MODERADO', 'Error: caso adverso con solo una métrica alta debe ser MODERADO'
+        assert risk_info_adv['icon'] == '🟡', 'Error: icono caso adverso'
+        self.logger.info(f"✅ Caso adverso: {risk_info_adv['level']} {risk_info_adv['icon']}")
+        # Test normal
         for idx, row in test_data.iterrows():
             strategy_name = row['Strategy Name']
             self.logger.info(f"📊 Probando estrategia: {strategy_name}")
-            
-            # Calcular riesgo de cola
             risk_info = self.gui._calculate_tail_risk_level(row)
-            
-            # Validar resultados
             expected = expected_results[strategy_name]
             assert risk_info['level'] == expected['level'], f"Error en nivel de riesgo para {strategy_name}"
             assert risk_info['icon'] == expected['icon'], f"Error en icono para {strategy_name}"
-            
             self.logger.info(f"✅ {strategy_name}: {risk_info['level']} {risk_info['icon']}")
             
         self.logger.info("✅ Test de cálculo de riesgo de cola completado")
