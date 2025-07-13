@@ -26,7 +26,7 @@ def main():
         
         print("📦 Importando módulos del proyecto...")
         from src.core.integration_layer import FactorKElite96Enhanced
-        print("✅ core_engine_enhanced importado")
+        print("✅ integration_layer importado")
         
         from data_manager import DataManager
         print("✅ data_manager importado")

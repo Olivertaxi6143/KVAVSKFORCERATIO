@@ -5,7 +5,7 @@ KFORCEVSQVARATIOS - Sistema de Análisis Cuantitativo v2.0
 Sistema principal para análisis robusto de estrategias de trading.
 
 Archivos principales:
-- core_engine_enhanced.py
+- integration_layer.py
 - gui_enhanced_rank.py
 - data_manager.py
 - data_processing.py

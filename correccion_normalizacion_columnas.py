@@ -129,7 +129,7 @@ def aplicar_correccion_permanente():
     print("=" * 60)
     
     # Leer el archivo DataLoaderEnhanced
-    data_loader_file = "src/core_engine_enhanced.py"
+    data_loader_file = "src/core/integration_layer.py"
     
     try:
         with open(data_loader_file, 'r', encoding='utf-8') as f:
