@@ -56,190 +56,114 @@ logging.basicConfig(
 
 def test_file_structure():
     """Test 1: Verificar estructura de archivos"""
-    try:
-        required_files = [
-            'src/gui/gui_enhanced_rank.py',
-            'src/core/integration_layer.py',
-            'src/logger_config.py',
-            'BACKUP/gui_enhanced_rank.py'
-        ]
-        
-        missing_files = []
-        for file_path in required_files:
-            if not os.path.exists(file_path):
-                missing_files.append(file_path)
-        
-        if missing_files:
-            return False, f"Archivos faltantes: {missing_files}"
-        
-        return True, "Estructura de archivos correcta"
-    except Exception as e:
-        return False, f"Error verificando estructura: {str(e)}"
+    required_files = [
+        'src/gui/gui_enhanced_rank.py',
+        'src/core/integration_layer.py',
+        'src/logger_config.py',
+        'BACKUP/gui_enhanced_rank.py'
+    ]
+    missing_files = [file_path for file_path in required_files if not os.path.exists(file_path)]
+    assert not missing_files, f"Archivos faltantes: {missing_files}"
+    logger.info("Estructura de archivos correcta")
 
 def test_data_loading():
     """Test 2: Verificar carga de datos"""
-    try:
-        # Buscar archivos de datos
-        data_files = []
-        for root, dirs, files in os.walk('.'):
-            for file in files:
-                if file.endswith(('.csv', '.xlsx', '.xls')):
-                    data_files.append(os.path.join(root, file))
-        
-        if not data_files:
-            return False, "No se encontraron archivos de datos"
-        
-        # Intentar cargar el primer archivo encontrado
-        test_file = data_files[0]
-        import pandas as pd
-        
-        if test_file.endswith('.csv'):
-            df = pd.read_csv(test_file, sep=';', decimal=',', engine='python')
-        else:
-            df = pd.read_excel(test_file)
-        
-        if len(df) == 0:
-            return False, f"Archivo de datos vacío: {test_file}"
-        
-        return True, f"Datos cargados correctamente: {len(df)} filas, {len(df.columns)} columnas"
-    except Exception as e:
-        return False, f"Error cargando datos: {str(e)}"
+    data_files = []
+    for root, dirs, files in os.walk('.'):
+        for file in files:
+            if file.endswith(('.csv', '.xlsx', '.xls')):
+                data_files.append(os.path.join(root, file))
+    assert data_files, "No se encontraron archivos de datos"
+    test_file = data_files[0]
+    import pandas as pd
+    if test_file.endswith('.csv'):
+        df = pd.read_csv(test_file, sep=';', decimal=',', engine='python')
+    else:
+        df = pd.read_excel(test_file)
+    assert len(df) > 0, f"Archivo de datos vacío: {test_file}"
+    logger.info(f"Datos cargados correctamente: {len(df)} filas, {len(df.columns)} columnas")
 
 def test_module_imports():
     """Test 3: Verificar imports de módulos"""
+    import pandas as pd
+    import numpy as np
+    import tkinter as tk
+    from tkinter import ttk
     try:
-        # Test imports principales
-        import pandas as pd
-        import numpy as np
-        import tkinter as tk
-        from tkinter import ttk
-        
-        # Test imports del sistema
-        try:
-            from src.core.integration_layer import run_complete_analysis_with_gui_integration
-            return True, "Importación exitosa"
-        except ImportError as e:
-            return False, "No se pudo importar integration_layer"
-        
-        return True, "Todos los módulos importados correctamente"
-    except Exception as e:
-        return False, f"Error en imports: {str(e)}"
+        from src.core.integration_layer import run_complete_analysis_with_gui_integration
+        logger.info("Importación exitosa")
+    except ImportError as e:
+        assert False, "No se pudo importar integration_layer"
+    logger.info("Todos los módulos importados correctamente")
 
 def test_gui_structure():
     """Test 4: Verificar estructura GUI"""
     try:
-        # Importar GUI
+        from src.gui_enhanced_rank import EnhancedRankGUI
+    except ImportError:
         try:
-            from src.gui_enhanced_rank import EnhancedRankGUI
+            from gui_enhanced_rank import EnhancedRankGUI
         except ImportError:
-            try:
-                from gui_enhanced_rank import EnhancedRankGUI
-            except ImportError:
-                return False, "No se pudo importar EnhancedRankGUI"
-        
-        # Verificar que la clase existe y tiene métodos principales
-        if not hasattr(EnhancedRankGUI, '__init__'):
-            return False, "Clase GUI no tiene constructor"
-        
-        return True, "Estructura GUI verificada"
-    except Exception as e:
-        return False, f"Error verificando GUI: {str(e)}"
+            assert False, "No se pudo importar EnhancedRankGUI"
+    assert hasattr(EnhancedRankGUI, '__init__'), "Clase GUI no tiene constructor"
+    logger.info("Estructura GUI verificada")
 
 def test_analysis_flow():
     """Test 5: Verificar flujo de análisis"""
-    try:
-        # Simular configuración básica
-        config = {
-            'trading_style': 'CONSERVADOR',
-            'kpis': ['CAGR', 'Drawdown', 'Sharpe Ratio'],
-            'alpha': 0.05,
-            'percentile': 90
-        }
-        
-        # Verificar que la configuración es válida
-        if not isinstance(config['trading_style'], str):
-            return False, "Trading style inválido"
-        
-        if not isinstance(config['kpis'], list):
-            return False, "KPIs inválidos"
-        
-        return True, "Flujo de análisis configurado correctamente"
-    except Exception as e:
-        return False, f"Error en flujo de análisis: {str(e)}"
+    config = {
+        'trading_style': 'CONSERVADOR',
+        'kpis': ['CAGR', 'Drawdown', 'Sharpe Ratio'],
+        'alpha': 0.05,
+        'percentile': 90
+    }
+    assert isinstance(config['trading_style'], str), "Trading style inválido"
+    assert isinstance(config['kpis'], list), "KPIs inválidos"
+    logger.info("Flujo de análisis configurado correctamente")
 
 def test_advisor_integration():
     """Test 6: Verificar integración del asesor financiero"""
-    try:
-        # Verificar funciones del asesor
-        advisor_functions = [
-            'build_analisis_seleccion_tab',
-            'build_resumen_cientifico_tab',
-            'build_informacion_empirica_tab',
-            'build_estrategias_seleccionadas_tab'
-        ]
-        
-        # Simular verificación de funciones
-        for func_name in advisor_functions:
-            # Aquí normalmente verificaríamos que las funciones existen
-            # Por ahora solo verificamos que los nombres son válidos
-            if not func_name or len(func_name) < 5:
-                return False, f"Nombre de función inválido: {func_name}"
-        
-        return True, "Integración del asesor verificada"
-    except Exception as e:
-        return False, f"Error en integración del asesor: {str(e)}"
+    advisor_functions = [
+        'build_analisis_seleccion_tab',
+        'build_resumen_cientifico_tab',
+        'build_informacion_empirica_tab',
+        'build_estrategias_seleccionadas_tab'
+    ]
+    for func_name in advisor_functions:
+        assert func_name and len(func_name) >= 5, f"Nombre de función inválido: {func_name}"
+    logger.info("Integración del asesor verificada")
 
 def test_export_functionality():
     """Test 7: Verificar funcionalidad de exportación"""
-    try:
-        # Verificar directorios de exportación
-        export_dirs = ['exports', 'results', 'reports']
-        
-        for dir_name in export_dirs:
-            if not os.path.exists(dir_name):
-                try:
-                    os.makedirs(dir_name)
-                except Exception:
-                    pass
-        
-        # Verificar que al menos un directorio es escribible
-        writable_dirs = []
-        for dir_name in export_dirs:
-            if os.path.exists(dir_name):
-                test_file = os.path.join(dir_name, 'test_write.tmp')
-                try:
-                    with open(test_file, 'w') as f:
-                        f.write('test')
-                    os.remove(test_file)
-                    writable_dirs.append(dir_name)
-                except Exception:
-                    pass
-        
-        if not writable_dirs:
-            return False, "No hay directorios escribibles para exportación"
-        
-        return True, f"Exportación verificada: {len(writable_dirs)} directorios disponibles"
-    except Exception as e:
-        return False, f"Error en exportación: {str(e)}"
+    export_dirs = ['exports', 'results', 'reports']
+    for dir_name in export_dirs:
+        if not os.path.exists(dir_name):
+            try:
+                os.makedirs(dir_name)
+            except Exception:
+                pass
+    writable_dirs = []
+    for dir_name in export_dirs:
+        if os.path.exists(dir_name):
+            test_file = os.path.join(dir_name, 'test_write.tmp')
+            try:
+                with open(test_file, 'w') as f:
+                    f.write('test')
+                os.remove(test_file)
+                writable_dirs.append(dir_name)
+            except Exception:
+                pass
+    assert writable_dirs, "No hay directorios escribibles para exportación"
+    logger.info(f"Exportación verificada: {len(writable_dirs)} directorios disponibles")
 
 def test_performance():
     """Test 8: Verificar rendimiento básico"""
-    try:
-        start_time = time.time()
-        
-        # Simular operaciones básicas
-        import numpy as np
-        data = np.random.rand(1000, 10)
-        result = np.mean(data, axis=0)
-        
-        execution_time = time.time() - start_time
-        
-        if execution_time > 5.0:  # Más de 5 segundos es lento
-            return False, f"Rendimiento lento: {execution_time:.2f}s"
-        
-        return True, f"Rendimiento aceptable: {execution_time:.2f}s"
-    except Exception as e:
-        return False, f"Error en test de rendimiento: {str(e)}"
+    start_time = time.time()
+    import numpy as np
+    data = np.random.rand(1000, 10)
+    result = np.mean(data, axis=0)
+    execution_time = time.time() - start_time
+    assert execution_time <= 5.0, f"Rendimiento lento: {execution_time:.2f}s"
+    logger.info(f"Rendimiento aceptable: {execution_time:.2f}s")
 
 def run_all_tests():
     """Ejecutar todos los tests"""
