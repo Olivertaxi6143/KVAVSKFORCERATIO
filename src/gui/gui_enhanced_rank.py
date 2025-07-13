@@ -28,9 +28,10 @@ import shutil
 from difflib import get_close_matches
 from datetime import datetime
 import math
+from typing import Dict
 
 # Importar el motor robusto
-from src.core_engine_enhanced import (
+from src.core.core_engine_enhanced import (
     run_complete_analysis_with_gui_integration, 
     GUIAnalysisError, 
     ProgressCallback,
@@ -38,10 +39,11 @@ from src.core_engine_enhanced import (
 )
 
 # Importar el Asesor Financiero Inteligente
-from src.asesor_financiero_inteligente import AsesorFinancieroInteligente, ejecutar_analisis_completo
+from src.analysis.asesor_financiero_inteligente import AsesorFinancieroInteligente, ejecutar_analisis_completo
+from src.analysis.darwinex_pipeline import DarwinEXPipeline, PipelineResult
 
 # Importar el DataManager consolidado
-from src.data_manager import DataManager, create_data_manager, load_inputtest_data_pipeline
+from src.data.data_manager import DataManager, create_data_manager, load_inputtest_data_pipeline
 
 # —————————————————————————————————————————————————
 # 1. NORMALIZACIÓN Y MAPEO DE COLUMNAS (MANTENIDO PARA COMPATIBILIDAD)
@@ -630,6 +632,11 @@ class EnhancedRankGUI(tk.Tk):
         self.notebook.add(self.tab_asesor, text="🤖 Asesor Financiero")
         self._build_asesor_tab(self.tab_asesor)
 
+        # Pestaña de DarwinEX Portfolio
+        self.tab_darwinex = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_darwinex, text="🏆 DarwinEX Portfolio")
+        self._build_darwinex_tab(self.tab_darwinex)
+
         # Pestaña de resumen detallado
         self.tab_summary = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_summary, text="Resumen Detallado")
@@ -992,6 +999,70 @@ class EnhancedRankGUI(tk.Tk):
         self.asesor_notebook = ttk.Notebook(main_frame)
         self.asesor_notebook.pack(fill="both", expand=True, pady=(10, 0))
 
+    def _build_darwinex_tab(self, parent):
+        """Construye la pestaña de DarwinEX Portfolio."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Título
+        ttk.Label(main_frame, text="🏆 DarwinEX Portfolio Analysis", font=("Arial", 14, "bold")).pack(anchor="w")
+        
+        # Frame de información
+        info_frame = ttk.LabelFrame(main_frame, text="Información del Pipeline", padding=10)
+        info_frame.pack(fill="x", pady=(10, 0))
+        
+        ttk.Label(info_frame, text="🔍 Pipeline de 6 filtros DarwinEX para asignación de capital").pack(anchor="w")
+        ttk.Label(info_frame, text="📊 Análisis de portafolios profesionales con métricas avanzadas").pack(anchor="w")
+        ttk.Label(info_frame, text="🎯 Scoring y sizing según normas DarwinEX").pack(anchor="w")
+        
+        # Frame de controles
+        controls_frame = ttk.LabelFrame(main_frame, text="Controles de Análisis", padding=10)
+        controls_frame.pack(fill="x", pady=10)
+        
+        # Botones de acción
+        buttons_frame = ttk.Frame(controls_frame)
+        buttons_frame.pack(fill="x")
+        
+        ttk.Button(buttons_frame, text="🚀 Ejecutar Pipeline DarwinEX", 
+                  command=self._run_darwinex_pipeline).pack(side="left", padx=(0, 5))
+        ttk.Button(buttons_frame, text="📊 Ver Resultados", 
+                  command=self._show_darwinex_results).pack(side="left", padx=(0, 5))
+        ttk.Button(buttons_frame, text="📋 Exportar Reporte", 
+                  command=self._export_darwinex_report).pack(side="left", padx=(0, 5))
+        ttk.Button(buttons_frame, text="🗑️ Limpiar", 
+                  command=self._clear_darwinex_results).pack(side="left")
+        
+        # Frame de resultados
+        self.darwinex_results_frame = ttk.LabelFrame(main_frame, text="Resultados del Pipeline", padding=10)
+        self.darwinex_results_frame.pack(fill="both", expand=True, pady=10)
+        
+        # Área de resultados (inicialmente vacía)
+        self.darwinex_text = tk.Text(self.darwinex_results_frame, height=20, wrap=tk.WORD)
+        scrollbar = ttk.Scrollbar(self.darwinex_results_frame, orient="vertical", command=self.darwinex_text.yview)
+        self.darwinex_text.configure(yscrollcommand=scrollbar.set)
+        
+        self.darwinex_text.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Mensaje inicial
+        self.darwinex_text.insert(tk.END, "🏆 DarwinEX Portfolio Analysis\n")
+        self.darwinex_text.insert(tk.END, "=" * 50 + "\n\n")
+        self.darwinex_text.insert(tk.END, "Haga clic en 'Ejecutar Pipeline DarwinEX' para comenzar el análisis.\n\n")
+        self.darwinex_text.insert(tk.END, "Este pipeline implementa los 6 filtros DarwinEX:\n")
+        self.darwinex_text.insert(tk.END, "• Gold Access (D-Score ≥ 70 o top-140)\n")
+        self.darwinex_text.insert(tk.END, "• Track Record (≥ 8 meses para piloto)\n")
+        self.darwinex_text.insert(tk.END, "• LEA/OS Positive (Corta pérdidas, deja correr)\n")
+        self.darwinex_text.insert(tk.END, "• Correlation 6m (≤ 0.25 vs Nasdaq, Oro, BTC)\n")
+        self.darwinex_text.insert(tk.END, "• Discipline (Estabilidad de frecuencia)\n")
+        self.darwinex_text.insert(tk.END, "• DD Correlation (< 0.6 con drawdowns INDX)\n")
+        
+        self.darwinex_text.config(state=tk.DISABLED)
+        
+        # Inicializar variables
+        self.darwinex_pipeline = None
+        self.darwinex_results = None
+
     def _build_estrategias_asesor_tab(self):
         """Construye la subpestaña de Estrategias Analizadas."""
         # Frame principal con scroll
@@ -1150,15 +1221,287 @@ class EnhancedRankGUI(tk.Tk):
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         ttk.Label(main_frame, text="📈 Estadísticas Empíricas", font=("Arial", 12, "bold")).pack(pady=(0, 10))
         text = ScrolledText(main_frame, wrap="word", font=("Arial", 10), height=20)
-        text.pack(fill="both", expand=True)
-        resumen = ""
-        if hasattr(self, 'results_df') and self.results_df is not None:
-            numeric_cols = self.results_df.select_dtypes(include=[float, int]).columns
-            for col in numeric_cols:
-                stats = self.results_df[col].describe()
-                resumen += f"{col}:\n  Media: {stats['mean']:.4f}\n  Std: {stats['std']:.4f}\n  Min: {stats['min']:.4f}\n  Max: {stats['max']:.4f}\n\n"
-        text.insert("end", resumen or "No hay estadísticas empíricas disponibles.")
-        text.config(state="disabled")
+
+    def _run_darwinex_pipeline(self):
+        """Ejecuta el pipeline de DarwinEX."""
+        try:
+            if not hasattr(self, 'results_df') or self.results_df is None or self.results_df.empty:
+                messagebox.showwarning("Sin Datos", "No hay datos de estrategias para analizar. Ejecute primero el análisis principal.")
+                return
+            
+            # Limpiar área de resultados
+            self.darwinex_text.config(state=tk.NORMAL)
+            self.darwinex_text.delete(1.0, tk.END)
+            self.darwinex_text.insert(tk.END, "🚀 Ejecutando pipeline DarwinEX...\n")
+            self.darwinex_text.config(state=tk.DISABLED)
+            
+            # Ejecutar en hilo separado
+            def ejecutar_pipeline():
+                try:
+                    # Crear instancia del pipeline
+                    self.darwinex_pipeline = DarwinEXPipeline()
+                    
+                    # Ejecutar pipeline
+                    self.darwinex_results = self.darwinex_pipeline.run_pipeline(self.results_df)
+                    
+                    # Generar reporte
+                    report = self.darwinex_pipeline.generate_pipeline_report(self.darwinex_results)
+                    
+                    # Mostrar resultados en GUI
+                    self.after(0, lambda: self._show_darwinex_results_in_gui(report))
+                    
+                except Exception as e:
+                    self.after(0, lambda: self._show_darwinex_error(str(e)))
+            
+            threading.Thread(target=ejecutar_pipeline, daemon=True).start()
+            
+        except Exception as e:
+            self._log_message(f"❌ Error ejecutando pipeline DarwinEX: {str(e)}", "ERROR")
+            messagebox.showerror("Error", f"Error ejecutando pipeline DarwinEX: {str(e)}")
+
+    def _show_darwinex_results_in_gui(self, report):
+        """Muestra los resultados del pipeline DarwinEX en la GUI."""
+        try:
+            self.darwinex_text.config(state=tk.NORMAL)
+            self.darwinex_text.delete(1.0, tk.END)
+            
+            # Mostrar resumen ejecutivo
+            self.darwinex_text.insert(tk.END, "🏆 RESULTADOS DEL PIPELINE DARWINEX\n")
+            self.darwinex_text.insert(tk.END, "=" * 50 + "\n\n")
+            
+            # Estadísticas generales
+            if 'summary' in report:
+                summary = report['summary']
+                self.darwinex_text.insert(tk.END, f"📊 ESTRATEGIAS ANALIZADAS: {summary.get('total_strategies', 0)}\n")
+                self.darwinex_text.insert(tk.END, f"✅ ESTRATEGIAS APROBADAS: {summary.get('passed_strategies', 0)}\n")
+                self.darwinex_text.insert(tk.END, f"❌ ESTRATEGIAS RECHAZADAS: {summary.get('rejected_strategies', 0)}\n")
+                self.darwinex_text.insert(tk.END, f"📈 TASA DE APROBACIÓN: {summary.get('approval_rate', 0):.1f}%\n\n")
+            
+            # Categorías de tickets
+            if 'ticket_categories' in report:
+                self.darwinex_text.insert(tk.END, "💰 DISTRIBUCIÓN DE TICKETS:\n")
+                self.darwinex_text.insert(tk.END, "-" * 30 + "\n")
+                categories = report['ticket_categories']
+                for category, count in categories.items():
+                    self.darwinex_text.insert(tk.END, f"• {category}: {count} estrategias\n")
+                self.darwinex_text.insert(tk.END, "\n")
+            
+            # Top estrategias
+            if 'top_strategies' in report:
+                self.darwinex_text.insert(tk.END, "🏆 TOP 5 ESTRATEGIAS:\n")
+                self.darwinex_text.insert(tk.END, "-" * 30 + "\n")
+                for i, strategy in enumerate(report['top_strategies'][:5], 1):
+                    self.darwinex_text.insert(tk.END, f"{i}. {strategy['name']} - Score: {strategy['score']:.1f} - Ticket: €{strategy['ticket']:,}\n")
+                self.darwinex_text.insert(tk.END, "\n")
+            
+            # Alertas de riesgo
+            if 'risk_alerts' in report and report['risk_alerts']:
+                self.darwinex_text.insert(tk.END, "⚠️ ALERTAS DE RIESGO:\n")
+                self.darwinex_text.insert(tk.END, "-" * 30 + "\n")
+                for alert in report['risk_alerts']:
+                    self.darwinex_text.insert(tk.END, f"• {alert}\n")
+                self.darwinex_text.insert(tk.END, "\n")
+            
+            # Recomendaciones
+            if 'recommendations' in report:
+                self.darwinex_text.insert(tk.END, "🎯 RECOMENDACIONES:\n")
+                self.darwinex_text.insert(tk.END, "-" * 30 + "\n")
+                for rec in report['recommendations']:
+                    self.darwinex_text.insert(tk.END, f"• {rec}\n")
+                self.darwinex_text.insert(tk.END, "\n")
+            
+            self.darwinex_text.config(state=tk.DISABLED)
+            
+            self._log_message("✅ Pipeline DarwinEX ejecutado exitosamente")
+            
+        except Exception as e:
+            self._show_darwinex_error(str(e))
+
+    def _show_darwinex_error(self, error_msg):
+        """Muestra error del pipeline DarwinEX."""
+        self.darwinex_text.config(state=tk.NORMAL)
+        self.darwinex_text.delete(1.0, tk.END)
+        self.darwinex_text.insert(tk.END, f"❌ ERROR EN PIPELINE DARWINEX:\n")
+        self.darwinex_text.insert(tk.END, f"{error_msg}\n")
+        self.darwinex_text.config(state=tk.DISABLED)
+        
+        self._log_message(f"❌ Error en pipeline DarwinEX: {error_msg}", "ERROR")
+
+    def _show_darwinex_results(self):
+        """Muestra resultados detallados del pipeline DarwinEX."""
+        if self.darwinex_results is None:
+            messagebox.showinfo("Sin Resultados", "Ejecute primero el pipeline DarwinEX para ver los resultados.")
+            return
+        
+        # Crear ventana de resultados detallados
+        results_window = tk.Toplevel(self)
+        results_window.title("🏆 Resultados Detallados - DarwinEX Pipeline")
+        results_window.geometry("800x600")
+        
+        # Crear notebook para organizar resultados
+        notebook = ttk.Notebook(results_window)
+        notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Pestaña de estrategias aprobadas
+        approved_frame = ttk.Frame(notebook)
+        notebook.add(approved_frame, text="✅ Estrategias Aprobadas")
+        self._build_approved_strategies_tab(approved_frame)
+        
+        # Pestaña de estrategias rechazadas
+        rejected_frame = ttk.Frame(notebook)
+        notebook.add(rejected_frame, text="❌ Estrategias Rechazadas")
+        self._build_rejected_strategies_tab(rejected_frame)
+        
+        # Pestaña de métricas
+        metrics_frame = ttk.Frame(notebook)
+        notebook.add(metrics_frame, text="📊 Métricas")
+        self._build_metrics_tab(metrics_frame)
+
+    def _build_approved_strategies_tab(self, parent):
+        """Construye pestaña de estrategias aprobadas."""
+        # Crear Treeview para mostrar estrategias aprobadas
+        columns = ("Nombre", "Score", "Ticket", "Categoría", "Filtros Pasados")
+        tree = ttk.Treeview(parent, columns=columns, show="headings")
+        
+        # Configurar columnas
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=120)
+        
+        # Añadir scrollbar
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Poblar datos
+        if self.darwinex_results:
+            for result in self.darwinex_results:
+                if result.ticket_size > 0:  # Estrategia aprobada
+                    tree.insert("", "end", values=(
+                        result.strategy_name,
+                        f"{result.final_score:.1f}",
+                        f"€{result.ticket_size:,}",
+                        result.category,
+                        ", ".join(result.passed_filters)
+                    ))
+
+    def _build_rejected_strategies_tab(self, parent):
+        """Construye pestaña de estrategias rechazadas."""
+        # Crear Treeview para mostrar estrategias rechazadas
+        columns = ("Nombre", "Score", "Filtros Fallidos", "Razón")
+        tree = ttk.Treeview(parent, columns=columns, show="headings")
+        
+        # Configurar columnas
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=150)
+        
+        # Añadir scrollbar
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Poblar datos
+        if self.darwinex_results:
+            for result in self.darwinex_results:
+                if result.ticket_size == 0:  # Estrategia rechazada
+                    tree.insert("", "end", values=(
+                        result.strategy_name,
+                        f"{result.final_score:.1f}",
+                        ", ".join(result.failed_filters),
+                        "No cumple criterios DarwinEX"
+                    ))
+
+    def _build_metrics_tab(self, parent):
+        """Construye pestaña de métricas."""
+        # Frame principal
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Métricas del pipeline
+        if self.darwinex_results:
+            total = len(self.darwinex_results)
+            approved = sum(1 for r in self.darwinex_results if r.ticket_size > 0)
+            rejected = total - approved
+            
+            ttk.Label(main_frame, text="📊 MÉTRICAS DEL PIPELINE", font=("Arial", 12, "bold")).pack(anchor="w")
+            ttk.Label(main_frame, text=f"Total de estrategias: {total}").pack(anchor="w")
+            ttk.Label(main_frame, text=f"Estrategias aprobadas: {approved}").pack(anchor="w")
+            ttk.Label(main_frame, text=f"Estrategias rechazadas: {rejected}").pack(anchor="w")
+            ttk.Label(main_frame, text=f"Tasa de aprobación: {(approved/total*100):.1f}%").pack(anchor="w")
+
+    def _export_darwinex_report(self):
+        """Exporta el reporte del pipeline DarwinEX."""
+        if self.darwinex_results is None:
+            messagebox.showinfo("Sin Resultados", "Ejecute primero el pipeline DarwinEX para exportar el reporte.")
+            return
+        
+        try:
+            filename = filedialog.asksaveasfilename(
+                title="Guardar Reporte DarwinEX",
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+            )
+            
+            if filename:
+                # Crear DataFrame con resultados
+                data = []
+                for result in self.darwinex_results:
+                    data.append({
+                        'Strategy_Name': result.strategy_name,
+                        'Final_Score': result.final_score,
+                        'Ticket_Size': result.ticket_size,
+                        'Category': result.category,
+                        'Passed_Filters': ', '.join(result.passed_filters),
+                        'Failed_Filters': ', '.join(result.failed_filters),
+                        'Recommendations': ', '.join(result.recommendations),
+                        'Risk_Alerts': ', '.join(result.risk_alerts)
+                    })
+                
+                df = pd.DataFrame(data)
+                
+                # Exportar a Excel
+                with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                    df.to_excel(writer, sheet_name='DarwinEX_Results', index=False)
+                    
+                    # Crear hoja de resumen
+                    summary_data = {
+                        'Metric': ['Total Strategies', 'Approved', 'Rejected', 'Approval Rate'],
+                        'Value': [
+                            len(self.darwinex_results),
+                            sum(1 for r in self.darwinex_results if r.ticket_size > 0),
+                            sum(1 for r in self.darwinex_results if r.ticket_size == 0),
+                            f"{(sum(1 for r in self.darwinex_results if r.ticket_size > 0) / len(self.darwinex_results) * 100):.1f}%"
+                        ]
+                    }
+                    pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
+                
+                messagebox.showinfo("Éxito", f"Reporte DarwinEX exportado a:\n{filename}")
+                self._log_message(f"✅ Reporte DarwinEX exportado: {filename}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error exportando reporte: {str(e)}")
+            self._log_message(f"❌ Error exportando reporte DarwinEX: {str(e)}", "ERROR")
+
+    def _clear_darwinex_results(self):
+        """Limpia los resultados del pipeline DarwinEX."""
+        self.darwinex_results = None
+        self.darwinex_pipeline = None
+        
+        self.darwinex_text.config(state=tk.NORMAL)
+        self.darwinex_text.delete(1.0, tk.END)
+        self.darwinex_text.insert(tk.END, "🏆 DarwinEX Portfolio Analysis\n")
+        self.darwinex_text.insert(tk.END, "=" * 50 + "\n\n")
+        self.darwinex_text.insert(tk.END, "Resultados limpiados. Ejecute el pipeline nuevamente.\n")
+        self.darwinex_text.config(state=tk.DISABLED)
+        
+        self._log_message("🗑️ Resultados DarwinEX limpiados")
+
+
 
     def _build_seleccionadas_asesor_tab(self):
         main_frame = ttk.Frame(self.tab_seleccionadas_asesor)
@@ -2180,7 +2523,7 @@ class EnhancedRankGUI(tk.Tk):
             ("RecoveryFactor", "Recovery", lambda v: "🛡️" if v >= 2 else ("⚠️" if v < 1.2 else "✅")),
             ("Stagnation", "Stag", lambda v: "🛡️" if v < 10 else ("⚠️" if v > 20 else "✅")),
         ]
-        columns = ["Seleccionar", "Estrategia", "Score", "Categoría", "Rendimiento", "Riesgo", "Robustez", "Métricas Científicas", "IS/OOS"]
+        columns = ["Badge", "Seleccionar", "Estrategia", "Score", "Categoría", "Predictibilidad", "Riesgo de Cola", "Rendimiento", "Riesgo", "Robustez", "Métricas Científicas", "IS/OOS"]
         self.filtered_results_df = getattr(self, 'filtered_results_df', None)
         if self.filtered_results_df is None:
             import pandas as pd
@@ -2192,7 +2535,9 @@ class EnhancedRankGUI(tk.Tk):
         self.results_tree.bind("<Button-1>", self._on_treeview_click)
         for col in columns:
             self.results_tree.heading(col, text=col, command=lambda c=col: self._sort_results_by_column(c))
-            if col == "Seleccionar":
+            if col == "Badge":
+                self.results_tree.column(col, width=60, anchor=tk.CENTER)
+            elif col == "Seleccionar":
                 self.results_tree.column(col, width=80, anchor=tk.CENTER)
             elif col == "Estrategia":
                 self.results_tree.column(col, width=140, anchor=tk.CENTER)
@@ -2200,6 +2545,10 @@ class EnhancedRankGUI(tk.Tk):
                 self.results_tree.column(col, width=60, anchor=tk.CENTER)
             elif col == "Categoría":
                 self.results_tree.column(col, width=90, anchor=tk.CENTER)
+            elif col == "Predictibilidad":
+                self.results_tree.column(col, width=120, anchor=tk.CENTER)
+            elif col == "Riesgo de Cola":
+                self.results_tree.column(col, width=100, anchor=tk.CENTER)
             elif col == "IS/OOS":
                 self.results_tree.column(col, width=200, anchor=tk.CENTER)
             else:
@@ -2211,6 +2560,7 @@ class EnhancedRankGUI(tk.Tk):
         self.results_tree.tag_configure("bueno", background="#fffac8")
         self.results_tree.tag_configure("regular", background="#ffe4b3")
         self.results_tree.tag_configure("pobre", background="#ffb3b3")
+        self.results_tree.tag_configure("sticky", background="#ffe066", font=("Arial", 10, "bold"))
         # Leyenda de colores
         legend_frame = ttk.Frame(self.results_frame)
         legend_frame.is_legend = True
@@ -2258,6 +2608,27 @@ class EnhancedRankGUI(tk.Tk):
             lbl.pack(side=tk.LEFT, padx=(2,0))
             txt = tk.Label(icon_legend_frame, text=desc)
             txt.pack(side=tk.LEFT, padx=(0,8))
+        
+        # Leyenda de badges
+        badge_legend_frame = ttk.Frame(self.results_frame)
+        badge_legend_frame.is_legend = True
+        badge_legend_frame.pack(fill=tk.X, pady=2)
+        badge_legend_text = "🏆 BADGES: 🥇 Elite | 🥈 Excellent | 🥉 Very Good | ⭐ Good | ⚠️ Regular | ❌ Poor"
+        tk.Label(badge_legend_frame, text=badge_legend_text, font=("Arial", 9, "bold"), anchor="w").pack(side=tk.LEFT, padx=4)
+        
+        # Leyenda de predictibilidad
+        predictability_legend_frame = ttk.Frame(self.results_frame)
+        predictability_legend_frame.is_legend = True
+        predictability_legend_frame.pack(fill=tk.X, pady=2)
+        predictability_legend_text = "🎯 PREDICTIBILIDAD: 🟢 EXCELENTE (≥85%) | 🟡 BUENA (70-84%) | 🟠 ACEPTABLE (60-69%) | 🔴 BAJA (<60%)"
+        tk.Label(predictability_legend_frame, text=predictability_legend_text, font=("Arial", 9, "bold"), anchor="w").pack(side=tk.LEFT, padx=4)
+        
+        # Leyenda de riesgo de cola
+        tail_risk_legend_frame = ttk.Frame(self.results_frame)
+        tail_risk_legend_frame.is_legend = True
+        tail_risk_legend_frame.pack(fill=tk.X, pady=2)
+        tail_risk_legend_text = "⚠️ RIESGO DE COLA: 🔴 ALTO (≥6) | 🟡 MODERADO (3-5) | 🟢 BAJO (1-2) | 🟢 MUY BAJO (0)"
+        tk.Label(tail_risk_legend_frame, text=tail_risk_legend_text, font=("Arial", 9, "bold"), anchor="w").pack(side=tk.LEFT, padx=4)
         # Función robusta para obtener nombre de estrategia
         def get_strategy_name(row):
             for key in ["Strategy Name", "Strategy_Name", "Estrategia", "Nombre", "Name"]:
@@ -2270,6 +2641,21 @@ class EnhancedRankGUI(tk.Tk):
                     if isinstance(val, str) and val.strip():
                         return val.strip()
             return ""
+        # Definir badges por categoría
+        badge_legend = {
+            "Elite": "🥇",
+            "Excellent": "🥈", 
+            "Very Good": "🥉",
+            "Good": "⭐",
+            "Regular": "⚠️",
+            "Poor": "❌"
+        }
+        
+        # Encontrar la mejor estrategia (mayor Unified_Score)
+        sticky_idx = None
+        if not df.empty and "Unified_Score" in df.columns:
+            sticky_idx = df["Unified_Score"].idxmax()
+        
         # Insertar filas y guardar detalles IS/OOS
         self.checkbox_vars = {}
         for idx, row in df.iterrows():
@@ -2297,22 +2683,59 @@ class EnhancedRankGUI(tk.Tk):
             self.is_oos_details[idx] = detalles_is_oos
             strategy_name = row.get("Strategy Name", row.get("Strategy_Name", ""))
             cat = row.get("Quality_Category", "")
-            tag = "regular"
-            if cat == "Excelente":
+            
+            # Badge visual según categoría
+            badge = ""
+            if cat == "Elite":
+                badge = badge_legend["Elite"]
                 tag = "excelente"
-            elif cat == "Muy Bueno":
+            elif cat == "Excellent":
+                badge = badge_legend["Excellent"]
                 tag = "muy_bueno"
-            elif cat == "Bueno":
+            elif cat == "Very Good":
+                badge = badge_legend["Very Good"]
                 tag = "bueno"
-            elif cat == "Regular":
+            elif cat == "Good":
+                badge = badge_legend["Good"]
                 tag = "regular"
-            elif cat == "Pobre":
+            elif cat == "Regular":
+                badge = badge_legend["Regular"]
+                tag = "regular"
+            elif cat == "Poor":
+                badge = badge_legend["Poor"]
                 tag = "pobre"
+            else:
+                tag = "regular"
+            
             # Obtener métricas científicas si están disponibles
             scientific_score = row.get("Unified_Score_Scientific", row.get("Unified_Score", row.get("Score", "")))
             enhanced_score = row.get("Unified_Score_Enhanced", row.get("Unified_Score", row.get("Score", "")))
             scientific_metrics = f"🔬 {scientific_score:.4f} | 🚀 {enhanced_score:.4f}"
-            item_id = self.results_tree.insert("", "end", values=["", strategy_name, row.get("Unified_Score", row.get("Score", "")), cat, rendimiento, riesgo, robustez, scientific_metrics, resumen_is_oos], tags=(tag,))
+            
+            # Calcular predictibilidad
+            predictability_score = row.get("predictability_score", row.get("Predictability_Score", 0))
+            if isinstance(predictability_score, (int, float)) and not pd.isna(predictability_score):
+                predictability_level = self._get_predictability_level(predictability_score)
+                predictability_display = f"🎯 {predictability_score:.1f}% ({predictability_level})"
+            else:
+                predictability_display = "📊 N/A"
+            
+            # Calcular riesgo de cola
+            tail_risk_info = self._calculate_tail_risk_level(row)
+            tail_risk_display = f"{tail_risk_info['icon']} {tail_risk_info['level']}"
+            
+            values = [badge, "", strategy_name, row.get("Unified_Score", row.get("Score", "")), cat, predictability_display, tail_risk_display, rendimiento, riesgo, robustez, scientific_metrics, resumen_is_oos]
+            
+            # Sticky row para la mejor estrategia
+            if idx == sticky_idx:
+                item_id = self.results_tree.insert("", 0, values=values, tags=("sticky", tag))
+            else:
+                item_id = self.results_tree.insert("", "end", values=values, tags=(tag,))
+            
+            # Crear tooltip para la columna de riesgo de cola
+            tail_risk_tooltip = f"Riesgo de Cola: {tail_risk_info['description']}\n\nFactores de riesgo:\n" + "\n".join(tail_risk_info['risk_factors'])
+            self._crear_tooltip(self.results_tree, tail_risk_tooltip)
+            
             self.checkbox_vars[item_id] = False
         # --- Botones de selección por categoría ---
         cat_frame = ttk.Frame(self.results_frame)
@@ -2328,6 +2751,40 @@ class EnhancedRankGUI(tk.Tk):
         self.save_mode = tk.StringVar(value="seleccionadas")
         ttk.Radiobutton(mode_frame, text="Guardar seleccionadas", variable=self.save_mode, value="seleccionadas").pack(side=tk.LEFT, padx=4)
         ttk.Radiobutton(mode_frame, text="Guardar Top N", variable=self.save_mode, value="topn").pack(side=tk.LEFT, padx=4)
+        # --- Barra de estado con contador de riesgo ---
+        status_frame = ttk.Frame(self.results_frame)
+        status_frame.pack(fill=tk.X, pady=5)
+        
+        # Contar estrategias con riesgo elevado
+        high_risk_count = 0
+        moderate_risk_count = 0
+        for idx, row in df.iterrows():
+            tail_risk_info = self._calculate_tail_risk_level(row)
+            if tail_risk_info['level'] == "ALTO":
+                high_risk_count += 1
+            elif tail_risk_info['level'] == "MODERADO":
+                moderate_risk_count += 1
+        
+        # Mostrar contadores
+        if high_risk_count > 0:
+            risk_status_text = f"⚠️ {high_risk_count} estrategias con riesgo ALTO | 🟡 {moderate_risk_count} con riesgo MODERADO"
+            risk_status_color = "red"
+        elif moderate_risk_count > 0:
+            risk_status_text = f"🟡 {moderate_risk_count} estrategias con riesgo MODERADO"
+            risk_status_color = "orange"
+        else:
+            risk_status_text = f"🟢 Todas las estrategias tienen riesgo bajo"
+            risk_status_color = "green"
+        
+        risk_status_label = tk.Label(status_frame, text=risk_status_text, font=("Arial", 9, "bold"), fg=risk_status_color)
+        risk_status_label.pack(side=tk.LEFT, padx=5)
+        
+        # Botón para ver análisis de riesgo completo
+        if high_risk_count > 0 or moderate_risk_count > 0:
+            risk_analysis_btn = ttk.Button(status_frame, text="🔍 Ver Análisis de Riesgo", 
+                                         command=lambda: self._show_risk_analysis_popup(df))
+            risk_analysis_btn.pack(side=tk.RIGHT, padx=5)
+        
         # --- Botones de acción ---
         action_frame = ttk.Frame(self.results_frame)
         action_frame.pack(pady=10)
@@ -3072,6 +3529,72 @@ class EnhancedRankGUI(tk.Tk):
                 return "Pobre"
         df["Quality_Category"] = df[score_col].apply(cat)
         return df
+    
+    def _get_predictability_level(self, score):
+        """Obtiene el nivel de predictibilidad basado en el score."""
+        if pd.isna(score):
+            return "Sin datos"
+        elif score >= 85:
+            return "🟢 EXCELENTE"
+        elif score >= 75:
+            return "🟡 BUENA"
+        elif score >= 65:
+            return "🟠 MODERADA"
+        elif score >= 50:
+            return "🔴 BAJA"
+        else:
+            return "⚫ MUY BAJA"
+    
+    def _get_predictability_recommendation(self, score):
+        """Obtiene la recomendación basada en el score de predictibilidad."""
+        if pd.isna(score):
+            return "Sin datos suficientes"
+        elif score >= 85:
+            return "Alta confiabilidad - Muy recomendable"
+        elif score >= 75:
+            return "Buena confiabilidad - Monitorear regularmente"
+        elif score >= 65:
+            return "Moderada confiabilidad - Usar con precaución"
+        elif score >= 50:
+            return "Baja confiabilidad - Requiere validación adicional"
+        else:
+            return "Muy baja confiabilidad - No recomendada"
+    
+    def _interpret_predictability_score(self, score: float) -> Dict[str, str]:
+        """
+        Interpreta el score de predictibilidad y proporciona recomendaciones.
+        
+        Args:
+            score: Score de predictibilidad (0-100)
+            
+        Returns:
+            Dict con nivel y recomendación
+        """
+        if score >= 85:
+            return {
+                "level": "🟢 EXCELENTE",
+                "recommendation": "Alta confiabilidad. La estrategia muestra excelente predictibilidad y es muy recomendable para trading real."
+            }
+        elif score >= 75:
+            return {
+                "level": "🟡 BUENA", 
+                "recommendation": "Buena predictibilidad. La estrategia es confiable pero monitoree su rendimiento regularmente."
+            }
+        elif score >= 65:
+            return {
+                "level": "🟠 MODERADA",
+                "recommendation": "Predictibilidad moderada. Use con precaución y valide con datos adicionales."
+            }
+        elif score >= 50:
+            return {
+                "level": "🔴 BAJA",
+                "recommendation": "Baja predictibilidad. Se requiere análisis adicional antes de usar en trading real."
+            }
+        else:
+            return {
+                "level": "⚫ MUY BAJA",
+                "recommendation": "Predictibilidad muy baja. No recomendada para trading sin mejoras significativas."
+            }
 
     def _display_results(self, df, summary):
         # Forzar presencia de métricas científicas
@@ -3079,51 +3602,228 @@ class EnhancedRankGUI(tk.Tk):
             df['Unified_Score_Scientific'] = df['Unified_Score']
         if 'Unified_Score_Enhanced' not in df.columns:
             df['Unified_Score_Enhanced'] = df['Unified_Score']
+        
+        # Agregar información de predictibilidad si está disponible
+        if 'predictability_score' in df.columns:
+            df['Predictability_Level'] = df['predictability_score'].apply(self._get_predictability_level)
+            df['Predictability_Recommendation'] = df['predictability_score'].apply(self._get_predictability_recommendation)
+        
         # ... resto del código igual ...
 
 
 
     def _on_result_double_click(self, event):
-        """Maneja el doble clic en la tabla de resultados para mostrar detalles."""
+        """Popup profesional con estadísticas empíricas detalladas según especificaciones del roadmap."""
         try:
             # --- REFUERZO DE DETECCIÓN PARA TESTS ---
-            # Registrar que el popup está disponible
             self.popup_details_available = True
-            self._log_message("🔍 Popup de detalles activado")
+            self._log_message("🔍 Popup de detalles avanzado activado")
             
             item = self.results_tree.selection()[0] if self.results_tree.selection() else None
             if item and hasattr(self, 'results_df'):
-                # Obtener índice del DataFrame
                 item_index = self.results_tree.index(item)
                 if item_index < len(self.results_df):
                     row = self.results_df.iloc[item_index]
-                    detalles = f"📊 Detalles de Estrategia\n"
-                    detalles += f"Estrategia: {row.get('Strategy Name', 'N/A')}\n"
-                    detalles += f"Score Unificado: {row.get('Unified_Score', 'N/A'):.4f}\n"
                     
-                    # Mostrar métricas científicas si están disponibles
-                    if 'Unified_Score_Scientific' in row and 'Unified_Score_Enhanced' in row:
-                        detalles += f"🔬 Score Científico: {row['Unified_Score_Scientific']:.4f}\n"
-                        detalles += f"🚀 Score Mejorado: {row['Unified_Score_Enhanced']:.4f}\n"
-                    
-                    # Crear ventana de detalles
+                    # Crear ventana modal profesional
                     detail_window = tk.Toplevel(self)
-                    detail_window.title(f"📊 Detalles: {row.get('Strategy Name', 'Estrategia')}")
-                    detail_window.geometry("500x300")
+                    detail_window.title(f"📊 Detalles Avanzados: {row.get('Strategy Name', 'Estrategia')}")
+                    detail_window.geometry("800x600")
+                    detail_window.configure(bg='#f0f0f0')
                     
-                    text_widget = ScrolledText(detail_window, wrap="word", font=("Arial", 10))
-                    text_widget.pack(fill="both", expand=True, padx=10, pady=10)
-                    text_widget.insert("end", detalles)
-                    text_widget.config(state="disabled")
+                    # Frame principal con scroll
+                    main_frame = ttk.Frame(detail_window)
+                    main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+                    
+                    # Sección 1: Nombre original (grande y visible)
+                    name_frame = ttk.LabelFrame(main_frame, text="🏆 ESTRATEGIA", padding=10)
+                    name_frame.pack(fill="x", pady=(0, 10))
+                    
+                    strategy_name = row.get('Strategy Name', 'N/A')
+                    name_label = ttk.Label(name_frame, text=strategy_name, 
+                                         font=("Arial", 16, "bold"), foreground="#2E86AB")
+                    name_label.pack()
+                    
+                    # Sección 2: Tarjeta-resumen individual con métricas clave
+                    summary_frame = ttk.LabelFrame(main_frame, text="📊 RESUMEN EJECUTIVO", padding=10)
+                    summary_frame.pack(fill="x", pady=(0, 10))
+                    
+                    # Grid para métricas principales
+                    metrics_frame = ttk.Frame(summary_frame)
+                    metrics_frame.pack(fill="x")
+                    
+                    # Métricas principales
+                    main_metrics = [
+                        ("Score Unificado", row.get('Unified_Score', 'N/A'), "#2E86AB"),
+                        ("Categoría", row.get('Quality_Category', 'N/A'), "#A23B72"),
+                        ("CAGR", row.get('CAGR', 'N/A'), "#F18F01"),
+                        ("Sharpe Ratio", row.get('Sharpe Ratio', 'N/A'), "#C73E1D"),
+                        ("Drawdown", row.get('Drawdown', 'N/A'), "#E74C3C"),
+                        ("Profit Factor", row.get('Profit factor', 'N/A'), "#27AE60")
+                    ]
+                    
+                    for i, (label, value, color) in enumerate(main_metrics):
+                        col = i % 3
+                        row_idx = i // 3
+                        
+                        metric_frame = ttk.Frame(metrics_frame)
+                        metric_frame.grid(row=row_idx, column=col, padx=10, pady=5, sticky="ew")
+                        
+                        ttk.Label(metric_frame, text=label, font=("Arial", 9, "bold")).pack()
+                        value_label = ttk.Label(metric_frame, text=str(value), 
+                                              font=("Arial", 11), foreground=color)
+                        value_label.pack()
+                    
+                    # Sección 3: Gráfico de importancia de KPIs (barras)
+                    kpis_frame = ttk.LabelFrame(main_frame, text="📈 IMPORTANCIA DE KPIs", padding=10)
+                    kpis_frame.pack(fill="x", pady=(0, 10))
+                    
+                    # KPIs clave con barras visuales
+                    kpis_data = [
+                        ("Profit Factor", row.get('Profit factor', 0), 1.6),
+                        ("CAGR", row.get('CAGR', 0), 2.0),
+                        ("Sharpe Ratio", row.get('Sharpe Ratio', 0), 1.0),
+                        ("Calmar Ratio", row.get('CalmarRatio', 0), 2.0),
+                        ("SQN", row.get('SQN', 0), 1.6),
+                        ("Win Rate", row.get('Winning Percent', 0), 55)
+                    ]
+                    
+                    for kpi_name, value, threshold in kpis_data:
+                        if value != 'N/A' and value != 0:
+                            try:
+                                value_float = float(value)
+                                percentage = min((value_float / threshold) * 100, 100)
+                                bar_width = int(percentage / 2)  # Máximo 50 caracteres
+                                bar = "█" * bar_width + "░" * (50 - bar_width)
+                                
+                                kpi_frame = ttk.Frame(kpis_frame)
+                                kpi_frame.pack(fill="x", pady=2)
+                                
+                                ttk.Label(kpi_frame, text=f"{kpi_name}: {value_float:.2f}", 
+                                         font=("Arial", 9)).pack(side="left")
+                                ttk.Label(kpi_frame, text=bar, font=("Courier", 8)).pack(side="right")
+                            except (ValueError, TypeError):
+                                continue
+                    
+                    # Sección 4: Recomendaciones y advertencias del asesor
+                    advice_frame = ttk.LabelFrame(main_frame, text="💡 RECOMENDACIONES DEL ASESOR", padding=10)
+                    advice_frame.pack(fill="x", pady=(0, 10))
+                    
+                    advice_text = tk.Text(advice_frame, height=4, wrap="word", font=("Arial", 10))
+                    advice_text.pack(fill="x")
+                    
+                    # Generar recomendaciones basadas en métricas
+                    recommendations = []
+                    
+                    # Análisis de predictibilidad
+                    if 'predictability_score' in row:
+                        predictability_score = row['predictability_score']
+                        interpretation = self._interpret_predictability_score(predictability_score)
+                        recommendations.append(f"🎯 Predictibilidad: {interpretation['level']}")
+                        recommendations.append(f"💡 {interpretation['recommendation']}")
+                    
+                    # Análisis de métricas clave
+                    if row.get('Profit factor', 0) != 'N/A':
+                        try:
+                            pf = float(row.get('Profit factor', 0))
+                            if pf >= 1.6:
+                                recommendations.append("✅ Profit Factor excelente - Estrategia muy rentable")
+                            elif pf < 1.3:
+                                recommendations.append("⚠️ Profit Factor bajo - Considerar optimización")
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    if row.get('Drawdown', 0) != 'N/A':
+                        try:
+                            dd = float(row.get('Drawdown', 0))
+                            if dd < 10:
+                                recommendations.append("🟢 Drawdown controlado - Riesgo bajo")
+                            elif dd > 20:
+                                recommendations.append("🔴 Drawdown alto - Requiere atención")
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Insertar recomendaciones
+                    advice_text.insert("1.0", "\n".join(recommendations) if recommendations else 
+                                    "📊 Análisis detallado disponible en el asesor financiero")
+                    advice_text.config(state="disabled")
+                    
+                    # Sección 5: Detalles avanzados (clustering, outliers, predicción)
+                    advanced_frame = ttk.LabelFrame(main_frame, text="🔬 ANÁLISIS AVANZADO", padding=10)
+                    advanced_frame.pack(fill="x", pady=(0, 10))
+                    
+                    advanced_text = tk.Text(advanced_frame, height=6, wrap="word", font=("Arial", 9))
+                    advanced_text.pack(fill="x")
+                    
+                    # Información avanzada
+                    advanced_info = []
+                    
+                    # Métricas científicas si están disponibles
+                    if 'Unified_Score_Scientific' in row and 'Unified_Score_Enhanced' in row:
+                        advanced_info.append(f"🔬 Score Científico: {row['Unified_Score_Scientific']:.4f}")
+                        advanced_info.append(f"🚀 Score Mejorado: {row['Unified_Score_Enhanced']:.4f}")
+                    
+                    # Información de clustering si está disponible
+                    if 'Cluster' in row:
+                        advanced_info.append(f"📊 Cluster: {row['Cluster']}")
+                    
+                    # Información de outliers
+                    if 'Outlier_Score' in row:
+                        outlier_score = row['Outlier_Score']
+                        if outlier_score > 0.8:
+                            advanced_info.append("⚠️ Posible outlier - Verificar datos")
+                        else:
+                            advanced_info.append("✅ Datos consistentes")
+                    
+                    # Predicción de rendimiento
+                    if 'predictability_score' in row:
+                        pred_score = row['predictability_score']
+                        if pred_score >= 80:
+                            advanced_info.append("📈 Alta predictibilidad - Confiable para trading")
+                        elif pred_score >= 60:
+                            advanced_info.append("📊 Predictibilidad moderada - Usar con precaución")
+                        else:
+                            advanced_info.append("⚠️ Baja predictibilidad - Requiere validación adicional")
+                    
+                    advanced_text.insert("1.0", "\n".join(advanced_info) if advanced_info else 
+                                      "🔬 Análisis científico disponible en el asesor financiero")
+                    advanced_text.config(state="disabled")
+                    
+                    # Sección 6: Tooltips en cada métrica (implementado con tooltips)
+                    tooltip_frame = ttk.LabelFrame(main_frame, text="ℹ️ AYUDA CONTEXTUAL", padding=10)
+                    tooltip_frame.pack(fill="x", pady=(0, 10))
+                    
+                    help_text = """
+📊 Profit Factor: Ratio entre ganancias y pérdidas (>1.6 excelente)
+📈 CAGR: Crecimiento anual compuesto (>2% bueno)
+⚖️ Sharpe Ratio: Rendimiento ajustado por riesgo (>1.0 aceptable)
+📉 Drawdown: Máxima pérdida desde pico (<10% ideal)
+🎯 Predictibilidad: Capacidad de mantener rendimiento futuro
+💡 Recomendación: Basada en análisis científico completo
+                    """
+                    
+                    help_label = ttk.Label(tooltip_frame, text=help_text, 
+                                         font=("Arial", 9), justify="left")
+                    help_label.pack()
+                    
+                    # Botones de acción
+                    button_frame = ttk.Frame(main_frame)
+                    button_frame.pack(fill="x", pady=10)
+                    
+                    ttk.Button(button_frame, text="📋 Copiar Detalles", 
+                              command=lambda: self._copy_details_to_clipboard(row)).pack(side="left", padx=5)
+                    ttk.Button(button_frame, text="📊 Análisis Completo", 
+                              command=lambda: self._open_full_analysis(row)).pack(side="left", padx=5)
+                    ttk.Button(button_frame, text="❌ Cerrar", 
+                              command=detail_window.destroy).pack(side="right", padx=5)
                     
                     # Registrar la ventana para detección
                     self.current_detail_window = detail_window
-                    self._log_message("✅ Ventana de detalles creada exitosamente")
+                    self._log_message("✅ Popup de detalles avanzado creado exitosamente")
                     
         except Exception as e:
-            self._log_message(f"❌ Error mostrando detalles: {str(e)}", "ERROR")
+            self._log_message(f"❌ Error mostrando detalles avanzados: {str(e)}", "ERROR")
             messagebox.showerror("❌ Error", f"Error mostrando detalles: {str(e)}")
-            # Fallback: marcar como no disponible
             self.popup_details_available = False
 
 
@@ -4075,6 +4775,343 @@ Contacta al desarrollador o revisa la documentación técnica incluida en el pro
             empirical_df['Profit_Factor_Adjusted'] = empirical_df['Profit_factor'] * pf_adjustment
         
         return empirical_df
+    
+    def _calculate_tail_risk_level(self, row):
+        """
+        Calcula el nivel de riesgo de cola basado en las métricas disponibles.
+        
+        Args:
+            row: Fila del DataFrame con métricas de la estrategia
+            
+        Returns:
+            dict: Diccionario con nivel, icono, descripción y métricas
+        """
+        try:
+            # Métricas disponibles para cálculo de riesgo de cola
+            var_95 = row.get('VaR (95%)', None)
+            cvar_95 = row.get('CVaR (95%)', None)
+            drawdown = row.get('Drawdown', None)
+            ulcer_index = row.get('Ulcer Index %', None)
+            
+            # Convertir a float si es posible
+            def safe_float(value):
+                if value is None or pd.isna(value):
+                    return None
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return None
+            
+            var_95 = safe_float(var_95)
+            cvar_95 = safe_float(cvar_95)
+            drawdown = safe_float(drawdown)
+            ulcer_index = safe_float(ulcer_index)
+            
+            # Calcular score de riesgo de cola
+            risk_score = 0
+            risk_factors = []
+            
+            # Factor 1: VaR 95%
+            if var_95 is not None:
+                if var_95 < -8:  # Muy alto riesgo
+                    risk_score += 3
+                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (CRÍTICO)")
+                elif var_95 < -5:  # Alto riesgo
+                    risk_score += 2
+                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (ELEVADO)")
+                elif var_95 < -3:  # Riesgo moderado
+                    risk_score += 1
+                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (MODERADO)")
+                else:  # Riesgo bajo
+                    risk_factors.append(f"VaR 95%: {var_95:.1f}% (BAJO)")
+            
+            # Factor 2: CVaR 95%
+            if cvar_95 is not None:
+                if cvar_95 < -10:  # Muy alto riesgo
+                    risk_score += 3
+                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (CRÍTICO)")
+                elif cvar_95 < -7:  # Alto riesgo
+                    risk_score += 2
+                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (ELEVADO)")
+                elif cvar_95 < -5:  # Riesgo moderado
+                    risk_score += 1
+                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (MODERADO)")
+                else:  # Riesgo bajo
+                    risk_factors.append(f"CVaR 95%: {cvar_95:.1f}% (BAJO)")
+            
+            # Factor 3: Drawdown
+            if drawdown is not None:
+                if drawdown > 20:  # Muy alto riesgo
+                    risk_score += 2
+                    risk_factors.append(f"Drawdown: {drawdown:.1f}% (ALTO)")
+                elif drawdown > 15:  # Alto riesgo
+                    risk_score += 1
+                    risk_factors.append(f"Drawdown: {drawdown:.1f}% (MODERADO)")
+                else:  # Riesgo bajo
+                    risk_factors.append(f"Drawdown: {drawdown:.1f}% (BAJO)")
+            
+            # Factor 4: Ulcer Index
+            if ulcer_index is not None:
+                if ulcer_index > 15:  # Muy alto riesgo
+                    risk_score += 2
+                    risk_factors.append(f"Ulcer Index: {ulcer_index:.1f}% (ALTO)")
+                elif ulcer_index > 10:  # Alto riesgo
+                    risk_score += 1
+                    risk_factors.append(f"Ulcer Index: {ulcer_index:.1f}% (MODERADO)")
+                else:  # Riesgo bajo
+                    risk_factors.append(f"Ulcer Index: {ulcer_index:.1f}% (BAJO)")
+            
+            # Determinar nivel de riesgo basado en el score
+            if risk_score >= 6:
+                level = "ALTO"
+                icon = "🔴"
+                description = "Riesgo de cola elevado - Requiere atención inmediata"
+            elif risk_score >= 3:
+                level = "MODERADO"
+                icon = "🟡"
+                description = "Riesgo de cola moderado - Monitorear regularmente"
+            elif risk_score >= 1:
+                level = "BAJO"
+                icon = "🟢"
+                description = "Riesgo de cola bajo - Aceptable"
+            else:
+                level = "MUY BAJO"
+                icon = "🟢"
+                description = "Riesgo de cola muy bajo - Excelente"
+            
+            return {
+                'level': level,
+                'icon': icon,
+                'description': description,
+                'risk_score': risk_score,
+                'risk_factors': risk_factors,
+                'metrics': {
+                    'var_95': var_95,
+                    'cvar_95': cvar_95,
+                    'drawdown': drawdown,
+                    'ulcer_index': ulcer_index
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'level': "N/A",
+                'icon': "❓",
+                'description': "No se pudo calcular el riesgo de cola",
+                'risk_score': 0,
+                'risk_factors': ["Error en cálculo"],
+                'metrics': {}
+            }
+    
+    def _show_risk_analysis_popup(self, df):
+        """Muestra un popup con análisis detallado de riesgo de cola."""
+        try:
+            # Crear ventana modal
+            risk_window = tk.Toplevel(self)
+            risk_window.title("🔍 Análisis Detallado de Riesgo de Cola")
+            risk_window.geometry("800x600")
+            risk_window.configure(bg='#f0f0f0')
+            
+            # Frame principal con scroll
+            main_frame = ttk.Frame(risk_window)
+            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # Título
+            title_label = ttk.Label(main_frame, text="⚠️ ANÁLISIS DE RIESGO DE COLA", 
+                                   font=("Arial", 16, "bold"), foreground="#d32f2f")
+            title_label.pack(pady=(0, 10))
+            
+            # Resumen ejecutivo
+            summary_frame = ttk.LabelFrame(main_frame, text="📊 RESUMEN EJECUTIVO", padding=10)
+            summary_frame.pack(fill="x", pady=(0, 10))
+            
+            # Contar estrategias por nivel de riesgo
+            risk_counts = {"ALTO": 0, "MODERADO": 0, "BAJO": 0, "MUY BAJO": 0}
+            high_risk_strategies = []
+            moderate_risk_strategies = []
+            
+            for idx, row in df.iterrows():
+                tail_risk_info = self._calculate_tail_risk_level(row)
+                risk_counts[tail_risk_info['level']] += 1
+                
+                if tail_risk_info['level'] == "ALTO":
+                    high_risk_strategies.append({
+                        'name': row.get("Strategy Name", "N/A"),
+                        'risk_info': tail_risk_info
+                    })
+                elif tail_risk_info['level'] == "MODERADO":
+                    moderate_risk_strategies.append({
+                        'name': row.get("Strategy Name", "N/A"),
+                        'risk_info': tail_risk_info
+                    })
+            
+            # Mostrar resumen
+            summary_text = f"""
+            📈 Total de estrategias analizadas: {len(df)}
+            
+            🔴 Estrategias con riesgo ALTO: {risk_counts['ALTO']}
+            🟡 Estrategias con riesgo MODERADO: {risk_counts['MODERADO']}
+            🟢 Estrategias con riesgo BAJO: {risk_counts['BAJO']}
+            🟢 Estrategias con riesgo MUY BAJO: {risk_counts['MUY BAJO']}
+            
+            ⚠️ RECOMENDACIÓN: {'Revisar inmediatamente las estrategias de alto riesgo' if risk_counts['ALTO'] > 0 else 'Monitorear estrategias de riesgo moderado' if risk_counts['MODERADO'] > 0 else 'Todas las estrategias tienen riesgo controlado'}
+            """
+            
+            summary_label = ttk.Label(summary_frame, text=summary_text, font=("Arial", 10))
+            summary_label.pack()
+            
+            # Detalles de estrategias de alto riesgo
+            if high_risk_strategies:
+                high_risk_frame = ttk.LabelFrame(main_frame, text="🔴 ESTRATEGIAS CON RIESGO ALTO", padding=10)
+                high_risk_frame.pack(fill="x", pady=(0, 10))
+                
+                for strategy in high_risk_strategies:
+                    strategy_text = f"""
+                    📊 {strategy['name']}
+                    ⚠️ {strategy['risk_info']['description']}
+                    
+                    Factores de riesgo:
+                    """
+                    for factor in strategy['risk_info']['risk_factors']:
+                        strategy_text += f"• {factor}\n"
+                    
+                    strategy_label = ttk.Label(high_risk_frame, text=strategy_text, 
+                                             font=("Arial", 9), foreground="red")
+                    strategy_label.pack(anchor="w", pady=2)
+            
+            # Detalles de estrategias de riesgo moderado
+            if moderate_risk_strategies:
+                moderate_risk_frame = ttk.LabelFrame(main_frame, text="🟡 ESTRATEGIAS CON RIESGO MODERADO", padding=10)
+                moderate_risk_frame.pack(fill="x", pady=(0, 10))
+                
+                for strategy in moderate_risk_strategies:
+                    strategy_text = f"""
+                    📊 {strategy['name']}
+                    ⚠️ {strategy['risk_info']['description']}
+                    
+                    Factores de riesgo:
+                    """
+                    for factor in strategy['risk_info']['risk_factors']:
+                        strategy_text += f"• {factor}\n"
+                    
+                    strategy_label = ttk.Label(moderate_risk_frame, text=strategy_text, 
+                                             font=("Arial", 9), foreground="orange")
+                    strategy_label.pack(anchor="w", pady=2)
+            
+            # Botones de acción
+            button_frame = ttk.Frame(main_frame)
+            button_frame.pack(fill="x", pady=10)
+            
+            ttk.Button(button_frame, text="📋 Copiar Análisis", 
+                      command=lambda: self._copy_risk_analysis_to_clipboard(df)).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="📄 Exportar Reporte", 
+                      command=lambda: self._export_risk_analysis_report(df)).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="❌ Cerrar", 
+                      command=risk_window.destroy).pack(side=tk.RIGHT, padx=5)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error mostrando análisis de riesgo: {str(e)}")
+    
+    def _copy_risk_analysis_to_clipboard(self, df):
+        """Copia el análisis de riesgo al portapapeles."""
+        try:
+            # Generar texto del análisis
+            analysis_text = "🔍 ANÁLISIS DE RIESGO DE COLA\n"
+            analysis_text += "=" * 50 + "\n\n"
+            
+            # Contar estrategias por nivel de riesgo
+            risk_counts = {"ALTO": 0, "MODERADO": 0, "BAJO": 0, "MUY BAJO": 0}
+            
+            for idx, row in df.iterrows():
+                tail_risk_info = self._calculate_tail_risk_level(row)
+                risk_counts[tail_risk_info['level']] += 1
+            
+            analysis_text += f"📈 Total de estrategias: {len(df)}\n"
+            analysis_text += f"🔴 Riesgo ALTO: {risk_counts['ALTO']}\n"
+            analysis_text += f"🟡 Riesgo MODERADO: {risk_counts['MODERADO']}\n"
+            analysis_text += f"🟢 Riesgo BAJO: {risk_counts['BAJO']}\n"
+            analysis_text += f"🟢 Riesgo MUY BAJO: {risk_counts['MUY BAJO']}\n\n"
+            
+            # Copiar al portapapeles
+            self.clipboard_clear()
+            self.clipboard_append(analysis_text)
+            
+            messagebox.showinfo("✅ Copiado", "Análisis de riesgo copiado al portapapeles")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error copiando análisis: {str(e)}")
+    
+    def _export_risk_analysis_report(self, df):
+        """Exporta el análisis de riesgo a un archivo."""
+        try:
+            from tkinter import filedialog
+            from datetime import datetime
+            
+            filename = filedialog.asksaveasfilename(
+                title="Guardar Reporte de Riesgo",
+                defaultextension=".txt",
+                filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
+            )
+            
+            if filename:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write("🔍 REPORTE DE ANÁLISIS DE RIESGO DE COLA\n")
+                    f.write("=" * 50 + "\n\n")
+                    f.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                    
+                    # Contar estrategias por nivel de riesgo
+                    risk_counts = {"ALTO": 0, "MODERADO": 0, "BAJO": 0, "MUY BAJO": 0}
+                    high_risk_strategies = []
+                    moderate_risk_strategies = []
+                    
+                    for idx, row in df.iterrows():
+                        tail_risk_info = self._calculate_tail_risk_level(row)
+                        risk_counts[tail_risk_info['level']] += 1
+                        
+                        if tail_risk_info['level'] == "ALTO":
+                            high_risk_strategies.append({
+                                'name': row.get("Strategy Name", "N/A"),
+                                'risk_info': tail_risk_info
+                            })
+                        elif tail_risk_info['level'] == "MODERADO":
+                            moderate_risk_strategies.append({
+                                'name': row.get("Strategy Name", "N/A"),
+                                'risk_info': tail_risk_info
+                            })
+                    
+                    f.write(f"📈 Total de estrategias analizadas: {len(df)}\n\n")
+                    f.write("DISTRIBUCIÓN DE RIESGO:\n")
+                    f.write(f"🔴 Riesgo ALTO: {risk_counts['ALTO']}\n")
+                    f.write(f"🟡 Riesgo MODERADO: {risk_counts['MODERADO']}\n")
+                    f.write(f"🟢 Riesgo BAJO: {risk_counts['BAJO']}\n")
+                    f.write(f"🟢 Riesgo MUY BAJO: {risk_counts['MUY BAJO']}\n\n")
+                    
+                    if high_risk_strategies:
+                        f.write("🔴 ESTRATEGIAS CON RIESGO ALTO:\n")
+                        f.write("-" * 30 + "\n")
+                        for strategy in high_risk_strategies:
+                            f.write(f"📊 {strategy['name']}\n")
+                            f.write(f"⚠️ {strategy['risk_info']['description']}\n")
+                            f.write("Factores de riesgo:\n")
+                            for factor in strategy['risk_info']['risk_factors']:
+                                f.write(f"• {factor}\n")
+                            f.write("\n")
+                    
+                    if moderate_risk_strategies:
+                        f.write("🟡 ESTRATEGIAS CON RIESGO MODERADO:\n")
+                        f.write("-" * 30 + "\n")
+                        for strategy in moderate_risk_strategies:
+                            f.write(f"📊 {strategy['name']}\n")
+                            f.write(f"⚠️ {strategy['risk_info']['description']}\n")
+                            f.write("Factores de riesgo:\n")
+                            for factor in strategy['risk_info']['risk_factors']:
+                                f.write(f"• {factor}\n")
+                            f.write("\n")
+                
+                messagebox.showinfo("✅ Exportado", f"Reporte de riesgo exportado a:\n{filename}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error exportando reporte: {str(e)}")
     
     def _apply_scientific_filters(self, df, timeframe):
         """Aplica filtros científicos basados en la temporalidad."""
