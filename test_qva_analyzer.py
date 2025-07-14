@@ -68,13 +68,15 @@ class TestQVAScorerEnhanced:
         assert qva_scorer is not None
         assert hasattr(qva_scorer, 'penalty_config')
         assert hasattr(qva_scorer, 'trading_style_weights')
-        assert len(qva_scorer.penalty_config) == 6  # 6 tipos de penalizaciones (añadimos stagnation_trades)
+        assert len(qva_scorer.penalty_config) == 8  # Ahora hay 8 penalizaciones
         assert 'stagnation_trades' in qva_scorer.penalty_config  # Verificar que existe la nueva penalización
         assert qva_scorer.penalty_config['stagnation_trades']['enabled'] == True
         assert qva_scorer.penalty_config['stagnation_trades']['threshold'] == 8
         assert qva_scorer.penalty_config['stagnation_trades']['penalty_factor'] == 0.85
+        # Verificar penalizaciones avanzadas
+        assert 'oos_robustness' in qva_scorer.penalty_config
+        assert 'overfitting' in qva_scorer.penalty_config
         assert len(qva_scorer.trading_style_weights) == 6  # 6 estilos de trading
-        
         logger.info("✅ Inicialización correcta verificada")
     
     def test_robust_normalization(self, qva_scorer):
