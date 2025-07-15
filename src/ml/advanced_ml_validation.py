@@ -25,7 +25,7 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.ensemble import IsolationForest, RandomForestRegressor
-from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit, cross_val_score
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -124,8 +124,8 @@ class AdvancedMLValidator:
         self.n_regimes = n_regimes
         self.drift_threshold = drift_threshold
         self.walk_forward_folds = walk_forward_folds
-        getattr(self, 'config', None) = config or WalkForwardConfig()
-        getattr(self, 'model', None) = model
+        self.config = config or WalkForwardConfig()
+        self.model = model
         self.logger = logging.getLogger(__name__)
         
         # Inicializar modelos
@@ -396,7 +396,7 @@ class AdvancedMLValidator:
         
         if len(available_features) < 2:
             # Usar columnas numéricas como fallback
-            numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
             available_features = numeric_cols[:5]  # Top 5 columnas numéricas
         
         return available_features
@@ -411,7 +411,7 @@ class AdvancedMLValidator:
         available_features = [f for f in drift_features if f in data.columns]
         
         if len(available_features) < 2:
-            numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
             available_features = numeric_cols[:3]
         
         return available_features
@@ -419,7 +419,7 @@ class AdvancedMLValidator:
     def _select_walk_forward_features(self, data: pd.DataFrame, target_column: str) -> List[str]:
         """Selecciona características para walk-forward."""
         # Excluir la columna objetivo y columnas no numéricas
-        numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
         
         if target_column in numeric_cols:
             numeric_cols.remove(target_column)
@@ -730,7 +730,7 @@ class AdvancedMLValidator:
             
             # Configuración por defecto
             if target_column is None:
-                target_column = getattr(self, 'config', None).target_column
+                target_column = self.config.target_column
             
             # Asegurar que target_column no sea None
             if target_column is None:
@@ -742,8 +742,8 @@ class AdvancedMLValidator:
             # Preparar datos
             X, y = self._prepare_temporal_data(data, feature_columns, target_column)
             
-            if len(X) < getattr(self, 'config', None).min_train_size:
-                self.logger.warning(f"⚠️ Datos insuficientes para validación temporal: {len(X)} < {getattr(self, 'config', None).min_train_size}")
+            if len(X) < self.config.min_train_size:
+                self.logger.warning(f"⚠️ Datos insuficientes para validación temporal: {len(X)} < {self.config.min_train_size}")
                 return self._create_empty_temporal_result()
             
             # Realizar walk-forward validation
@@ -752,8 +752,8 @@ class AdvancedMLValidator:
             all_actuals = []
             
             # Configurar TimeSeriesSplit para validación temporal
-            from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit
-            tscv = TimeSeriesSplit(n_splits=getattr(self, 'config', None).n_splits)
+            from sklearn.model_selection import TimeSeriesSplit
+            tscv = TimeSeriesSplit(n_splits=self.config.n_splits)
             
             for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(X)):
                 try:
@@ -762,11 +762,12 @@ class AdvancedMLValidator:
                     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
                     
                     # Entrenar modelo
-                    if getattr(self, 'model', None) is not None:
-                        getattr(self, 'model', None).fit(X_train, y_train)
+                    model = getattr(self, 'model', None)
+                    if model is not None:
+                        model.fit(X_train, y_train)
                         
                         # Predecir
-                        y_pred = getattr(self, 'model', None).predict(X_test)
+                        y_pred = model.predict(X_test)
                     else:
                         # Usar modelo por defecto si no hay uno configurado
                         from sklearn.ensemble import RandomForestRegressor
@@ -836,7 +837,7 @@ class AdvancedMLValidator:
     def _select_temporal_features(self, data: pd.DataFrame, target_column: str) -> List[str]:
         """Selecciona características para validación temporal."""
         # Excluir la columna objetivo y columnas no numéricas
-        numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
         
         if target_column in numeric_cols:
             numeric_cols.remove(target_column)
@@ -870,7 +871,7 @@ class AdvancedMLValidator:
         if len(available_features) < 2:
             self.logger.warning("⚠️ Pocas características disponibles para validación temporal")
             # Usar columnas numéricas como fallback
-            numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
             if target_column in numeric_cols:
                 numeric_cols.remove(target_column)
             available_features = numeric_cols[:5]
@@ -1068,8 +1069,8 @@ def run_advanced_ml_validation(data: pd.DataFrame,
         # 1. Detección de regímenes
         regime_result = validator.detect_market_regimes(data)
         results['regime_detection'] = {
-            'regime_labels': regime_result.((regime_labels.tolist() if hasattr(regime_labels, 'tolist') else list(regime_labels)) if hasattr(regime_labels, 'tolist') else list(regime_labels)),
-            'regime_centers': regime_result.((regime_centers.tolist() if hasattr(regime_centers, 'tolist') else list(regime_centers)) if hasattr(regime_centers, 'tolist') else list(regime_centers)),
+            'regime_labels': regime_result.regime_labels.tolist(),
+            'regime_centers': regime_result.regime_centers.tolist(),
             'regime_characteristics': regime_result.regime_characteristics,
             'quality_metrics': regime_result.quality_metrics,
             'feature_importance': regime_result.feature_importance
