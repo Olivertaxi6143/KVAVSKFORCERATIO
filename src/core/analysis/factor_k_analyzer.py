@@ -2,28 +2,59 @@ import pandas as pd
 import numpy as np
 import gc
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Tuple
+from sklearn.cluster import KMeans, DBSCAN
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import IsolationForest
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import silhouette_score
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
+import warnings
+warnings.filterwarnings('ignore')
+
+# Importar hmmlearn para HMM real
+try:
+    from hmmlearn import hmm
+    HMM_AVAILABLE = True
+except ImportError:
+    HMM_AVAILABLE = False
+    print("⚠️ hmmlearn no disponible. HMM será simulado.")
+
 from src.core.config.config_manager import ConfigManagerEnhanced
 from src.core.config.progress_callback import ProgressCallback
 from src.data.data_manager import DataManager
 from src.logger_config import setup_logger
+
 # Importar analizadores científicos si están disponibles
 try:
     from src.core.market_regime_analyzer import HiddenMarkovModelAnalyzer
     from src.core.robustness_analyzer import StressTestGenerator
-    from src.core.integration_layer import DataDriftDetector, TemporalValidation
+    # DataDriftDetector y TemporalValidation no están disponibles en integration_layer
+    # Se implementan en otros módulos del proyecto
 except ImportError:
     HiddenMarkovModelAnalyzer = None
     StressTestGenerator = None
-    DataDriftDetector = None
-    TemporalValidation = None
+
+# Variables para compatibilidad (no disponibles en integration_layer)
+DataDriftDetector = None
+TemporalValidation = None
 
 CHUNK_SIZE = 10000
 MAX_WORKERS = 4
 
 class FactorKElite96Enhanced:
     """
-    Motor principal mejorado con procesamiento en hilos y optimizaciones para GUI.
+    Motor principal mejorado con IA avanzada: HMM real, clustering optimizado,
+    detección de anomalías, componentes temporal y predictivo.
+
+    ADVERTENCIA PROFESIONAL:
+    ------------------------------------------------------------
+    Este módulo SOLO debe recibir DataFrames ya validados y preparados por DataManager
+    u otras funciones centralizadas de la capa data. No realizar validación, carga ni
+    manipulación local de datos aquí. Toda gestión de datos debe estar centralizada.
+    ------------------------------------------------------------
     """
     
     def __init__(self, config: Optional[Dict] = None, progress_callback: Optional[ProgressCallback] = None):
@@ -44,6 +75,12 @@ class FactorKElite96Enhanced:
         self.drift_detector = None
         self.temporal_validator = None
         
+        # Modelos de IA
+        self.hmm_model = None
+        self.isolation_forest = None
+        self.ml_scorer = None
+        self.optimized_weights = None
+        
         # Cache para optimización
         self._calculation_cache = {}
         
@@ -55,12 +92,16 @@ class FactorKElite96Enhanced:
     
     def enable_scientific_improvements(self, cache_dir: str = "cache/scientific"):
         """
-        Habilita las mejoras científicas opcionales.
+        Habilita las mejoras científicas con IA avanzada.
         """
         try:
             self.scientific_improvements_enabled = True
             self.cache_dir = Path(cache_dir)
             self.cache_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Inicializar modelos de IA
+            self._initialize_ai_models()
+            
             if HiddenMarkovModelAnalyzer:
                 self.hmm_analyzer = HiddenMarkovModelAnalyzer()
             if StressTestGenerator:
@@ -69,108 +110,508 @@ class FactorKElite96Enhanced:
                 self.drift_detector = DataDriftDetector()
             if TemporalValidation:
                 self.temporal_validator = TemporalValidation()
-            self.logger.info("Mejoras científicas habilitadas")
+                
+            self.logger.info("Mejoras científicas con IA avanzada habilitadas")
         except Exception as e:
             self.logger.error(f"Error habilitando mejoras científicas: {e}")
             self.scientific_improvements_enabled = False
     
-    def load_and_prepare_data(self, file_path: str) -> pd.DataFrame:
+    def _initialize_ai_models(self):
+        """Inicializa modelos de IA avanzada."""
+        try:
+            # Isolation Forest para detección de anomalías
+            self.isolation_forest = IsolationForest(
+                contamination="auto",  # Cambiar de float a str
+                random_state=42,
+                n_estimators=100
+            )
+            
+            # Modelo de ML para scoring predictivo
+            self.ml_scorer = RandomForestRegressor(
+                n_estimators=100,
+                random_state=42,
+                max_depth=10
+            )
+            
+            # HMM real si está disponible
+            if HMM_AVAILABLE:
+                self.hmm_model = hmm.GaussianHMM(
+                    n_components=3,
+                    covariance_type="full",
+                    random_state=42
+                )
+            
+            self.logger.info("Modelos de IA inicializados correctamente")
+            
+        except Exception as e:
+            self.logger.warning(f"Error inicializando modelos de IA: {e}")
+            # Inicializar con valores por defecto si falla
+            self.isolation_forest = None
+            self.ml_scorer = None
+    
+    def _optimize_clustering(self, X: np.ndarray) -> Tuple[int, np.ndarray]:
         """
-        Carga y prepara datos usando el cargador mejorado.
+        Optimiza el número de clusters usando silhouette score y elbow method.
+        
+        Args:
+            X: Datos para clustering
+            
+        Returns:
+            Tuple con número óptimo de clusters y labels
         """
         try:
-            return self.data_manager.load_and_prepare_data_pipeline(file_path)
+            if not isinstance(X, np.ndarray):
+                X = np.array(X)
+            
+            # Probar diferentes números de clusters
+            n_clusters_range = range(2, min(8, len(X) // 10 + 1))
+            silhouette_scores = []
+            inertias = []
+            
+            for n_clusters in n_clusters_range:
+                kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
+                cluster_labels = kmeans.fit_predict(X)
+                
+                # Calcular silhouette score
+                if len(np.unique(cluster_labels)) > 1:
+                    silhouette_avg = silhouette_score(X, cluster_labels)
+                    silhouette_scores.append(silhouette_avg)
+                    inertias.append(kmeans.inertia_)
+                else:
+                    silhouette_scores.append(0)
+                    inertias.append(float('inf'))
+            
+            # Encontrar número óptimo de clusters
+            if silhouette_scores:
+                optimal_n_clusters = n_clusters_range[np.argmax(silhouette_scores)]
+            else:
+                optimal_n_clusters = 3
+            
+            # Aplicar clustering óptimo
+            kmeans_optimal = KMeans(n_clusters=optimal_n_clusters, random_state=42, n_init='auto')
+            optimal_labels = kmeans_optimal.fit_predict(X)
+            
+            self.logger.info(f"Clustering optimizado: {optimal_n_clusters} clusters (silhouette: {max(silhouette_scores):.3f})")
+            
+            return optimal_n_clusters, optimal_labels
+            
         except Exception as e:
-            self.logger.error(f"Error en load_and_prepare_data: {e}")
-            raise
+            self.logger.warning(f"Error optimizando clustering: {e}")
+            # Fallback a 3 clusters
+            kmeans = KMeans(n_clusters=3, random_state=42, n_init='auto')
+            return 3, kmeans.fit_predict(X)
+    
+    def _detect_anomalies_multivariate(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Detecta anomalías multivariadas usando Isolation Forest.
+        
+        Args:
+            df: DataFrame con métricas
+            
+        Returns:
+            DataFrame con columna de anomalías
+        """
+        try:
+            anomaly_metrics = ['Sharpe_Ratio', 'Max_DD_%', 'CAGR', 'Profit_factor', 'Total_Trades']
+            available_metrics = [m for m in anomaly_metrics if m in df.columns]
+            
+            if len(available_metrics) >= 2:
+                X = df[available_metrics].fillna(0).values
+                if self.isolation_forest is not None:
+                    anomaly_labels = self.isolation_forest.fit_predict(X)
+                else:
+                    self.logger.warning("IsolationForest no inicializado, asignando normalidad por defecto")
+                    anomaly_labels = np.ones(len(df))
+                df['Anomaly_Score'] = anomaly_labels
+                df['Is_Anomaly'] = (anomaly_labels == -1).astype(int)
+                anomaly_penalty = np.where(df['Is_Anomaly'] == 1, 0.2, 0)
+                if 'FK96_Elite_Enhanced' in df.columns:
+                    df['FK96_Elite_Enhanced'] *= (1 - anomaly_penalty)
+                self.logger.info(f"Detección de anomalías: {df['Is_Anomaly'].sum()} estrategias anómalas")
+            return df
+        except Exception as e:
+            self.logger.warning(f"Error detectando anomalías: {e}")
+            return df
+    
+    def _calculate_temporal_component(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calcula componente temporal basado en robustez estadística (trades/mes y trades/año) según temporalidad.
+        Penaliza solo si la estrategia tiene menos del mínimo para su temporalidad.
+        
+        Args:
+            df: DataFrame con estrategias
+            
+        Returns:
+            DataFrame con componente temporal
+        """
+        try:
+            # Inicializar score temporal
+            temporal_scores = np.full(len(df), 0.8)  # Score normal por defecto
+            
+            # Definir umbrales por temporalidad
+            temporalidad_minimos = {
+                'M1':  (2, 24),
+                'M5':  (2, 24),
+                'M15': (2, 24),
+                'M30': (2, 24),
+                'H1':  (1.5, 18),
+                'H4':  (1, 12),
+                'D1':  (0.5, 6),
+                'W1':  (0.25, 3)
+            }
+            
+            # Buscar columnas relevantes
+            tf_col = None
+            months_col = None
+            trades_col = None
+            for col in df.columns:
+                if col.strip().lower() in ["timeframe", "temporalidad"]:
+                    tf_col = col
+                if col.strip().lower() in ["total data months", "total_data_months", "months", "total_months"]:
+                    months_col = col
+                if col.strip().lower() in ["# of trades", "total_trades", "trades", "#_of_trades"]:
+                    trades_col = col
+            
+            if tf_col and months_col and trades_col:
+                timeframes = df[tf_col].astype(str).str.upper().str.strip()
+                total_months = pd.to_numeric(df[months_col], errors='coerce').fillna(1)
+                total_trades = pd.to_numeric(df[trades_col], errors='coerce').fillna(0)
+                trades_per_month = total_trades / total_months
+                trades_per_year = total_trades / (total_months / 12)
+                
+                for idx, tf in enumerate(timeframes):
+                    min_mes, min_ano = temporalidad_minimos.get(tf, (2, 24))  # Default mínimo intradía
+                    if trades_per_month.iloc[idx] < min_mes or trades_per_year.iloc[idx] < min_ano:
+                        temporal_scores[idx] = 0.2  # Penalización fuerte
+            else:
+                # Si faltan columnas, score neutral
+                temporal_scores[:] = 0.5
+            
+            df['FK96_Temporal_Component'] = temporal_scores
+            return df
+        except Exception as e:
+            self.logger.warning(f"Error calculando componente temporal: {e}")
+            df['FK96_Temporal_Component'] = 0.5
+            return df
+    
+    def _calculate_new_strategy_temporal_score(self, df_new: pd.DataFrame) -> np.ndarray:
+        """
+        Calcula score temporal específico para estrategias nuevas.
+        
+        Args:
+            df_new: DataFrame con solo estrategias nuevas
+            
+        Returns:
+            Array con scores temporales para estrategias nuevas
+        """
+        try:
+            # Métricas de calidad para estrategias nuevas
+            quality_metrics = []
+            
+            # Sharpe Ratio (indicador de calidad)
+            if 'Sharpe_Ratio' in df_new.columns:
+                sharpe = pd.to_numeric(df_new['Sharpe_Ratio'], errors='coerce').fillna(0)
+                quality_metrics.append((sharpe + 3) / 6)  # Normalizar a [0,1]
+            
+            # Profit Factor (eficiencia)
+            if 'Profit_factor' in df_new.columns:
+                pf = pd.to_numeric(df_new['Profit_factor'], errors='coerce').fillna(1)
+                quality_metrics.append((pf - 1) / 2)  # Normalizar a [0,1]
+            
+            # Max Drawdown (riesgo controlado)
+            if 'Max_DD_%' in df_new.columns:
+                dd = pd.to_numeric(df_new['Max_DD_%'], errors='coerce').fillna(0)
+                quality_metrics.append(1 - (dd / 100))  # Menor DD = mejor
+            
+            # CAGR (crecimiento)
+            if 'CAGR' in df_new.columns:
+                cagr = pd.to_numeric(df_new['CAGR'], errors='coerce').fillna(0)
+                quality_metrics.append((cagr + 50) / 100)  # Normalizar a [0,1]
+            
+            # Calcular score temporal para estrategias nuevas
+            if quality_metrics:
+                # Promedio de métricas de calidad
+                temporal_score = np.mean(quality_metrics, axis=0)
+                
+                # Aplicar factor de "novedad" (estrategias nuevas tienen potencial pero incertidumbre)
+                novelty_factor = 0.8  # Reducir score por incertidumbre temporal
+                temporal_score *= novelty_factor
+                
+                return temporal_score
+            else:
+                # Score por defecto para estrategias nuevas
+                return np.full(len(df_new), 0.4)  # Score moderado por incertidumbre
+                
+        except Exception as e:
+            self.logger.warning(f"Error calculando score temporal para estrategias nuevas: {e}")
+            return np.full(len(df_new), 0.4)
+    
+    def _calculate_predictive_component(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calcula componente predictivo usando ML para predecir éxito futuro.
+        
+        Args:
+            df: DataFrame con estrategias
+            
+        Returns:
+            DataFrame con componente predictivo
+        """
+        try:
+            # Métricas para predicción
+            predictive_features = []
+            feature_names = []
+            
+            # Métricas de calidad
+            if 'Sharpe_Ratio' in df.columns:
+                sharpe = pd.to_numeric(df['Sharpe_Ratio'], errors='coerce').fillna(0)
+                predictive_features.append(sharpe)
+                feature_names.append('Sharpe_Ratio')
+            
+            if 'Profit_factor' in df.columns:
+                pf = pd.to_numeric(df['Profit_factor'], errors='coerce').fillna(1)
+                predictive_features.append(pf)
+                feature_names.append('Profit_factor')
+            
+            if 'Max_DD_%' in df.columns:
+                dd = pd.to_numeric(df['Max_DD_%'], errors='coerce').fillna(0)
+                predictive_features.append(-dd)  # Negativo porque menor es mejor
+                feature_names.append('Max_DD_%')
+            
+            if 'CAGR' in df.columns:
+                cagr = pd.to_numeric(df['CAGR'], errors='coerce').fillna(0)
+                predictive_features.append(cagr)
+                feature_names.append('CAGR')
+            
+            if len(predictive_features) >= 2:
+                # Crear matriz de características
+                X = np.column_stack(predictive_features)
+                
+                # Crear target sintético basado en score actual
+                if 'FK96_Elite_Enhanced' in df.columns:
+                    target = df['FK96_Elite_Enhanced'].values
+                else:
+                    # Target basado en combinación de métricas
+                    target = np.mean(X, axis=1)
+                
+                # Entrenar modelo predictivo
+                try:
+                    if self.ml_scorer is not None:
+                        self.ml_scorer.fit(X, target)
+                        predictions = self.ml_scorer.predict(X)
+                        
+                        # Normalizar predicciones
+                        min_pred = predictions.min()
+                        max_pred = predictions.max()
+                        if max_pred > min_pred:
+                            df['FK96_Predictive_Component'] = (predictions - min_pred) / (max_pred - min_pred)
+                        else:
+                            df['FK96_Predictive_Component'] = 0.5
+                        
+                        self.logger.info(f"Componente predictivo calculado usando {len(feature_names)} características")
+                        
+                    else:
+                        self.logger.warning("ml_scorer no inicializado, asignando valor por defecto")
+                        df['FK96_Predictive_Component'] = 0.5
+                except Exception as e:
+                    self.logger.warning(f"Error entrenando modelo predictivo: {e}")
+                    df['FK96_Predictive_Component'] = 0.5
+            else:
+                df['FK96_Predictive_Component'] = 0.5
+            
+            return df
+            
+        except Exception as e:
+            self.logger.warning(f"Error calculando componente predictivo: {e}")
+            df['FK96_Predictive_Component'] = 0.5
+            return df
+    
+    def _apply_real_hmm_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Aplica análisis HMM real usando hmmlearn.
+        
+        Args:
+            df: DataFrame con estrategias
+            
+        Returns:
+            DataFrame con análisis HMM
+        """
+        try:
+            if not HMM_AVAILABLE or not hasattr(self, 'hmm_model') or self.hmm_model is None:
+                return self._apply_hmm_analysis(df)
+            
+            # Seleccionar métricas para HMM
+            hmm_metrics = ['Sharpe_Ratio', 'Max_DD_%', 'CAGR']
+            available_metrics = [m for m in hmm_metrics if m in df.columns]
+            
+            if len(available_metrics) >= 2:
+                # Preparar datos
+                X = df[available_metrics].fillna(0).values
+                
+                # Entrenar HMM
+                self.hmm_model.fit(X)
+                
+                # Predecir estados
+                states = self.hmm_model.predict(X)
+                
+                # Calcular scores por estado
+                df['HMM_State'] = states
+                
+                for state in range(self.hmm_model.n_components):
+                    state_mask = df['HMM_State'] == state
+                    if state_mask.any():
+                        state_score = df.loc[state_mask, 'FK96_Elite_Enhanced'].mean()
+                        df.loc[state_mask, 'HMM_Score'] = state_score
+                
+                # Calcular probabilidades de estado
+                state_probs = self.hmm_model.predict_proba(X)
+                df['HMM_State_Probability'] = np.max(state_probs, axis=1)
+                
+                self.logger.info(f"HMM real aplicado: {self.hmm_model.n_components} estados detectados")
+            
+            return df
+            
+        except Exception as e:
+            self.logger.warning(f"Error aplicando HMM real: {e}")
+            return self._apply_hmm_analysis(df)
+    
+    def _optimize_weights_evolutionary(self, df: pd.DataFrame) -> Dict[str, float]:
+        """
+        Optimiza pesos de componentes usando algoritmo evolutivo.
+        
+        Args:
+            df: DataFrame con estrategias
+            
+        Returns:
+            Diccionario con pesos optimizados
+        """
+        try:
+            # Componentes disponibles
+            components = []
+            component_names = []
+            
+            if 'FK96_Stability_Enhanced' in df.columns:
+                components.append(df['FK96_Stability_Enhanced'].values)
+                component_names.append('Stability')
+            
+            if 'FK96_Growth_Enhanced' in df.columns:
+                components.append(df['FK96_Growth_Enhanced'].values)
+                component_names.append('Growth')
+            
+            if 'FK96_Efficiency_Enhanced' in df.columns:
+                components.append(df['FK96_Efficiency_Enhanced'].values)
+                component_names.append('Efficiency')
+            
+            if 'FK96_Consistency_Enhanced' in df.columns:
+                components.append(df['FK96_Consistency_Enhanced'].values)
+                component_names.append('Consistency')
+            
+            if 'FK96_Risk_Enhanced' in df.columns:
+                components.append(df['FK96_Risk_Enhanced'].values)
+                component_names.append('Risk')
+            
+            if 'FK96_Temporal_Component' in df.columns:
+                components.append(df['FK96_Temporal_Component'].values)
+                component_names.append('Temporal')
+            
+            if 'FK96_Predictive_Component' in df.columns:
+                components.append(df['FK96_Predictive_Component'].values)
+                component_names.append('Predictive')
+            
+            if len(components) >= 2:
+                # Crear matriz de componentes
+                X = np.column_stack(components)
+                
+                # Función objetivo: maximizar varianza explicada
+                def objective_function(weights):
+                    weights = np.array(weights)
+                    weights = weights / np.sum(weights)  # Normalizar
+                    combined_score = np.dot(X, weights)
+                    return np.var(combined_score)  # Maximizar varianza
+                
+                # Optimización simple (podría extenderse a algoritmos genéticos)
+                from scipy.optimize import minimize
+                
+                n_components = len(components)
+                initial_weights = np.ones(n_components) / n_components
+                
+                # Restricciones: pesos suman 1
+                constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+                
+                # Límites: pesos entre 0 y 1
+                bounds = [(0, 1)] * n_components
+                
+                result = minimize(
+                    lambda x: -objective_function(x),  # Minimizar negativo = maximizar
+                    initial_weights,
+                    method='SLSQP',
+                    bounds=bounds,
+                    constraints=constraints
+                )
+                
+                if result.success:
+                    optimized_weights = result.x / np.sum(result.x)
+                    self.optimized_weights = dict(zip(component_names, optimized_weights))
+                    
+                    self.logger.info(f"Pesos optimizados: {self.optimized_weights}")
+                    return self.optimized_weights
+                else:
+                    self.logger.warning("Optimización de pesos falló, usando pesos por defecto")
+            
+            # Pesos por defecto
+            default_weights = {
+                'Stability': 0.25,
+                'Growth': 0.25,
+                'Efficiency': 0.20,
+                'Consistency': 0.15,
+                'Risk': 0.15
+            }
+            
+            return default_weights
+            
+        except Exception as e:
+            self.logger.warning(f"Error optimizando pesos: {e}")
+            return {
+                'Stability': 0.25,
+                'Growth': 0.25,
+                'Efficiency': 0.20,
+                'Consistency': 0.15,
+                'Risk': 0.15
+            }
     
     def evaluate_strategies(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Evalúa estrategias con procesamiento optimizado y callbacks de progreso.
+        Recibe un DataFrame ya validado y preparado por DataManager.
+        No realizar validación ni carga local aquí.
         """
-        try:
-            self.logger.info("Iniciando evaluación de estrategias")
-            if self.progress_callback:
-                self.progress_callback.update_progress("Evaluación", 0, 100, "Iniciando evaluación...")
-            df = self._validate_input_data(df)
-            if self.progress_callback:
-                self.progress_callback.update_progress("Evaluación", 10, 100, "Datos validados, calculando componentes...")
-            df = self._calculate_factor_k_elite(df)
-            if self.progress_callback:
-                self.progress_callback.update_progress("Evaluación", 60, 100, "Componentes calculados, aplicando mejoras...")
-            if self.scientific_improvements_enabled:
-                df = self._apply_scientific_improvements(df)
-            if self.progress_callback:
-                self.progress_callback.update_progress("Evaluación", 80, 100, "Finalizando evaluación...")
-            df = self._apply_final_normalization(df)
-            df = self._assign_quality_categories(df)
-            if self.progress_callback:
-                self.progress_callback.update_progress("Evaluación", 100, 100, "Evaluación completada")
-            gc.collect()
-            return df
-        except Exception as e:
-            self.logger.error(f"Error en evaluate_strategies: {str(e)}")
-            if self.progress_callback:
-                self.progress_callback.update_progress("Evaluación", 0, 100, f"Error: {str(e)}")
-            raise ValueError(f"Error en el análisis: {str(e)}")
+        self.logger.debug("[INICIO] evaluate_strategies - Entrada recibida (datos validados por DataManager)")
+        self.logger.info("Evaluando estrategias (datos ya preparados por DataManager)")
+        if self.progress_callback:
+            self.progress_callback.update_progress("Evaluación", 0, 100, "Iniciando evaluación...")
+        df = self._calculate_factor_k_elite(df)
+        if self.progress_callback:
+            self.progress_callback.update_progress("Evaluación", 60, 100, "Componentes calculados, aplicando mejoras...")
+        if self.scientific_improvements_enabled:
+            df = self._apply_scientific_improvements(df)
+        if self.progress_callback:
+            self.progress_callback.update_progress("Evaluación", 80, 100, "Finalizando evaluación...")
+        df = self._apply_final_normalization(df)
+        df = self._assign_quality_categories(df)
+        if self.progress_callback:
+            self.progress_callback.update_progress("Evaluación", 100, 100, "Evaluación completada")
+        self.logger.debug("[FIN] evaluate_strategies - Evaluación completada")
+        gc.collect()
+        return df
     
-    def _validate_input_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Valida los datos de entrada con validaciones mejoradas."""
-        try:
-            if df is None or df.empty:
-                raise ValueError("DataFrame vacío o None")
-            
-            # Verificar columnas mínimas requeridas
-            required_columns = ['Strategy_Name']
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            if missing_columns:
-                raise ValueError(f"Columnas requeridas faltantes: {missing_columns}")
-            
-            # Verificar que hay suficientes datos
-            if len(df) < 5:
-                raise ValueError("Insuficientes datos para análisis (mínimo 5 estrategias)")
-            
-            # Verificar que hay columnas numéricas
-            numeric_columns = df.select_dtypes(include=[np.number]).columns
-            if len(numeric_columns) < 3:
-                raise ValueError("Insuficientes columnas numéricas para análisis")
-            
-            # Limpiar datos extremos
-            df = self._clean_extreme_values(df)
-            
-            return df
-            
-        except Exception as e:
-            self.logger.error(f"Error validando datos de entrada: {e}")
-            raise
-    
-    def _clean_extreme_values(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Limpia valores extremos en columnas numéricas."""
-        try:
-            numeric_columns = df.select_dtypes(include=[np.number]).columns
-            
-            for col in numeric_columns:
-                if col in df.columns:
-                    # Calcular percentiles para detectar outliers
-                    q1 = float(df[col].quantile(0.01))
-                    q3 = float(df[col].quantile(0.99))
-                    iqr = q3 - q1
-                    
-                    # Definir límites
-                    lower_bound = q1 - 1.5 * iqr
-                    upper_bound = q3 + 1.5 * iqr
-                    
-                    # Reemplazar outliers con límites
-                    df[col] = df[col].clip(lower=lower_bound, upper=upper_bound)
-            
-            return df
-            
-        except Exception as e:
-            self.logger.warning(f"Error limpiando valores extremos: {e}")
-            return df
+    def load_and_prepare_data(self, file_path: str) -> pd.DataFrame:
+        """
+        Carga y prepara datos usando el pipeline centralizado de DataManager.
+        Cumple con la arquitectura profesional: toda gestión de datos debe estar centralizada.
+        """
+        self.logger.debug(f"[FactorKElite96Enhanced] Llamando a DataManager.load_and_prepare_data_pipeline para {file_path}")
+        return self.data_manager.load_and_prepare_data_pipeline(file_path)
     
     def _calculate_factor_k_elite(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calcula el Factor K Elite con procesamiento optimizado."""
+        """Calcula el Factor K Elite con IA avanzada."""
         try:
             # Calcular componentes principales
             df = self._calculate_stability_component(df)
@@ -179,17 +620,54 @@ class FactorKElite96Enhanced:
             df = self._calculate_consistency_component(df)
             df = self._calculate_risk_component(df)
             
-            # Calcular Factor K Elite
-            df['FK96_Elite_Enhanced'] = (
-                df['FK96_Stability_Enhanced'] * 0.25 +
-                df['FK96_Growth_Enhanced'] * 0.25 +
-                df['FK96_Efficiency_Enhanced'] * 0.20 +
-                df['FK96_Consistency_Enhanced'] * 0.15 +
-                df['FK96_Risk_Enhanced'] * 0.15
-            )
+            # Calcular componentes de IA avanzada
+            df = self._calculate_temporal_component(df)
+            df = self._calculate_predictive_component(df)
+            
+            # Detectar anomalías multivariadas
+            df = self._detect_anomalies_multivariate(df)
+            
+            # Optimizar pesos de componentes
+            optimized_weights = self._optimize_weights_evolutionary(df)
+            
+            # Calcular Factor K Elite con pesos optimizados
+            df['FK96_Elite_Enhanced'] = 0.0
+            
+            # Aplicar pesos optimizados
+            if 'FK96_Stability_Enhanced' in df.columns:
+                df['FK96_Elite_Enhanced'] += df['FK96_Stability_Enhanced'] * optimized_weights.get('Stability', 0.25)
+            
+            if 'FK96_Growth_Enhanced' in df.columns:
+                df['FK96_Elite_Enhanced'] += df['FK96_Growth_Enhanced'] * optimized_weights.get('Growth', 0.25)
+            
+            if 'FK96_Efficiency_Enhanced' in df.columns:
+                df['FK96_Elite_Enhanced'] += df['FK96_Efficiency_Enhanced'] * optimized_weights.get('Efficiency', 0.20)
+            
+            if 'FK96_Consistency_Enhanced' in df.columns:
+                df['FK96_Elite_Enhanced'] += df['FK96_Consistency_Enhanced'] * optimized_weights.get('Consistency', 0.15)
+            
+            if 'FK96_Risk_Enhanced' in df.columns:
+                df['FK96_Elite_Enhanced'] += df['FK96_Risk_Enhanced'] * optimized_weights.get('Risk', 0.15)
+            
+            # Añadir componentes de IA si están disponibles
+            if 'FK96_Temporal_Component' in df.columns:
+                temporal_weight = optimized_weights.get('Temporal', 0.1)
+                df['FK96_Elite_Enhanced'] += df['FK96_Temporal_Component'] * temporal_weight
+            
+            if 'FK96_Predictive_Component' in df.columns:
+                predictive_weight = optimized_weights.get('Predictive', 0.1)
+                df['FK96_Elite_Enhanced'] += df['FK96_Predictive_Component'] * predictive_weight
             
             # Aplicar penalizaciones dinámicas
             df = self._apply_dynamic_penalties(df)
+            
+            # Crear versión científica con componentes de IA
+            df['FK96_Elite_Enhanced_Scientific'] = df['FK96_Elite_Enhanced'].copy()
+            
+            # Añadir información de anomalías al score científico
+            if 'Is_Anomaly' in df.columns:
+                anomaly_penalty = np.where(df['Is_Anomaly'] == 1, 0.3, 0)
+                df['FK96_Elite_Enhanced_Scientific'] *= (1 - anomaly_penalty)
             
             return df
             
@@ -425,17 +903,16 @@ class FactorKElite96Enhanced:
             return df
     
     def _apply_scientific_improvements(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Aplica mejoras científicas si están habilitadas."""
+        """Aplica mejoras científicas con IA avanzada."""
         try:
             if not self.scientific_improvements_enabled:
                 return df
             
-            # Detectar regímenes de mercado
+            # Detectar regímenes de mercado optimizados
             df = self._detect_market_regimes(df)
             
-            # Aplicar análisis HMM si está disponible
-            if self.hmm_analyzer:
-                df = self._apply_hmm_analysis(df)
+            # Aplicar análisis HMM real
+            df = self._apply_real_hmm_analysis(df)
             
             # Aplicar mejora científica al score
             df = self._apply_scientific_score_enhancement(df)
@@ -456,22 +933,18 @@ class FactorKElite96Enhanced:
             if len(available_metrics) >= 2:
                 # Preparar datos para clustering
                 X = df[available_metrics].fillna(0).values
+                # Asegurar que X sea un np.ndarray
+                if not isinstance(X, np.ndarray):
+                    X = np.array(X)
                 
                 # Aplicar K-means clustering
-                from sklearn.cluster import KMeans
-                from sklearn.preprocessing import StandardScaler
-                
-                scaler = StandardScaler()
-                X_scaled = scaler.fit_transform(X)
-                
-                kmeans = KMeans(n_clusters=3, random_state=42, n_init='auto')
-                cluster_labels = kmeans.fit_predict(X_scaled)
+                optimal_n_clusters, cluster_labels = self._optimize_clustering(X)
                 
                 # Asignar regímenes
                 df['Market_Regime'] = cluster_labels
                 
                 # Calcular scores por régimen
-                for regime in range(3):
+                for regime in range(optimal_n_clusters):
                     regime_mask = df['Market_Regime'] == regime
                     if regime_mask.any():
                         regime_score = df.loc[regime_mask, 'FK96_Elite_Enhanced'].mean()

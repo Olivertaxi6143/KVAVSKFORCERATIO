@@ -50,15 +50,12 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 # Importar componentes del core engine
 from src.core.integration_layer import (
     ConfigManagerEnhanced,
-    DataLoaderEnhanced,
     FactorKElite96Enhanced,
     QVAScorerEnhanced,
     UnifiedEvaluatorEnhanced,
     ProgressCallback,
-    RobustErrorHandler,
     run_complete_analysis_with_gui_integration,
-    run_unified_analysis_enhanced,
-    categorize_quality,
+    run_unified_analysis,
     predictividad_is_oos_empirica
 )
 
@@ -158,8 +155,7 @@ class CLIRunner:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.config_manager = ConfigManagerEnhanced()
-        self.data_loader = DataLoaderEnhanced()
-        self.error_handler = RobustErrorHandler()
+        self.data_loader = DataManager() # Changed from DataLoaderEnhanced
         self.progress_callback = ProgressCallback()
         self.data_validator = DataValidator()
         
@@ -382,20 +378,14 @@ class CLIRunner:
                 try:
                     if config["analysis_type"] == "unified":
                         self.logger.info("🔬 Ejecutando análisis Unified...")
-                        results, summary = run_unified_analysis_enhanced(
-                            df, 
-                            config=config, 
+                        results_df = run_unified_analysis(df, config=config)
+                        summary = None  # O usar un evaluador si se requiere
+                    else:
+                        results, summary = run_complete_analysis_with_gui_integration(
+                            df,
+                            config=config,
                             progress_callback=self.progress_callback
                         )
-                    else:
-                        self.logger.info("🔬 Ejecutando análisis Factor K...")
-                        results = run_complete_analysis_with_gui_integration(
-                            self.current_config["kpi_file"],
-                            config=config,
-                            progress_callback=self.progress_callback,
-                            analysis_type=config["analysis_type"]
-                        )
-                        summary = {}
                     
                     # Verificar que results sea un DataFrame válido
                     if results is None:
@@ -411,11 +401,6 @@ class CLIRunner:
                         self.logger.error("❌ Todos los intentos fallaron")
                         return False
                     time.sleep(2)  # Esperar antes del siguiente intento
-            
-            # Aplicar categorización de calidad (results ya es DataFrame aquí)
-            self.logger.info(f"Tipo de results antes de categorize_quality: {type(results)}")
-            results = categorize_quality(results)
-            self.logger.info(f"Tipo de results después de categorize_quality: {type(results)}")
             
             # Aplicar análisis IS/OOS (results ya es DataFrame aquí)
             self.logger.info(f"Tipo de results antes de predictividad_is_oos_empirica: {type(results)}")

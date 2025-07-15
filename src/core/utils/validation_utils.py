@@ -2,6 +2,7 @@
 Utilidades de validación para el core engine.
 
 Este módulo contiene funciones para validar datos y configuración.
+NOTA: Las funciones básicas de validación se han centralizado en src/gui/utils.py
 """
 
 import pandas as pd
@@ -13,52 +14,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Funciones de validación básicas eliminadas - usar src/gui/utils.py en su lugar
+# from src.gui.utils import validate_dataframe, validate_numeric_column
 
-def validate_dataframe(df: pd.DataFrame, required_columns: Optional[List[str]] = None, 
-                      min_rows: int = 1, max_rows: Optional[int] = None) -> Tuple[bool, List[str]]:
-    """
-    Valida que un DataFrame tenga la estructura esperada.
-    
-    Args:
-        df: DataFrame a validar
-        required_columns: Lista de columnas requeridas
-        min_rows: Número mínimo de filas
-        max_rows: Número máximo de filas
-        
-    Returns:
-        tuple: (es_válido, lista_de_errores)
-    """
-    errors = []
-    
-    # Verificar que no esté vacío
-    if df.empty:
-        errors.append("DataFrame está vacío")
-        return False, errors
-    
-    # Verificar número de filas
-    if len(df) < min_rows:
-        errors.append(f"DataFrame tiene {len(df)} filas, mínimo requerido: {min_rows}")
-    
-    if max_rows is not None and len(df) > max_rows:
-        errors.append(f"DataFrame tiene {len(df)} filas, máximo permitido: {max_rows}")
-    
-    # Verificar columnas requeridas
-    if required_columns is not None:
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            errors.append(f"Columnas faltantes: {missing_columns}")
-    
-    # Verificar tipos de datos
-    numeric_columns = df.select_dtypes(include=[np.number]).columns
-    if len(numeric_columns) == 0:
-        errors.append("No hay columnas numéricas en el DataFrame")
-    
-    # Verificar valores duplicados en índice
-    if df.index.duplicated().any():
-        errors.append("El índice contiene valores duplicados")
-    
-    return len(errors) == 0, errors
-
+# ===================== FUNCIONES ESPECÍFICAS DEL CORE (NO DUPLICADAS) =====================
 
 def validate_config(config: Dict[str, Any], required_keys: Optional[List[str]] = None) -> Tuple[bool, List[str]]:
     """
@@ -198,18 +157,10 @@ def validate_file_path(file_path: str, file_type: Optional[str] = None) -> Tuple
         errors.append(f"Ruta no es un archivo: {file_path}")
         return False, errors
     
-    # Validar extensión si se especifica
+    # Verificar extensión si se especifica
     if file_type is not None:
-        expected_extensions = {
-            'csv': ['.csv'],
-            'excel': ['.xlsx', '.xls'],
-            'json': ['.json'],
-            'config': ['.json', '.yaml', '.yml']
-        }
-        
-        if file_type in expected_extensions:
-            if path.suffix.lower() not in expected_extensions[file_type]:
-                errors.append(f"Archivo debe tener extensión {expected_extensions[file_type]}")
+        if not path.suffix.lower() == f".{file_type.lower()}":
+            errors.append(f"Archivo debe tener extensión .{file_type}")
     
     return len(errors) == 0, errors
 
@@ -217,7 +168,7 @@ def validate_file_path(file_path: str, file_type: Optional[str] = None) -> Tuple
 def validate_numeric_range(value: float, min_val: Optional[float] = None, max_val: Optional[float] = None, 
                           name: str = "valor") -> Tuple[bool, List[str]]:
     """
-    Valida que un valor numérico esté en un rango específico.
+    Valida que un valor numérico esté en el rango especificado.
     
     Args:
         value: Valor a validar
@@ -235,10 +186,10 @@ def validate_numeric_range(value: float, min_val: Optional[float] = None, max_va
         return False, errors
     
     if min_val is not None and value < min_val:
-        errors.append(f"{name} debe ser >= {min_val} (actual: {value})")
+        errors.append(f"{name} debe ser >= {min_val}")
     
     if max_val is not None and value > max_val:
-        errors.append(f"{name} debe ser <= {max_val} (actual: {value})")
+        errors.append(f"{name} debe ser <= {max_val}")
     
     return len(errors) == 0, errors
 
@@ -291,20 +242,20 @@ def validate_series_quality(series: pd.Series, min_non_null: float = 0.5) -> Tup
     # Verificar proporción de valores no nulos
     non_null_ratio = series.notna().mean()
     if non_null_ratio < min_non_null:
-        errors.append(f"Proporción de valores no nulos ({non_null_ratio:.2%}) < {min_non_null:.2%}")
+        errors.append(f"Proporción de valores no nulos ({non_null_ratio:.2%}) es menor al mínimo ({min_non_null:.2%})")
     
-    # Verificar si hay valores infinitos
+    # Verificar valores infinitos
     if np.isinf(series).any():
         errors.append("Serie contiene valores infinitos")
     
-    # Verificar si hay valores extremos (outliers)
+    # Verificar valores extremos (outliers)
     if series.dtype in ['float64', 'int64']:
         Q1 = series.quantile(0.25)
         Q3 = series.quantile(0.75)
         IQR = Q3 - Q1
-        outliers = ((series < (Q1 - 1.5 * IQR)) | (series > (Q3 + 1.5 * IQR))).sum()
-        if outliers > len(series) * 0.1:  # Más del 10% son outliers
-            errors.append(f"Serie contiene muchos outliers ({outliers} valores)")
+        outliers = series[(series < Q1 - 1.5 * IQR) | (series > Q3 + 1.5 * IQR)]
+        if len(outliers) > len(series) * 0.1:  # Más del 10% son outliers
+            errors.append(f"Serie contiene muchos outliers ({len(outliers)} de {len(series)})")
     
     return len(errors) == 0, errors
 
@@ -314,7 +265,7 @@ def validate_correlation_matrix(corr_matrix: pd.DataFrame) -> Tuple[bool, List[s
     Valida una matriz de correlación.
     
     Args:
-        corr_matrix: Matriz de correlación
+        corr_matrix: Matriz de correlación a validar
         
     Returns:
         tuple: (es_válido, lista_de_errores)
@@ -333,9 +284,14 @@ def validate_correlation_matrix(corr_matrix: pd.DataFrame) -> Tuple[bool, List[s
     if (corr_matrix < -1).any().any() or (corr_matrix > 1).any().any():
         errors.append("Valores de correlación deben estar en [-1, 1]")
     
-    # Verificar que la diagonal sea 1
-    if not np.allclose(np.diag(corr_matrix), 1):
+    # Verificar diagonal
+    diagonal = np.diag(corr_matrix.values)
+    if not np.allclose(diagonal, 1.0):
         errors.append("Diagonal de matriz de correlación debe ser 1")
+    
+    # Verificar simetría
+    if not np.allclose(corr_matrix.values, corr_matrix.values.T):
+        errors.append("Matriz de correlación debe ser simétrica")
     
     return len(errors) == 0, errors
 
@@ -345,7 +301,7 @@ def validate_analysis_results(results: Dict[str, Any]) -> Tuple[bool, List[str]]
     Valida resultados de análisis.
     
     Args:
-        results: Resultados de análisis
+        results: Resultados a validar
         
     Returns:
         tuple: (es_válido, lista_de_errores)
@@ -357,18 +313,21 @@ def validate_analysis_results(results: Dict[str, Any]) -> Tuple[bool, List[str]]
         return False, errors
     
     # Verificar campos requeridos
-    required_fields = ['success', 'data']
+    required_fields = ['status', 'data']
     for field in required_fields:
         if field not in results:
-            errors.append(f"Campo requerido faltante: {field}")
+            errors.append(f"Campo requerido '{field}' no encontrado en resultados")
     
-    # Validar campo success
-    if 'success' in results and not isinstance(results['success'], bool):
-        errors.append("Campo 'success' debe ser booleano")
+    # Validar status
+    if 'status' in results and results['status'] not in ['success', 'error', 'warning']:
+        errors.append("Status debe ser 'success', 'error' o 'warning'")
     
-    # Validar campo data si existe
-    if 'data' in results and results['data'] is not None:
-        if not isinstance(results['data'], pd.DataFrame):
-            errors.append("Campo 'data' debe ser un DataFrame")
+    # Validar timestamp si existe
+    if 'timestamp' in results:
+        try:
+            from datetime import datetime
+            datetime.fromisoformat(results['timestamp'])
+        except (ValueError, TypeError):
+            errors.append("Timestamp debe ser una fecha ISO válida")
     
     return len(errors) == 0, errors 

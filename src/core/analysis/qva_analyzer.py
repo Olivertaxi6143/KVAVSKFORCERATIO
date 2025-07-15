@@ -27,7 +27,8 @@ warnings.filterwarnings('ignore')
 
 # Importar DataManager y utilidades
 from src.data.data_manager import DataManager, create_data_manager
-from src.data.data_utils import read_and_prepare, validate_dataframe
+from src.data.data_utils import read_and_prepare
+from src.gui.utils import validate_dataframe
 from src.core.config.config_manager import ConfigManagerEnhanced
 from src.core.config.progress_callback import ProgressCallback
 from src.logger_config import setup_logger
@@ -76,14 +77,13 @@ def ensure_series(obj: Any, index: Any = None) -> pd.Series:
 class QVAScorerEnhanced:
     """
     QVA Scorer unificado con funcionalidades básicas y avanzadas.
-    
-    Características principales:
-    - Scoring QVA robusto con penalizaciones avanzadas
-    - Integración con ExtraKPIManager para KPIs extra por estilo de trading
-    - Componentes de ML opcionales (predicción OOS, detección overfitting)
-    - Explicabilidad con SHAP (opcional)
-    - Optimización automática de pesos y penalizaciones (opcional)
-    - Pesos dinámicos según régimen de mercado (opcional)
+
+    ADVERTENCIA PROFESIONAL:
+    ------------------------------------------------------------
+    Este módulo SOLO debe recibir DataFrames ya validados y preparados por DataManager
+    u otras funciones centralizadas de la capa data. No realizar validación, carga ni
+    manipulación local de datos aquí. Toda gestión de datos debe estar centralizada.
+    ------------------------------------------------------------
     """
     
     def __init__(self, config_manager: Optional[ConfigManagerEnhanced] = None, 
@@ -231,16 +231,11 @@ class QVAScorerEnhanced:
     
     def calculate_qva_score(self, df: Optional[pd.DataFrame] = None) -> pd.Series:
         """
-        Calcula el score QVA unificado con funcionalidades básicas y avanzadas.
-        
-        Args:
-            df: DataFrame con datos (opcional, usa DataManager si no se proporciona)
-            
-        Returns:
-            Series con scores QVA normalizados en [0,1]
+        Recibe un DataFrame ya validado y preparado por DataManager.
+        No realizar validación ni carga local aquí.
         """
+        self.logger.debug("[INICIO] calculate_qva_score - Entrada recibida (datos validados por DataManager)")
         try:
-            self.logger.info("🚀 Iniciando cálculo QVA Score unificado")
             
             # Obtener datos del DataManager si no se proporcionan
             if df is None:
@@ -334,6 +329,7 @@ class QVAScorerEnhanced:
             
             if self.progress_callback:
                 self.progress_callback.update_progress("QVA", 100, 100, "Cálculo QVA completado")
+            self.logger.debug("[FIN] calculate_qva_score - Score calculado")
             
             return qva_score
             
@@ -773,15 +769,10 @@ class QVAScorerEnhanced:
     
     def compute_qva_score_robust(self, df: pd.DataFrame, alpha: float = 0.8) -> pd.Series:
         """
-        Calcula el score QVA robusto con parámetro alpha.
-        
-        Args:
-            df: DataFrame con datos
-            alpha: Parámetro de robustez (0-1)
-            
-        Returns:
-            Series con scores QVA robustos
+        Recibe un DataFrame ya validado y preparado por DataManager.
+        No realizar validación ni carga local aquí.
         """
+        self.logger.info("Calculando QVA Score Robusto (datos ya preparados por DataManager)")
         try:
             # Calcular score QVA normal
             qva_score = self.calculate_qva_score(df)

@@ -3,8 +3,9 @@ import pandas as pd
 def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """
     Normaliza nombres de columnas según el estándar único del sistema.
-    - 'Stagnation': periodo de estancamiento (tiempo o trades sin nuevo máximo de equity).
-    - 'Stagnation_Trades': número máximo de operaciones consecutivas en estancamiento (si la fuente lo provee).
+    Esta función debe ser la única fuente de normalización de columnas en el flujo de datos.
+    Ejemplo de uso:
+        df = normalize_column_names(df)
     """
     column_mapping = {
         # Integrales

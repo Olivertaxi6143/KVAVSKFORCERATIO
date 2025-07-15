@@ -71,6 +71,28 @@ class WalkForwardResult:
     predictability_score: float
 
 
+@dataclass
+class TemporalValidationResult:
+    """Resultado de validación temporal avanzada."""
+    fold_results: List[Dict[str, Any]]
+    overall_metrics: Dict[str, float]
+    stability_analysis: Dict[str, float]
+    degradation_analysis: Dict[str, float]
+    robustness_score: float
+    temporal_consistency: float
+
+
+@dataclass
+class WalkForwardConfig:
+    """Configuración para walk-forward validation."""
+    n_splits: int = 5
+    test_size: float = 0.2
+    min_train_size: int = 30
+    target_column: str = "Unified_Score"
+    feature_columns: Optional[List[str]] = None
+    model_type: str = "random_forest"
+
+
 class AdvancedMLValidator:
     """
     Validador avanzado de ML para estrategias de trading.
@@ -679,6 +701,331 @@ class AdvancedMLValidator:
             stability_score=0.0,
             degradation_score=0.0,
             predictability_score=0.0
+        )
+    
+    def perform_advanced_temporal_validation(self, 
+                                          data: pd.DataFrame,
+                                          target_column: Optional[str] = None,
+                                          feature_columns: Optional[List[str]] = None) -> TemporalValidationResult:
+        """
+        Realiza validación temporal avanzada con análisis de estabilidad y degradación.
+        
+        Args:
+            data: DataFrame con datos de estrategias
+            target_column: Columna objetivo para validación
+            feature_columns: Columnas de características (opcional)
+            
+        Returns:
+            TemporalValidationResult con análisis temporal completo
+        """
+        try:
+            self.logger.info("🔬 Iniciando validación temporal avanzada...")
+            
+            # Configuración por defecto
+            if target_column is None:
+                target_column = self.config.target_column
+            
+            # Asegurar que target_column no sea None
+            if target_column is None:
+                target_column = "Unified_Score"
+            
+            if feature_columns is None:
+                feature_columns = self._select_temporal_features(data, target_column)
+            
+            # Preparar datos
+            X, y = self._prepare_temporal_data(data, feature_columns, target_column)
+            
+            if len(X) < self.config.min_train_size:
+                self.logger.warning(f"⚠️ Datos insuficientes para validación temporal: {len(X)} < {self.config.min_train_size}")
+                return self._create_empty_temporal_result()
+            
+            # Realizar walk-forward validation
+            fold_results = []
+            all_predictions = []
+            all_actuals = []
+            
+            # Configurar TimeSeriesSplit para validación temporal
+            from sklearn.model_selection import TimeSeriesSplit
+            tscv = TimeSeriesSplit(n_splits=self.config.n_splits)
+            
+            for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(X)):
+                try:
+                    # Dividir datos temporalmente
+                    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+                    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+                    
+                    # Entrenar modelo
+                    self.model.fit(X_train, y_train)
+                    
+                    # Predecir
+                    y_pred = self.model.predict(X_test)
+                    
+                    # Calcular métricas
+                    metrics = self._calculate_temporal_metrics(y_test, y_pred)
+                    
+                    # Calcular importancia de características
+                    feature_importance = self._calculate_feature_importance(X_train, y_train)
+                    
+                    fold_result = {
+                        'fold': fold_idx + 1,
+                        'train_size': len(X_train),
+                        'test_size': len(X_test),
+                        'metrics': metrics,
+                        'feature_importance': feature_importance,
+                        'predictions': y_pred.tolist(),
+                        'actuals': y_test.tolist()
+                    }
+                    
+                    fold_results.append(fold_result)
+                    all_predictions.extend(y_pred.tolist())
+                    all_actuals.extend(y_test.tolist())
+                    
+                except Exception as e:
+                    self.logger.warning(f"Error en fold {fold_idx + 1}: {e}")
+                    continue
+            
+            if not fold_results:
+                self.logger.error("❌ No se pudo completar ningún fold de validación temporal")
+                return self._create_empty_temporal_result()
+            
+            # Calcular métricas generales
+            overall_metrics = self._calculate_overall_temporal_metrics(fold_results)
+            
+            # Análisis de estabilidad temporal
+            stability_analysis = self._analyze_temporal_stability(fold_results)
+            
+            # Análisis de degradación temporal
+            degradation_analysis = self._analyze_temporal_degradation(fold_results)
+            
+            # Calcular robustez temporal
+            robustness_score = self._calculate_temporal_robustness(fold_results)
+            
+            # Calcular consistencia temporal
+            temporal_consistency = self._calculate_temporal_consistency(all_predictions, all_actuals)
+            
+            result = TemporalValidationResult(
+                fold_results=fold_results,
+                overall_metrics=overall_metrics,
+                stability_analysis=stability_analysis,
+                degradation_analysis=degradation_analysis,
+                robustness_score=robustness_score,
+                temporal_consistency=temporal_consistency
+            )
+            
+            self.logger.info("✅ Validación temporal avanzada completada")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en validación temporal: {e}")
+            return self._create_empty_temporal_result()
+    
+    def _select_temporal_features(self, data: pd.DataFrame, target_column: str) -> List[str]:
+        """Selecciona características para validación temporal."""
+        # Excluir la columna objetivo y columnas no numéricas
+        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if target_column in numeric_cols:
+            numeric_cols.remove(target_column)
+        
+        # Priorizar características relevantes para validación temporal
+        priority_features = [
+            'Profit_factor', 'Sharpe_Ratio', 'Max_DD_%',
+            'Win_Rate_%', 'Total_Trades', 'CAGR',
+            'FK96_Elite_Enhanced', 'QVA_Score', 'Unified_Score'
+        ]
+        
+        selected_features = []
+        for feature in priority_features:
+            if feature in numeric_cols:
+                selected_features.append(feature)
+                numeric_cols.remove(feature)
+        
+        # Agregar otras características numéricas
+        selected_features.extend(numeric_cols[:5])
+        
+        return selected_features[:10]  # Máximo 10 características
+    
+    def _prepare_temporal_data(self, 
+                              data: pd.DataFrame, 
+                              feature_columns: List[str], 
+                              target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
+        """Prepara datos para validación temporal."""
+        # Verificar que las columnas existen
+        available_features = [col for col in feature_columns if col in data.columns]
+        
+        if len(available_features) < 2:
+            self.logger.warning("⚠️ Pocas características disponibles para validación temporal")
+            # Usar columnas numéricas como fallback
+            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+            if target_column in numeric_cols:
+                numeric_cols.remove(target_column)
+            available_features = numeric_cols[:5]
+        
+        if target_column not in data.columns:
+            raise ValueError(f"Columna objetivo '{target_column}' no encontrada en los datos")
+        
+        # Preparar X e y
+        X = data[available_features].copy()
+        y = data[target_column]
+        
+        # Limpiar datos
+        X = X.replace([np.inf, -np.inf], np.nan)
+        X = X.fillna(X.median())
+        
+        y = y.replace([np.inf, -np.inf], np.nan)
+        y = y.dropna()
+        
+        # Alinear índices
+        common_index = X.index.intersection(y.index)
+        X = X.loc[common_index]
+        y = y.loc[common_index]
+        
+        return X, y
+    
+    def _calculate_temporal_metrics(self, y_true: pd.Series, y_pred: np.ndarray) -> Dict[str, float]:
+        """Calcula métricas para un fold temporal."""
+        try:
+            from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+            
+            r2 = r2_score(y_true, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+            mae = mean_absolute_error(y_true, y_pred)
+            
+            # Métricas adicionales para validación temporal
+            correlation = np.corrcoef(y_true, y_pred)[0, 1] if len(y_true) > 1 else 0.0
+            bias = np.mean(y_pred - y_true)
+            
+            return {
+                'r2_score': float(r2),
+                'rmse': float(rmse),
+                'mae': float(mae),
+                'correlation': float(correlation),
+                'bias': float(bias)
+            }
+        except Exception as e:
+            self.logger.warning(f"Error calculando métricas temporales: {e}")
+            return {
+                'r2_score': 0.0, 'rmse': 0.0, 'mae': 0.0,
+                'correlation': 0.0, 'bias': 0.0
+            }
+    
+    def _calculate_overall_temporal_metrics(self, fold_results: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Calcula métricas generales de validación temporal."""
+        if not fold_results:
+            return {}
+        
+        # Extraer métricas de todos los folds
+        r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
+        rmse_scores = [fold['metrics']['rmse'] for fold in fold_results]
+        correlation_scores = [fold['metrics']['correlation'] for fold in fold_results]
+        bias_scores = [fold['metrics']['bias'] for fold in fold_results]
+        
+        return {
+            'mean_r2': float(np.mean(r2_scores)),
+            'std_r2': float(np.std(r2_scores)),
+            'mean_rmse': float(np.mean(rmse_scores)),
+            'std_rmse': float(np.std(rmse_scores)),
+            'mean_correlation': float(np.mean(correlation_scores)),
+            'std_correlation': float(np.std(correlation_scores)),
+            'mean_bias': float(np.mean(bias_scores)),
+            'std_bias': float(np.std(bias_scores))
+        }
+    
+    def _analyze_temporal_stability(self, fold_results: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Analiza estabilidad temporal."""
+        if len(fold_results) < 2:
+            return {'stability_score': 0.0, 'consistency': 0.0, 'volatility': 0.0}
+        
+        # Calcular estabilidad basada en R²
+        r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
+        stability_score = 1.0 - np.std(r2_scores)
+        
+        # Calcular consistencia (cuánto se mantienen las métricas)
+        consistency = 1.0 - np.std([fold['metrics']['correlation'] for fold in fold_results])
+        
+        # Calcular volatilidad de las métricas
+        volatility = np.std([fold['metrics']['rmse'] for fold in fold_results])
+        
+        return {
+            'stability_score': float(max(0.0, min(1.0, float(stability_score)))),
+            'consistency': float(max(0.0, min(1.0, float(consistency)))),
+            'volatility': float(volatility)
+        }
+    
+    def _analyze_temporal_degradation(self, fold_results: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Analiza degradación temporal."""
+        if len(fold_results) < 2:
+            return {'degradation_score': 0.0, 'trend': 0.0, 'acceleration': 0.0}
+        
+        # Calcular degradación entre folds consecutivos
+        degradations = []
+        for i in range(1, len(fold_results)):
+            prev_r2 = fold_results[i-1]['metrics']['r2_score']
+            curr_r2 = fold_results[i]['metrics']['r2_score']
+            
+            if prev_r2 > 0:
+                degradation = (prev_r2 - curr_r2) / prev_r2
+                degradations.append(degradation)
+        
+        degradation_score = float(np.mean(degradations)) if degradations else 0.0
+        
+        # Calcular tendencia de degradación
+        if len(degradations) > 1:
+            trend = np.polyfit(range(len(degradations)), degradations, 1)[0]
+            acceleration = np.polyfit(range(len(degradations)), degradations, 2)[0] if len(degradations) > 2 else 0.0
+        else:
+            trend = 0.0
+            acceleration = 0.0
+        
+        return {
+            'degradation_score': degradation_score,
+            'trend': float(trend),
+            'acceleration': float(acceleration)
+        }
+    
+    def _calculate_temporal_robustness(self, fold_results: List[Dict[str, Any]]) -> float:
+        """Calcula score de robustez temporal."""
+        if not fold_results:
+            return 0.0
+        
+        # Robustez basada en estabilidad y consistencia
+        r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
+        correlation_scores = [fold['metrics']['correlation'] for fold in fold_results]
+        
+        # Calcular robustez como combinación de estabilidad y predictibilidad
+        stability = 1.0 - np.std(r2_scores)
+        predictability = np.mean([abs(corr) for corr in correlation_scores])
+        
+        robustness = (stability + predictability) / 2.0
+        
+        return max(0.0, min(1.0, float(robustness)))
+    
+    def _calculate_temporal_consistency(self, predictions: List[float], actuals: List[float]) -> float:
+        """Calcula consistencia temporal entre predicciones y valores reales."""
+        if len(predictions) != len(actuals) or len(predictions) < 2:
+            return 0.0
+        
+        try:
+            # Calcular correlación entre predicciones y valores reales
+            correlation = np.corrcoef(predictions, actuals)[0, 1]
+            
+            # Calcular consistencia como medida de estabilidad temporal
+            consistency = max(0.0, min(1.0, abs(correlation)))
+            
+            return float(consistency)
+        except Exception as e:
+            self.logger.warning(f"Error calculando consistencia temporal: {e}")
+            return 0.0
+    
+    def _create_empty_temporal_result(self) -> TemporalValidationResult:
+        """Crea resultado vacío para validación temporal."""
+        return TemporalValidationResult(
+            fold_results=[],
+            overall_metrics={},
+            stability_analysis={'stability_score': 0.0, 'consistency': 0.0, 'volatility': 0.0},
+            degradation_analysis={'degradation_score': 0.0, 'trend': 0.0, 'acceleration': 0.0},
+            robustness_score=0.0,
+            temporal_consistency=0.0
         )
 
 

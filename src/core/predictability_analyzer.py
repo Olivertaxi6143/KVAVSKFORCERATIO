@@ -1506,6 +1506,15 @@ class PredictabilityAnalyzer:
     @property
     def safe_getitem(self):
         return safe_getitem
+    
+    @property
+    def predictability_metrics(self):
+        """Retorna las métricas de predictibilidad calculadas."""
+        return {
+            'correlation_threshold': self.correlation_threshold,
+            'min_correlation_threshold': self.min_correlation_threshold,
+            'significance_level': self.significance_level
+        }
 
 class WalkForwardAnalyzer:
     """

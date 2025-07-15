@@ -1,17 +1,20 @@
 """
 Implementación del pipeline de 6 filtros DarwinEX según normas de asignación.
 Basado en el feedback específico de DarwinEX para captación de capital de terceros.
+Mejorado con configuración externa, validación robusta y predictibilidad Silver→Gold.
 """
 
 import pandas as pd
 import numpy as np
 import sys
 import os
+import json
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass
+from pathlib import Path
 
-# Configurar logging básico
+# Configurar logging estructurado
 logging.basicConfig(level=logging.INFO)
 
 # Añadir el directorio raíz al path
@@ -30,96 +33,217 @@ class PipelineResult:
     category: str
     recommendations: List[str]
     risk_alerts: List[str]
+    asset_type: Optional[str] = None
+    predictability_score: Optional[float] = None
+    silver_to_gold_potential: Optional[float] = None
 
 class DarwinEXPipeline:
     """
     Pipeline de 6 filtros DarwinEX para asignación de capital.
     Implementa las normas específicas de DarwinEX para captación de terceros.
+    Mejorado con configuración externa y predictibilidad Silver→Gold.
     """
     
-    def __init__(self):
+    def __init__(self, config_path: Optional[str] = None):
         self.logger = logging.getLogger("darwin_ex_pipeline")
         self.predictability_analyzer = PredictabilityAnalyzer()
         
-        # Configuración según normas DarwinEX
-        self.config = {
-            # Pipeline de 6 filtros
-            "filters": {
-                "gold_access": {
-                    "min_d_score": 70,  # D-Score mínimo para Gold
-                    "top_ranking": 140,  # Top-140 ranking interno
-                    "description": "DARWIN en Gold (≈ D-Score ≥ 70 o top-140 ranking)"
-                },
-                "track_record": {
-                    "min_months_pilot": 8,  # Mínimo para ticket piloto
-                    "preferred_years": 2,   # Preferencia ≥ 2 años
-                    "description": "≥ 8-9 meses para ticket piloto; preferencia ≥ 2 años"
-                },
-                "lea_os_positive": {
-                    "min_lea": 0,  # LEA > 0
-                    "min_os": 0,   # OS > 0
-                    "description": "LEA > 0 & OS > 0 (Corta pérdidas, deja correr ganancias)"
-                },
-                "correlation_6m": {
-                    "max_correlation": 0.25,  # ≤ 0.25 vs Nasdaq, Oro, BTC
-                    "description": "Corr_6m ≤ 0.25 vs Nasdaq, Oro, BTC"
-                },
-                "discipline": {
-                    "frequency_stability": 0.30,  # Estabilidad de frecuencia
-                    "asset_drift_threshold": 0.20,  # Sin asset drift
-                    "description": "Estabilidad de frecuencia & sin asset drift"
-                },
-                "dd_correlation": {
-                    "max_dd_corr": 0.60,  # Correlación < 0.6 con drawdowns INDX
-                    "description": "Correlación < 0.6 con drawdowns INDX"
-                },
-                "max_drawdown": 0.15,  # Umbral de drawdown para el filtro de drawdown propio
-            },
+        # Cargar configuración externa
+        self.config = self._load_configuration(config_path)
+        
+        # Función utilitaria para conversión de floats
+        self.to_float = self._create_float_converter()
+    
+    def _load_configuration(self, config_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Carga configuración desde archivo JSON externo.
+        
+        Args:
+            config_path: Ruta al archivo de configuración
             
-            # Scoring & sizing según DarwinEX
+        Returns:
+            Configuración cargada
+        """
+        try:
+            if config_path is None:
+                config_path = "config/darwin_ex_config.json"
+            
+            config_file = Path(config_path)
+            if config_file.exists():
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                self.logger.info(f"✅ Configuración cargada desde {config_path}")
+                return config
+            else:
+                self.logger.warning(f"⚠️ Archivo de configuración no encontrado: {config_path}")
+                return self._get_default_config()
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error cargando configuración: {e}")
+            return self._get_default_config()
+    
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Configuración por defecto si no se puede cargar archivo externo."""
+        return {
+            "filters": {
+                "gold_access": {"min_d_score": 70, "top_ranking": 140},
+                "track_record": {"min_months_pilot": 8, "preferred_years": 2},
+                "lea_os_positive": {"min_lea": 0, "min_os": 0},
+                "correlation_6m": {"max_correlation": 0.25},
+                "discipline": {"frequency_stability": 0.30, "asset_drift_threshold": 0.20},
+                "dd_correlation": {"max_dd_corr": 0.60},
+                "max_drawdown": 0.15
+            },
             "scoring": {
                 "weights": {
-                    "years_running": 0.25,
-                    "lea": 0.20,
-                    "os": 0.20,
-                    "correlation": 0.15,
-                    "discipline": 0.10,
-                    "dd_correlation": 0.10
+                    "years_running": 0.25, "lea": 0.20, "os": 0.20,
+                    "correlation": 0.15, "discipline": 0.10, "dd_correlation": 0.10
                 },
-                "thresholds": {
-                    "gold": 85,      # Score ≥ 85: ticket 100,000€
-                    "silver": 75,     # Score 75-84: ticket 25,000€
-                    "bronze": 60,     # Score 60-74: ticket 11,000€
-                    "reject": 60      # Score < 60: reject
-                }
+                "thresholds": {"gold": 85, "silver": 75, "bronze": 60, "reject": 60}
             },
-            
-            # Gestión táctica
             "risk_management": {
-                "hard_stop": -0.09,  # -9% desde la compra
-                "second_stop": -0.18,  # -18% = exclusión definitiva
-                "var_monthly_limit": 0.065,  # 6.5% VaR mensual
-                "var_kill_switch": 0.13,  # 2×6.5% = kill switch
-                "alert_triggers": {
-                    "lea_negative": True,
-                    "os_negative": True,
-                    "corr_high": 0.25,
-                    "freq_drop": 0.30  # op_freq -30%
+                "hard_stop": -0.09, "second_stop": -0.18, "var_monthly_limit": 0.065,
+                "var_kill_switch": 0.13, "alert_triggers": {
+                    "lea_negative": True, "os_negative": True, "corr_high": 0.25, "freq_drop": 0.30
                 }
             },
-            
-            # Escalado de capital
             "escalation": {
-                "score_tolerance": 5,  # ±5 pts para mantener escalado
-                "time_period": 12,     # 12 meses para duplicar
-                "max_ticket": 1000000,  # 1M€ límite actual
-                "target_max": 5000000   # 3-5M€ meta a medio plazo
+                "score_tolerance": 5, "time_period": 12, "max_ticket": 1000000, "target_max": 5000000
+            },
+            "validation": {
+                "required_fields": [
+                    "Strategy_Name", "D_Score", "Years_Running", "LEA", "OS"
+                ],
+                "numeric_fields": [
+                    "D_Score", "Years_Running", "LEA", "OS", "Sharpe_Ratio", "CAGR", "Max_Drawdown"
+                ],
+                "new_strategy_criteria": {
+                    "max_years_running": 1.0, "min_total_months": 12, "development_mode_flag": True
+                }
             }
         }
     
+    def _is_scalar_na(self, value: Any) -> bool:
+        """Devuelve True si value es un escalar NA o None (nunca devuelve array)."""
+        if value is None:
+            return True
+        if isinstance(value, (int, float, str)):
+            return pd.isna(value)
+        return False
+
+    def _create_float_converter(self):
+        """
+        Crea función utilitaria para conversión segura de floats.
+        DRY: Evita duplicación de código de conversión.
+        """
+        def to_float(value: Union[str, float, int, None, pd.Series, Any]) -> float:
+            try:
+                # Si es un array vacío o Series/DataFrame vacío, retorna 0.0
+                if isinstance(value, (np.ndarray, pd.Series, pd.DataFrame)):
+                    if hasattr(value, 'empty') and value.empty:
+                        return 0.0
+                    if hasattr(value, 'size') and value.size == 0:
+                        return 0.0
+                    # Si es un array/serie de un solo valor, extrae el escalar
+                    if hasattr(value, 'item') and value.size == 1:
+                        value = value.item()
+                # Solo chequea isna/None si value es escalar
+                if self._is_scalar_na(value):
+                    return 0.0
+                if isinstance(value, (int, float)):
+                    return float(value)
+                if isinstance(value, str):
+                    cleaned = value.replace(',', '.').strip()
+                    return float(cleaned)
+                return 0.0
+            except (ValueError, TypeError):
+                return 0.0
+        
+        return to_float
+    
+    def _validate_strategy_data(self, strategy_data: pd.Series) -> Tuple[bool, List[str]]:
+        """
+        Valida datos de estrategia con typing estricto.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            (es_válido, lista_de_errores)
+        """
+        errors = []
+        
+        # Verificar campos requeridos
+        required_fields = self.config.get("validation", {}).get("required_fields", [
+            "Strategy_Name", "D_Score", "Years_Running", "LEA", "OS"
+        ])
+        
+        for field in required_fields:
+            if field not in strategy_data:
+                errors.append(f"Campo requerido faltante: {field}")
+                continue
+            
+            value = strategy_data[field]
+            # Control estricto para pandas/numpy
+            if isinstance(value, (np.ndarray, pd.Series, pd.DataFrame)):
+                if hasattr(value, 'empty') and value.empty:
+                    errors.append(f"Campo requerido vacío: {field}")
+                    continue
+                if hasattr(value, 'size') and value.size == 0:
+                    errors.append(f"Campo requerido vacío: {field}")
+                    continue
+            # Solo chequea isna/None si value es escalar
+            if self._is_scalar_na(value):
+                errors.append(f"Campo requerido vacío: {field}")
+                continue
+            
+            # Validar campos numéricos
+            numeric_fields = self.config.get("validation", {}).get("numeric_fields", [
+                "D_Score", "Years_Running", "LEA", "OS", "Sharpe_Ratio", "CAGR", "Max_Drawdown"
+            ])
+            
+            if field in numeric_fields:
+                try:
+                    self.to_float(value)
+                except (ValueError, TypeError):
+                    errors.append(f"Campo numérico inválido: {field} = {value}")
+        
+        return len(errors) == 0, errors
+    
+    def _is_new_strategy(self, strategy_data: pd.Series) -> bool:
+        """
+        Detecta estrategias nuevas con criterios mejorados.
+        
+        Args:
+            strategy_data: Datos de la estrategia
+            
+        Returns:
+            True si es estrategia nueva
+        """
+        try:
+            criteria = self.config.get("validation", {}).get("new_strategy_criteria", {})
+            
+            years_running = self.to_float(strategy_data.get('Years_Running', 0))
+            total_months = self.to_float(strategy_data.get('Total_Data_Months', 0))
+            development_mode = strategy_data.get('Development_Mode', False)
+            
+            max_years = criteria.get("max_years_running", 1.0)
+            min_months = criteria.get("min_total_months", 12)
+            dev_flag = criteria.get("development_mode_flag", True)
+            
+            return (
+                years_running < max_years or
+                total_months < min_months or
+                (dev_flag and bool(development_mode))
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Error detectando estrategia nueva: {e}")
+            return False
+    
     def run_pipeline(self, df: pd.DataFrame) -> List[PipelineResult]:
         """
-        Ejecuta el pipeline completo de 6 filtros DarwinEX.
+        Ejecuta el pipeline completo de filtros DarwinEX unificados.
         
         Args:
             df: DataFrame con datos de estrategias
@@ -127,209 +251,120 @@ class DarwinEXPipeline:
         Returns:
             Lista de resultados del pipeline
         """
-        self.logger.info("🚀 Ejecutando pipeline de 6 filtros DarwinEX...")
+        self.logger.info("🚀 Ejecutando pipeline unificado de filtros DarwinEX...")
         
         results = []
         
         for idx in df.index:
-            strategy_name = df.loc[idx, 'Strategy_Name'] if 'Strategy_Name' in df.columns else f"Strategy_{idx}"
+            strategy_data = df.loc[idx]
+            strategy_name = strategy_data.get('Strategy_Name', f"Strategy_{idx}")
             
-            # Ejecutar filtros de predictibilidad
-            predictability_results = self._apply_predictability_filters(df.loc[idx])
+            # Validar datos de entrada
+            is_valid, validation_errors = self._validate_strategy_data(strategy_data)
+            if not is_valid:
+                self.logger.warning(f"⚠️ Datos inválidos para {strategy_name}: {validation_errors}")
+                continue
             
-            # Ejecutar filtros originales
-            original_results = self._apply_filters(df.loc[idx])
+            # Detectar si es estrategia nueva
+            is_new_strategy = self._is_new_strategy(strategy_data)
             
-            # Combinar resultados
-            combined_results = self._combine_filter_results(predictability_results, original_results)
+            # Ejecutar filtros unificados (originales + predictibilidad)
+            unified_results = self._apply_unified_filters(strategy_data)
             
             # Calcular score final
-            final_score = self._calculate_score(df.loc[idx], combined_results)
+            final_score = self._calculate_score(strategy_data, unified_results)
+            
+            # Calcular predictibilidad Silver→Gold
+            silver_to_gold_potential = self._calculate_silver_to_gold_potential(
+                strategy_data, final_score, is_new_strategy
+            )
             
             # Determinar ticket y categoría
             ticket_info = self._determine_ticket_size(final_score)
             
             # Generar recomendaciones
-            recommendations = self._generate_recommendations(combined_results, final_score)
+            recommendations = self._generate_recommendations(unified_results, final_score, silver_to_gold_potential)
             
             # Generar alertas de riesgo
-            risk_alerts = self._generate_risk_alerts(df.loc[idx], combined_results)
+            risk_alerts = self._generate_risk_alerts(strategy_data, unified_results)
             
             # Crear resultado
             result = PipelineResult(
                 strategy_name=strategy_name,
-                passed_filters=combined_results["passed"],
-                failed_filters=combined_results["failed"],
+                passed_filters=unified_results["passed"],
+                failed_filters=unified_results["failed"],
                 final_score=final_score,
                 ticket_size=ticket_info['ticket'],
                 category=ticket_info['category'],
                 recommendations=recommendations,
-                risk_alerts=risk_alerts
+                risk_alerts=risk_alerts,
+                asset_type=strategy_data.get('Asset_Type', 'unknown'),
+                predictability_score=unified_results.get('predictability_score', 0.0),
+                silver_to_gold_potential=silver_to_gold_potential
             )
             
             results.append(result)
         
-        self.logger.info(f"✅ Pipeline completado para {len(results)} estrategias")
+        self.logger.info(f"✅ Pipeline unificado completado para {len(results)} estrategias")
         return results
     
-    def _apply_filters(self, strategy_data: pd.Series) -> Dict[str, Any]:
+    def _apply_unified_filters(self, strategy_data: pd.Series) -> Dict[str, Any]:
         """
-        Aplica los 6 filtros del pipeline DarwinEX.
+        Aplica filtros unificados (originales + predictibilidad) en un solo flujo.
         
         Args:
             strategy_data: Datos de una estrategia
             
         Returns:
-            Resultado de filtros aplicados
+            Resultado de filtros unificados
         """
         passed_filters = []
         failed_filters = []
         filter_details = {}
         
-        # Filtro 1: Gold Access
-        if self._check_gold_access(strategy_data):
-            passed_filters.append("gold_access")
-            filter_details["gold_access"] = {"passed": True, "value": "Gold"}
-        else:
-            failed_filters.append("gold_access")
-            filter_details["gold_access"] = {"passed": False, "value": "Not Gold"}
+        # Definir todos los filtros en orden de aplicación
+        all_filters = [
+            ("gold_access", self._check_gold_access),
+            ("track_record", self._check_track_record),
+            ("lea_os_positive", self._check_lea_os_positive),
+            ("correlation_6m", self._check_correlation_6m),
+            ("discipline", self._check_discipline),
+            ("dd_correlation", self._check_dd_correlation),
+            ("is_oos_consistency", self._check_is_oos_consistency),
+            ("temporal_robustness", self._check_temporal_robustness),
+            ("overfitting_detection", self._check_overfitting_detection),
+            ("stability_score", self._check_stability_score),
+            ("drawdown_filter", self._check_drawdown_filter)
+        ]
         
-        # Filtro 2: Track Record
-        if self._check_track_record(strategy_data):
-            passed_filters.append("track_record")
-            filter_details["track_record"] = {"passed": True, "value": "Sufficient"}
-        else:
-            failed_filters.append("track_record")
-            filter_details["track_record"] = {"passed": False, "value": "Insufficient"}
+        # Aplicar todos los filtros
+        for filter_name, filter_func in all_filters:
+            try:
+                if filter_func(strategy_data):
+                    passed_filters.append(filter_name)
+                    filter_details[filter_name] = {"passed": True, "value": "Pass"}
+                else:
+                    failed_filters.append(filter_name)
+                    filter_details[filter_name] = {"passed": False, "value": "Fail"}
+            except Exception as e:
+                self.logger.error(f"Error en filtro {filter_name}: {e}")
+                failed_filters.append(filter_name)
+                filter_details[filter_name] = {"passed": False, "value": "Error"}
         
-        # Filtro 3: LEA & OS Positive
-        if self._check_lea_os_positive(strategy_data):
-            passed_filters.append("lea_os_positive")
-            filter_details["lea_os_positive"] = {"passed": True, "value": "Positive"}
-        else:
-            failed_filters.append("lea_os_positive")
-            filter_details["lea_os_positive"] = {"passed": False, "value": "Negative"}
-        
-        # Filtro 4: Correlation 6m
-        if self._check_correlation_6m(strategy_data):
-            passed_filters.append("correlation_6m")
-            filter_details["correlation_6m"] = {"passed": True, "value": "Low"}
-        else:
-            failed_filters.append("correlation_6m")
-            filter_details["correlation_6m"] = {"passed": False, "value": "High"}
-        
-        # Filtro 5: Discipline
-        if self._check_discipline(strategy_data):
-            passed_filters.append("discipline")
-            filter_details["discipline"] = {"passed": True, "value": "Stable"}
-        else:
-            failed_filters.append("discipline")
-            filter_details["discipline"] = {"passed": False, "value": "Unstable"}
-        
-        # Filtro 6: DD Correlation
-        if self._check_dd_correlation(strategy_data):
-            passed_filters.append("dd_correlation")
-            filter_details["dd_correlation"] = {"passed": True, "value": "Low"}
-        else:
-            failed_filters.append("dd_correlation")
-            filter_details["dd_correlation"] = {"passed": False, "value": "High"}
+        # Calcular score de predictibilidad
+        predictability_score = len([f for f in passed_filters if f in [
+            "is_oos_consistency", "temporal_robustness", "overfitting_detection", 
+            "stability_score", "drawdown_filter"
+        ]]) / 5.0  # 5 filtros de predictibilidad
         
         return {
             "passed": passed_filters,
             "failed": failed_filters,
-            "details": filter_details
+            "details": filter_details,
+            "predictability_score": predictability_score,
+            "total_passed": len(passed_filters),
+            "total_filters": len(all_filters)
         }
-    
-    def _apply_predictability_filters(self, strategy_data: pd.Series) -> Dict[str, Any]:
-        """
-        Aplica filtros de predictibilidad usando datos empíricos reales.
-        Reemplaza los filtros de correlación externa que no son aplicables.
-        
-        Args:
-            strategy_data: Datos de la estrategia
-            
-        Returns:
-            Resultados de filtros de predictibilidad
-        """
-        try:
-            passed_filters = []
-            failed_filters = []
-            
-            # 1. Filtro de Consistencia IS/OOS (datos reales)
-            if self._check_is_oos_consistency(strategy_data):
-                passed_filters.append("is_oos_consistency")
-            else:
-                failed_filters.append("is_oos_consistency")
-            
-            # 2. Filtro de Robustez Temporal (datos reales)
-            if self._check_temporal_robustness(strategy_data):
-                passed_filters.append("temporal_robustness")
-            else:
-                failed_filters.append("temporal_robustness")
-            
-            # 3. Filtro de Detección de Sobreajuste (datos reales)
-            if self._check_overfitting_detection(strategy_data):
-                passed_filters.append("overfitting_detection")
-            else:
-                failed_filters.append("overfitting_detection")
-            
-            # 4. Filtro de Estabilidad (datos reales)
-            if self._check_stability_score(strategy_data):
-                passed_filters.append("stability_score")
-            else:
-                failed_filters.append("stability_score")
-            
-            # 5. Filtro de Drawdown Propio (mantener original)
-            if self._check_drawdown_filter(strategy_data):
-                passed_filters.append("drawdown_filter")
-            else:
-                failed_filters.append("drawdown_filter")
-            
-            return {
-                "passed": passed_filters,
-                "failed": failed_filters,
-                "total_passed": len(passed_filters),
-                "total_filters": len(passed_filters) + len(failed_filters)
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error aplicando filtros de predictibilidad: {e}")
-            return {"passed": [], "failed": [], "total_passed": 0, "total_filters": 0}
-    
-    def _combine_filter_results(self, predictability_results: Dict[str, Any], original_results: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Combina resultados de filtros de predictibilidad con filtros originales.
-        
-        Args:
-            predictability_results: Resultados de filtros de predictibilidad
-            original_results: Resultados de filtros originales
-            
-        Returns:
-            Resultados combinados
-        """
-        try:
-            # Combinar filtros pasados
-            combined_passed = predictability_results.get("passed", []) + original_results.get("passed", [])
-            
-            # Combinar filtros fallidos
-            combined_failed = predictability_results.get("failed", []) + original_results.get("failed", [])
-            
-            # Combinar detalles si existen
-            combined_details = {}
-            if "details" in original_results:
-                combined_details.update(original_results["details"])
-            
-            return {
-                "passed": combined_passed,
-                "failed": combined_failed,
-                "details": combined_details,
-                "predictability_results": predictability_results,
-                "original_results": original_results
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error combinando resultados de filtros: {e}")
-            return original_results  # Fallback a resultados originales
     
     def _check_is_oos_consistency(self, strategy_data: pd.Series) -> bool:
         """
@@ -436,12 +471,12 @@ class DarwinEXPipeline:
         try:
             # Usar Max DD % si está disponible
             if 'Max DD %' in strategy_data:
-                max_dd = abs(self._safe_float(strategy_data['Max DD %']))
+                max_dd = abs(self.to_float(strategy_data['Max DD %']))
                 return max_dd <= self.config["filters"]["max_drawdown"]
             
             # Fallback a Drawdown si está disponible
             elif 'Drawdown' in strategy_data:
-                dd = abs(self._safe_float(strategy_data['Drawdown']))
+                dd = abs(self.to_float(strategy_data['Drawdown']))
                 # Si el valor es muy alto (>100), probablemente son puntos monetarios
                 if dd > 100:
                     return True  # No podemos determinar con seguridad
@@ -512,7 +547,7 @@ class DarwinEXPipeline:
         """Verifica track record mínimo (≥ 8-9 meses para piloto, ≥ 2 años preferido)."""
         try:
             # Detectar si es estrategia NUEVA
-            is_development = self._is_development_strategy(strategy_data)
+            is_development = self._is_new_strategy(strategy_data)
             
             if is_development:
                 self.logger.info("🔬 Estrategia NUEVA detectada - ajustando criterios de track record")
@@ -532,33 +567,6 @@ class DarwinEXPipeline:
             return False
         except Exception as e:
             self.logger.error(f"Error verificando track record: {e}")
-            return False
-    
-    def _is_development_strategy(self, strategy_data: pd.Series) -> bool:
-        """Detecta si una estrategia es NUEVA (sin track record real)."""
-        try:
-            # Verificar si hay Start_Date válida
-            has_start_date = 'Start_Date' in strategy_data
-            
-            # Verificar si hay Years_Running real
-            has_real_years = False
-            if 'Years_Running' in strategy_data:
-                years_val = strategy_data['Years_Running']
-                if isinstance(years_val, (int, float)):
-                    has_real_years = years_val > 0.5
-            
-            # Verificar si hay Total_Data_Months significativo
-            has_significant_months = False
-            if 'Total_Data_Months' in strategy_data:
-                months_val = strategy_data['Total_Data_Months']
-                if isinstance(months_val, (int, float)):
-                    has_significant_months = months_val > 12
-            
-            # Si no hay fecha de inicio y no hay track record significativo, es NUEVA
-            return not has_start_date and not has_real_years and not has_significant_months
-            
-        except Exception as e:
-            self.logger.error(f"Error detectando estrategia NUEVA: {e}")
             return False
     
     def _check_lea_os_positive(self, strategy_data: pd.Series) -> bool:
@@ -647,30 +655,31 @@ class DarwinEXPipeline:
     def _check_correlation_6m(self, strategy_data: pd.Series) -> bool:
         """Verifica correlación 6m ≤ 0.25 vs Nasdaq, Oro, BTC."""
         try:
+            max_correlation = self.config["filters"]["correlation_6m"]["max_correlation"]
+            
+            # Verificar correlaciones específicas
+            correlation_fields = [
+                'Correlation_6m_Nasdaq', 'Correlation_6m_Gold', 'Correlation_6m_BTC'
+            ]
+            
+            for field in correlation_fields:
+                if field in strategy_data:
+                    correlation = abs(self.to_float(strategy_data[field]))
+                    if correlation > max_correlation:
+                        self.logger.debug(f"Correlación {field} = {correlation} > {max_correlation}")
+                        return False
+            
+            # Si no hay correlaciones específicas, verificar campo genérico
             if 'Correlation_6m' in strategy_data:
-                return abs(strategy_data['Correlation_6m']) <= self.config["filters"]["correlation_6m"]["max_correlation"]
+                correlation = abs(self.to_float(strategy_data['Correlation_6m']))
+                if correlation > max_correlation:
+                    self.logger.debug(f"Correlación genérica = {correlation} > {max_correlation}")
+                    return False
             
-            # Fallback: verificar correlaciones disponibles
-            correlation_columns = [col for col in strategy_data.index if 'corr' in col.lower() or 'correlation' in col.lower()]
-            if correlation_columns:
-                # Convertir a valores numéricos de forma segura
-                corr_values = []
-                for col in correlation_columns:
-                    try:
-                        value = strategy_data[col]
-                        # Convertir a string y verificar si es válido
-                        if isinstance(value, (int, float)) or (isinstance(value, str) and value.strip()):
-                            if isinstance(value, str):
-                                value = value.replace(',', '.')
-                            corr_values.append(abs(float(value)))
-                    except (ValueError, TypeError, AttributeError):
-                        continue
-                
-                if corr_values:
-                    max_corr = max(corr_values)
-                    return max_corr <= self.config["filters"]["correlation_6m"]["max_correlation"]
+            # Si no hay datos de correlación, pasar
+            self.logger.debug("No hay datos de correlación, pasando filtro")
+            return True
             
-            return True  # Si no hay datos de correlación, asumir que pasa
         except Exception as e:
             self.logger.error(f"Error verificando correlación 6m: {e}")
             return True
@@ -705,34 +714,25 @@ class DarwinEXPipeline:
     def _check_dd_correlation(self, strategy_data: pd.Series) -> bool:
         """Verifica correlación de drawdown < 0.6 con drawdowns INDX."""
         try:
-            # CORRECCIÓN: Usar 'Max DD %' en lugar de 'Drawdown'
-            # La columna 'Drawdown' contiene valores monetarios, no porcentajes
-            dd_column = 'Max DD %'
+            max_dd_corr = self.config["filters"]["dd_correlation"]["max_dd_corr"]
             
-            if dd_column in strategy_data:
-                # Convertir a float de forma segura
-                dd_value = strategy_data[dd_column]
-                if isinstance(dd_value, str):
-                    # Manejar formato europeo
-                    dd_value = dd_value.replace(',', '.')
-                
-                dd_float = float(dd_value)
-                
-                # Verificar que el drawdown sea razonable (< 50%)
-                if dd_float > 50:
-                    self.logger.warning(f"Drawdown muy alto ({dd_float}%) - posible error de interpretación")
-                    return False
-                
-                # Para este filtro, asumimos que si el drawdown es bajo, la correlación es aceptable
-                # En un sistema real, se calcularía la correlación real con índices de mercado
-                return dd_float <= 20  # Umbral conservador
-            else:
-                self.logger.warning(f"Columna {dd_column} no encontrada")
-                return False
-                
+            # Verificar correlación DD específica
+            if 'DD_Correlation_INDX' in strategy_data:
+                dd_corr = abs(self.to_float(strategy_data['DD_Correlation_INDX']))
+                return dd_corr <= max_dd_corr
+            
+            # Fallback: verificar campo genérico
+            if 'DD_Correlation' in strategy_data:
+                dd_corr = abs(self.to_float(strategy_data['DD_Correlation']))
+                return dd_corr <= max_dd_corr
+            
+            # Si no hay datos de correlación DD, pasar
+            self.logger.debug("No hay datos de correlación DD, pasando filtro")
+            return True
+            
         except Exception as e:
             self.logger.error(f"Error verificando correlación DD: {e}")
-            return False
+            return True
     
     def _calculate_score(self, strategy_data: pd.Series, filter_results: Dict[str, Any]) -> float:
         """
@@ -762,109 +762,173 @@ class DarwinEXPipeline:
     
     def _calculate_base_score(self, strategy_data: pd.Series, filter_results: Dict[str, Any]) -> float:
         """
-        Calcula score base original (mantener lógica original).
+        Calcula score base original (ajustado para progresión Silver→Gold y mantenimiento Gold, priorizando predictibilidad para estrategias sin real).
         """
         try:
             score = 0.0
             weights = self.config["scoring"]["weights"]
-            
-            # Detectar si es estrategia en desarrollo
-            is_development = self._is_development_strategy(strategy_data)
-            
-            if is_development:
-                self.logger.info("🔬 Aplicando scoring adaptado para estrategias NUEVAS")
-                # Para estrategias NUEVAS, reducir peso de antigüedad y aumentar peso de rendimiento
-                years_weight = weights["years_running"] * 0.1  # Reducir peso de antigüedad al mínimo
-                performance_weight = 1.0 - years_weight  # Aumentar peso de rendimiento
-            else:
-                years_weight = weights["years_running"]
-                performance_weight = 1.0 - years_weight
-            
-            # Componente: Years Running (ajustado para desarrollo)
+            is_development = self._is_new_strategy(strategy_data)
+
+            # Ajuste: para estrategias nuevas, reducir peso de años y aumentar el de robustez simulada
+            years_weight = weights["years_running"] * (0.2 if is_development else 1.0)
+            lea_weight = weights["lea"] * (1.2 if is_development else 1.0)
+            os_weight = weights["os"] * (1.2 if is_development else 1.0)
+            sharpe_weight = 0.20 if is_development else 0.15
+            bonus_per_filter = 8 if is_development else 7
+
+            # Years Running (mínimo para nuevas)
             if 'Years_Running' in strategy_data:
-                years = strategy_data['Years_Running']
-                if is_development:
-                    # Para desarrollo, usar valor mínimo pero no penalizar
-                    score += min(years * 5, 10) * years_weight  # Reducir impacto
-                else:
-                    score += min(years * 10, 25) * years_weight
-            elif is_development:
-                # Para estrategias NUEVAS sin años, usar valor mínimo
-                score += 1 * years_weight  # Valor mínimo para estrategias NUEVAS
-            
-            # Componente: LEA (más importante para desarrollo)
-            if 'LEA' in strategy_data and strategy_data['LEA'] > 0:
-                score += 20 * weights["lea"] * performance_weight
-            elif 'Expectancy' in strategy_data and strategy_data['Expectancy'] > 0:
-                score += 20 * weights["lea"] * performance_weight
-            
-            # Componente: OS (más importante para desarrollo)
-            if 'OS' in strategy_data and strategy_data['OS'] > 0:
-                score += 20 * weights["os"] * performance_weight
-            elif 'Sharpe_Ratio' in strategy_data and strategy_data['Sharpe_Ratio'] > 0:
-                score += 20 * weights["os"] * performance_weight
-            
-            # Componente: Correlation
+                years = self.to_float(strategy_data['Years_Running'])
+                score += min(years / 3.0, 1.0) * 10.0 * years_weight
+
+            # LEA
+            if 'LEA' in strategy_data:
+                lea = self.to_float(strategy_data['LEA'])
+                score += max(lea, 0.0) * 30.0 * lea_weight
+
+            # OS
+            if 'OS' in strategy_data:
+                os_val = self.to_float(strategy_data['OS'])
+                score += max(os_val, 0.0) * 30.0 * os_weight
+
+            # Sharpe Ratio
+            if 'Sharpe_Ratio' in strategy_data:
+                sharpe = self.to_float(strategy_data['Sharpe_Ratio'])
+                score += min(sharpe / 2.0, 1.0) * 25.0 * sharpe_weight
+
+            # Correlation
             if len([f for f in filter_results['passed'] if 'correlation' in f]) > 0:
-                score += 15 * weights["correlation"]
-            
-            # Componente: Discipline
+                score += 10 * weights["correlation"]
+
+            # Discipline
             if len([f for f in filter_results['passed'] if 'discipline' in f]) > 0:
                 score += 10 * weights["discipline"]
-            
-            # Componente: DD Correlation
+
+            # DD Correlation
             if len([f for f in filter_results['passed'] if 'dd_correlation' in f]) > 0:
                 score += 10 * weights["dd_correlation"]
-            
+
             # Bonus por filtros pasados
-            bonus_per_filter = 5
             score += len(filter_results['passed']) * bonus_per_filter
-            
-            # Bonus adicional para estrategias NUEVAS con buen rendimiento
-            if is_development:
-                if 'Sharpe_Ratio' in strategy_data and strategy_data['Sharpe_Ratio'] > 1.0:
-                    score += 15  # Bonus por Sharpe alto en estrategias NUEVAS
-                if 'Profit_Factor' in strategy_data and strategy_data['Profit_Factor'] > 1.5:
-                    score += 15  # Bonus por Profit Factor alto en estrategias NUEVAS
-            
+
+            # Bonus adicional para estrategias Gold con buen track record
+            if not is_development and 'Years_Running' in strategy_data and self.to_float(strategy_data['Years_Running']) > 2.0:
+                score += 5
+
             return min(score, 100)
-            
         except Exception as e:
             self.logger.error(f"Error calculando score base: {e}")
             return 0.0
-    
+
     def _calculate_predictability_bonus(self, strategy_data: pd.Series) -> float:
         """
         Calcula bonus por predictibilidad usando datos empíricos reales.
+        Para estrategias nuevas, el bonus puede ser hasta 30 puntos.
+        """
+        try:
+            predictability_metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            is_development = self._is_new_strategy(strategy_data)
+            # Bonus más alto para nuevas
+            if is_development:
+                if predictability_metrics.overall_predictability >= 80:
+                    bonus = 30
+                elif predictability_metrics.overall_predictability >= 70:
+                    bonus = 22
+                elif predictability_metrics.overall_predictability >= 60:
+                    bonus = 15
+                elif predictability_metrics.overall_predictability >= 50:
+                    bonus = 8
+                else:
+                    bonus = 0
+            else:
+                if predictability_metrics.overall_predictability >= 80:
+                    bonus = 20
+                elif predictability_metrics.overall_predictability >= 70:
+                    bonus = 15
+                elif predictability_metrics.overall_predictability >= 60:
+                    bonus = 10
+                elif predictability_metrics.overall_predictability >= 50:
+                    bonus = 5
+                else:
+                    bonus = 0
+            self.logger.info(f"Predictibilidad: {predictability_metrics.overall_predictability:.1f}, Bonus: {bonus}")
+            return bonus
+        except Exception as e:
+            self.logger.error(f"Error calculando bonus de predictibilidad: {e}")
+            return 0.0
+    
+    def _calculate_silver_to_gold_potential(self, strategy_data: pd.Series, current_score: float, is_new_strategy: bool) -> float:
+        """
+        Calcula potencial de ascenso Silver→Gold.
         
         Args:
             strategy_data: Datos de la estrategia
+            current_score: Score actual
+            is_new_strategy: Si es estrategia nueva
             
         Returns:
-            Bonus de predictibilidad (0-20 puntos)
+            Potencial de ascenso (0-100)
         """
         try:
-            # Calcular métricas de predictibilidad
-            predictability_metrics = self.predictability_analyzer.calculate_overall_predictability(strategy_data)
+            # Solo evaluar estrategias Silver
+            silver_threshold = self.config["scoring"]["thresholds"]["silver"]
+            gold_threshold = self.config["scoring"]["thresholds"]["gold"]
             
-            # Bonus basado en predictibilidad general
-            if predictability_metrics.overall_predictability >= 80:
-                bonus = 20  # Excelente predictibilidad
-            elif predictability_metrics.overall_predictability >= 70:
-                bonus = 15  # Buena predictibilidad
-            elif predictability_metrics.overall_predictability >= 60:
-                bonus = 10  # Predictibilidad aceptable
-            elif predictability_metrics.overall_predictability >= 50:
-                bonus = 5   # Predictibilidad básica
-            else:
-                bonus = 0   # Sin bonus
+            if current_score < silver_threshold or current_score >= gold_threshold:
+                return 0.0
             
-            self.logger.info(f"Predictibilidad: {predictability_metrics.overall_predictability:.1f}, Bonus: {bonus}")
+            # Factores de mejora
+            improvement_factors = []
             
-            return bonus
+            # 1. Estabilidad de métricas clave
+            stability_score = 0.0
+            if 'Frequency_Stability' in strategy_data:
+                stability_score += self.to_float(strategy_data['Frequency_Stability'])
+            if 'Asset_Drift' in strategy_data:
+                drift = self.to_float(strategy_data['Asset_Drift'])
+                stability_score += max(0, 1.0 - drift)
+            stability_score = min(stability_score, 1.0)
+            improvement_factors.append(stability_score)
+            
+            # 2. Consistencia IS/OOS
+            consistency_score = 0.0
+            if 'CAGR_IS' in strategy_data and 'CAGR_OOS' in strategy_data:
+                cagr_is = self.to_float(strategy_data['CAGR_IS'])
+                cagr_oos = self.to_float(strategy_data['CAGR_OOS'])
+                if cagr_is > 0:
+                    consistency_score = min(cagr_oos / cagr_is, 1.5) / 1.5
+            improvement_factors.append(consistency_score)
+            
+            # 3. Mejora en métricas fundamentales
+            fundamental_score = 0.0
+            if 'LEA' in strategy_data and 'OS' in strategy_data:
+                lea = self.to_float(strategy_data['LEA'])
+                os_val = self.to_float(strategy_data['OS'])
+                fundamental_score = (max(0, lea) + max(0, os_val)) / 2.0
+            improvement_factors.append(fundamental_score)
+            
+            # 4. Track record
+            track_record_score = 0.0
+            if 'Years_Running' in strategy_data:
+                years = self.to_float(strategy_data['Years_Running'])
+                track_record_score = min(years / 3.0, 1.0)
+            improvement_factors.append(track_record_score)
+            
+            # Calcular potencial promedio
+            avg_improvement = sum(improvement_factors) / len(improvement_factors)
+            
+            # Ajustar por distancia al umbral Gold
+            distance_to_gold = (gold_threshold - current_score) / (gold_threshold - silver_threshold)
+            potential = avg_improvement * (1.0 - distance_to_gold)
+            
+            # Penalizar estrategias nuevas
+            if is_new_strategy:
+                potential *= 0.7
+            
+            return min(max(potential * 100, 0.0), 100.0)
             
         except Exception as e:
-            self.logger.error(f"Error calculando bonus de predictibilidad: {e}")
+            self.logger.error(f"Error calculando potencial Silver→Gold: {e}")
             return 0.0
     
     def _determine_ticket_size(self, score: float) -> Dict[str, Any]:
@@ -904,7 +968,7 @@ class DarwinEXPipeline:
                 "description": "No cumple criterios mínimos"
             }
     
-    def _generate_recommendations(self, filter_results: Dict[str, Any], score: float) -> List[str]:
+    def _generate_recommendations(self, filter_results: Dict[str, Any], score: float, silver_to_gold_potential: float) -> List[str]:
         """Genera recomendaciones específicas basadas en resultados del pipeline."""
         recommendations = []
         
@@ -971,6 +1035,14 @@ class DarwinEXPipeline:
                 recommendations.append("Optimizar métricas fundamentales")
             else:
                 recommendations.append("Revisar criterios de entrada completamente")
+        
+        # Recomendaciones adicionales por potencial Silver→Gold
+        if silver_to_gold_potential > 0:
+            recommendations.append(f"🚀 Potencial de ascenso Silver→Gold: {silver_to_gold_potential:.1f}%")
+            if silver_to_gold_potential > 50:
+                recommendations.append("🔬 Considerar optimización de parámetros para alcanzar Gold")
+            elif silver_to_gold_potential > 20:
+                recommendations.append("🔬 Evaluar estrategia para posibles mejoras de predictibilidad")
         
         return recommendations
     
@@ -1074,23 +1146,6 @@ class DarwinEXPipeline:
         except Exception as e:
             self.logger.error(f"Error generando reporte: {e}")
             return {}
-
-    def _safe_float(self, value) -> float:
-        """
-        Convierte valor a float de forma segura.
-        
-        Args:
-            value: Valor a convertir
-            
-        Returns:
-            Float convertido o 0.0 si falla
-        """
-        try:
-            if pd.isna(value) or value is None:
-                return 0.0
-            return float(value)
-        except (ValueError, TypeError):
-            return 0.0
 
 def test_darwin_ex_pipeline():
     """Test del pipeline DarwinEX."""

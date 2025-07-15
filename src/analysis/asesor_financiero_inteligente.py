@@ -39,9 +39,10 @@ from scipy.stats import spearmanr
 from src.data.data_manager import DataManager
 import re
 from src.analysis.predictability_metrics import PredictabilityAnalyzer
+from core.logger_config import setup_logger
 warnings.filterwarnings('ignore')
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 class AsesorFinancieroInteligente:
     """

@@ -24,29 +24,39 @@ Responsabilidades:
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any, Union
-import logging
 import os
-from pathlib import Path
 import json
-import yaml
-from datetime import datetime
-import warnings
-warnings.filterwarnings('ignore')
-import hashlib
-import pickle
 import gzip
 import time
+import re
+import logging
+import pickle
+import yaml
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Any
+from datetime import datetime
+from .data_utils import extract_float_from_tuple, calculate_basic_stats, detect_outliers_iqr
+from .column_mapping import normalize_column_names
 
 # Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+try:
+    from core.logger_config import setup_logger
+    logger = setup_logger(__name__)
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
 
 class DataManager:
     """
     Gestor centralizado de datos para el sistema de análisis cuantitativo.
-    - 'Stagnation': periodo de estancamiento (tiempo o trades sin nuevo máximo de equity).
-    - 'Stagnation_Trades': número máximo de operaciones consecutivas en estancamiento (si la fuente lo provee).
+
+    ADVERTENCIA PROFESIONAL:
+    ------------------------------------------------------------
+    Toda carga, validación, limpieza y manipulación de archivos de estrategias (.sqx, .csv, .xlsx, etc.)
+    debe realizarse exclusivamente a través de este módulo y utilidades de la carpeta data.
+    Ningún otro módulo debe realizar validación, carga ni manipulación local de datos.
+    Este módulo es la única fuente de datos preparados y validados para el core y análisis.
+    ------------------------------------------------------------
     """
     
     def __init__(self, config: Optional[Dict] = None):
@@ -169,8 +179,8 @@ class DataManager:
         
         self.logger.info("DataManager inicializado correctamente")
         
-        # Cargar datos automáticamente si están disponibles
-        self._auto_load_data()
+        # NO cargar datos automáticamente para evitar duplicaciones
+        # self._auto_load_data()
         
     def _auto_load_data(self):
         """Carga datos automáticamente si están disponibles."""
@@ -293,15 +303,10 @@ class DataManager:
     
     def load_and_prepare_data_pipeline(self, file_path: str) -> pd.DataFrame:
         """
-        Pipeline completo de carga y preparación de datos.
-        Preserva los datos reales sin cocinamiento.
-        
-        Args:
-            file_path: Ruta al archivo
-            
-        Returns:
-            DataFrame preparado con datos reales
+        Carga y prepara datos desde un archivo, centralizando validación y limpieza.
+        Ningún otro módulo debe realizar validación/carga local.
         """
+        self.logger.debug(f"[INICIO] load_and_prepare_data_pipeline - Archivo: {file_path}")
         try:
             self.logger.info(f"Cargando datos desde: {file_path}")
             
@@ -365,23 +370,51 @@ class DataManager:
             
             # Detectar formato por extensión
             if path_obj.suffix.lower() == '.csv':
-                # Cargar CSV con configuración específica
-                df = pd.read_csv(
-                    file_path,
-                    sep=self.config['csv_delimiter'],
-                    decimal=self.config['csv_decimal'],
-                    encoding='utf-8',
-                    low_memory=False
-                )
+                # Intentar diferentes delimitadores en orden de probabilidad
+                delimiters = [';', ',', '\t']  # Punto y coma primero para archivos europeos
+                
+                for delimiter in delimiters:
+                    try:
+                        df = pd.read_csv(
+                            file_path,
+                            sep=delimiter,
+                            decimal=self.config.get('csv_decimal', '.'),
+                            encoding='utf-8',
+                            low_memory=False
+                        )
+                        
+                        # Verificar si la carga fue exitosa (más de 1 columna)
+                        if len(df.columns) > 1:
+                            self.logger.info(f"Archivo cargado con delimitador '{delimiter}': {len(df)} filas, {len(df.columns)} columnas")
+                            return df
+                            
+                    except Exception as e:
+                        self.logger.debug(f"Error con delimitador '{delimiter}': {e}")
+                        continue
+                
+                # Si ningún delimitador funcionó, intentar con el delimitador por defecto
+                try:
+                    df = pd.read_csv(
+                        file_path,
+                        sep=self.config['csv_delimiter'],
+                        decimal=self.config.get('csv_decimal', '.'),
+                        encoding='utf-8',
+                        low_memory=False
+                    )
+                    self.logger.info(f"Archivo cargado con delimitador por defecto: {len(df)} filas, {len(df.columns)} columnas")
+                    return df
+                except Exception as e:
+                    self.logger.error(f"Error cargando archivo {file_path}: {e}")
+                    return pd.DataFrame()
+                    
             elif path_obj.suffix.lower() in ['.xlsx', '.xls']:
                 # Cargar Excel
                 df = pd.read_excel(file_path, engine='openpyxl')
+                self.logger.info(f"Archivo Excel cargado: {len(df)} filas, {len(df.columns)} columnas")
+                return df
             else:
                 self.logger.error(f"Formato no soportado: {path_obj.suffix}. SUGERENCIA: Usa archivos .csv o .xlsx válidos.")
                 return pd.DataFrame()
-            
-            self.logger.info(f"Archivo cargado: {len(df)} filas, {len(df.columns)} columnas")
-            return df
             
         except Exception as e:
             self.logger.error(f"Error cargando archivo {file_path}: {e}. SUGERENCIA: Revisa el formato y el delimitador del archivo.")
@@ -409,40 +442,43 @@ class DataManager:
             # Normalizar nombres restantes
             normalized_columns = []
             for col in df_normalized.columns:
-                normalized_col = self._normalize_column_name(col)
+                normalized_col = normalize_column_names(col)
                 normalized_columns.append(normalized_col)
             
             df_normalized.columns = normalized_columns
             
             self.logger.info(f"Nombres de columnas normalizados: {list(df_normalized.columns)[:5]}...")
+
+            # Refuerzo profesional: mapeo simple de alias críticos
+            critical_aliases = {
+                'strategy_name': ['strategy_name', 'strategy', 'name', 'strategy_name'],
+                'number_of_trades': ['number_of_trades', '#_of_trades', 'tradescount'],
+                'max_dd_pct': ['max_dd_pct', 'max_dd_percent', 'drawdown_is'],
+            }
+            
+            for std_name, aliases in critical_aliases.items():
+                found = None
+                for alias in aliases:
+                    if hasattr(df_normalized, 'columns') and df_normalized.columns is not None:
+                        columns_list = list(df_normalized.columns)
+                        for col in columns_list:
+                            if col.lower() == alias.lower():
+                                found = col
+                                break
+                    if found:
+                        break
+                if found and std_name not in df_normalized.columns:
+                    try:
+                        df_normalized[std_name] = df_normalized[found].copy()
+                        self.logger.info(f"Alias crítico: '{found}' -> '{std_name}'")
+                    except Exception as e:
+                        self.logger.warning(f"No se pudo crear alias '{found}' -> '{std_name}': {e}")
+            
             return df_normalized
             
         except Exception as e:
             self.logger.error(f"Error normalizando nombres de columnas: {e}")
             return df
-    
-    def _normalize_column_name(self, col: str) -> str:
-        """
-        Normaliza el nombre de una columna.
-        
-        Args:
-            col: Nombre original de columna
-            
-        Returns:
-            Nombre normalizado
-        """
-        return (
-            col.strip()
-            .replace('"', '')
-            .replace("'", '')
-            .replace('%', 'pct')
-            .replace('(', '')
-            .replace(')', '')
-            .replace('.', '_')
-            .replace('-', '_')
-            .replace(' ', '_')
-            .lower()
-        )
     
     def _validate_dataframe(self, df: pd.DataFrame) -> Tuple[bool, List[str]]:
         """
@@ -454,7 +490,7 @@ class DataManager:
         Returns:
             Tupla (es_válido, lista_errores)
         """
-        errors = []
+        errors: List[str] = []
         
         # Verificar que no esté vacío
         if df is None or df.empty:
@@ -469,8 +505,7 @@ class DataManager:
             # No agregar a errores para no bloquear el proceso
         
         # Verificar tipos de datos numéricos
-        numeric_errors = self._validate_numeric_columns(df)
-        errors.extend(numeric_errors)
+        errors.extend(list(self._validate_numeric_columns(df)))  # type: ignore[reportGeneralTypeIssues]
         
         # Verificar valores extremos (sin modificar)
         outlier_errors = self._validate_outliers(df)
@@ -480,66 +515,83 @@ class DataManager:
     
     def _validate_numeric_columns(self, df: pd.DataFrame) -> List[str]:
         """
-        Valida columnas numéricas sin modificar datos.
-        
-        Args:
-            df: DataFrame a validar
-            
-        Returns:
-            Lista de errores
+        Valida y convierte columnas numéricas.
         """
         errors = []
-        
-        # Identificar columnas que deberían ser numéricas
-        potential_numeric = [col for col in df.columns 
-                           if any(keyword in col.lower() for keyword in 
-                                 ['cagr', 'drawdown', 'sharpe', 'profit', 'ratio', 'percent', 'factor'])]
-        
-        for col in potential_numeric:
-            if col in df.columns:
-                # Intentar convertir a numérico sin modificar original
-                try:
-                    pd.to_numeric(df[col], errors='coerce')
-                except Exception:
-                    errors.append(f"Columna {col} no es numérica")
-        
+        for col in df.columns:
+            if col in ['strategy_name', 'date', 'timeframe', 'filters_result']:
+                continue  # Saltar columnas no numéricas
+            try:
+                if col not in df.columns:
+                    continue
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    continue
+                if not isinstance(df[col], pd.Series):
+                    continue
+                original_values = df[col].copy()
+                if hasattr(df[col], 'dtype') and df[col].dtype == object:
+                    df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                non_numeric_count = df[col].isna().sum()
+                if non_numeric_count > 0:
+                    logger.warning(f"⚠️ Columna '{col}': {non_numeric_count} valores no numéricos convertidos a NaN")
+            except Exception as e:
+                logger.warning(f"⚠️ Error convirtiendo columna '{col}' a numérico: {e}")
+                errors.append(f"Error en columna {col}: {e}")
+        assert isinstance(errors, list)
         return errors
-    
+
+    def _clean_duplicate_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Elimina columnas duplicadas basándose en nombres.
+        """
+        unique_columns = []
+        seen_columns = set()
+        for col in df.columns:
+            if col not in seen_columns:
+                unique_columns.append(col)
+                seen_columns.add(col)
+            else:
+                logger.warning(f"⚠️ Columna duplicada eliminada: {col}")
+        # Siempre devolver un DataFrame, nunca una Series
+        if not unique_columns:
+            return df.iloc[:, :0].copy()
+        result = df.loc[:, unique_columns]
+        if isinstance(result, pd.Series):
+            return result.to_frame().T
+        return result
+
     def _validate_outliers(self, df: pd.DataFrame) -> List[str]:
         """
-        Valida valores extremos sin modificar datos.
-        
-        Args:
-            df: DataFrame a validar
-            
-        Returns:
-            Lista de errores
+        Valida outliers en columnas numéricas.
         """
         errors = []
         
-        # Identificar columnas numéricas
-        numeric_columns = df.select_dtypes(include=[np.number]).columns
-        
-        for col in numeric_columns:
-            if col in df.columns:
-                # Verificar valores infinitos
-                try:
-                    inf_check = np.isinf(df[col])
-                    if inf_check.any():
-                        errors.append(f"Valores infinitos detectados en {col}")
-                except Exception:
-                    pass  # Ignorar errores de validación
+        for col in df.columns:
+            if col in ['strategy_name', 'date', 'timeframe', 'filters_result']:
+                continue
                 
-                # Verificar valores extremos
-                max_val = df[col].abs().max()
-                try:
-                    max_val_scalar = max_val.item() if hasattr(max_val, 'item') else float(max_val)
-                    if pd.notna(max_val_scalar):
-                        if max_val_scalar > 1e6:
-                            errors.append(f"Valores extremos detectados en {col}")
-                except Exception:
-                    pass  # Ignorar errores de validación
-        
+            try:
+                # Verificar si la columna es numérica
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    # Calcular estadísticas para detectar outliers
+                    Q1 = df[col].quantile(0.25)
+                    Q3 = df[col].quantile(0.75)
+                    IQR = Q3 - Q1
+                    
+                    # Definir límites para outliers
+                    lower_bound = Q1 - 1.5 * IQR
+                    upper_bound = Q3 + 1.5 * IQR
+                    
+                    # Contar outliers
+                    outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
+                    
+                    if len(outliers) > 0:
+                        logger.warning(f"⚠️ Columna '{col}': {len(outliers)} outliers detectados")
+                        
+            except Exception as e:
+                logger.warning(f"⚠️ Error validando outliers en columna '{col}': {e}")
+                
         return errors
     
     def _clean_data_basic(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -593,6 +645,38 @@ class DataManager:
             self.logger.error(f"Error en limpieza básica: {e}")
             return df
     
+    def _normalize_numeric_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Convierte todas las columnas numéricas (con coma o punto decimal) a float de forma robusta.
+        Aplica solo a columnas que parecen numéricas pero son string.
+        """
+        df_clean = df.copy()
+        for col in df_clean.columns:
+            # Si la columna es object pero parece numérica (contiene solo dígitos, puntos o comas)
+            if df_clean[col].dtype == object:
+                try:
+                    # Reemplazar comas por puntos y convertir a float
+                    df_clean[col] = (
+                        df_clean[col]
+                        .astype(str)
+                        .str.replace(',', '.', regex=False)
+                        .str.replace(' ', '', regex=False)
+                    )
+                    # Intentar convertir a float, si falla, loggear advertencia
+                    df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+                    null_count = df_clean[col].isnull().sum()
+                    total_count = len(df_clean[col])
+                    
+                    if null_count == total_count:
+                        self.logger.warning(f"Columna '{col}' no pudo convertirse a float (todo NaN)")
+                    elif null_count > 0:
+                        self.logger.warning(f"Columna '{col}' parcialmente convertida a float ({null_count} NaN)")
+                    else:
+                        self.logger.info(f"Columna '{col}' convertida exitosamente a float")
+                except Exception as e:
+                    self.logger.warning(f"Error convirtiendo columna '{col}' a float: {e}")
+        return df_clean
+
     # ===================== CARGA ESPECÍFICA DE DATOS =====================
     
     def load_strategies_data(self, folder_path: str) -> bool:
@@ -661,27 +745,20 @@ class DataManager:
     
     def load_kpis_data(self, file_path: str) -> bool:
         """
-        Carga datos de KPIs.
-        
-        Args:
-            file_path: Ruta al archivo de KPIs
-            
-        Returns:
-            True si la carga fue exitosa
+        Carga datos de KPIs y normaliza columnas numéricas.
         """
         try:
             self.logger.info(f"Cargando KPIs desde: {file_path}")
-            
             self._kpis_data = self.load_and_prepare_data_pipeline(file_path)
-            
+            # --- Limpieza profesional: normalizar columnas numéricas ---
             if self._kpis_data is not None and not self._kpis_data.empty:
+                self._kpis_data = self._normalize_numeric_columns(self._kpis_data)
                 self._load_status['kpis'] = True
                 self.logger.info(f"KPIs cargados: {len(self._kpis_data)} registros")
                 return True
             else:
                 self.logger.error("No se pudieron cargar KPIs - DataFrame vacío o None")
                 return False
-                
         except Exception as e:
             self.logger.error(f"Error cargando KPIs: {e}")
             return False
@@ -890,21 +967,13 @@ class DataManager:
     def export_consolidated_data(self, output_path: str, format: str = 'excel') -> bool:
         """
         Exporta datos consolidados.
-        
-        Args:
-            output_path: Ruta de salida
-            format: Formato de exportación ('excel' o 'json')
-            
-        Returns:
-            True si la exportación fue exitosa
+        Solo serializa tipos simples y DataFrames convertidos a dict.
         """
         try:
             if self._consolidated_data is None:
                 self.logger.error("No hay datos consolidados para exportar")
                 return False
-            
             output_path_obj = Path(output_path)
-            
             if format.lower() == 'excel':
                 with pd.ExcelWriter(output_path_obj, engine='openpyxl') as writer:
                     for data_type, data in self._consolidated_data.items():
@@ -913,24 +982,21 @@ class DataManager:
                         else:
                             df_dict = pd.DataFrame([data])
                             df_dict.to_excel(writer, sheet_name=data_type, index=False)
-                
                 self.logger.info(f"Datos consolidados exportados a {output_path_obj}")
-            
             elif format.lower() == 'json':
                 json_data = {}
                 for data_type, data in self._consolidated_data.items():
                     if isinstance(data, pd.DataFrame):
                         json_data[data_type] = data.to_dict('records')
-                    else:
+                    elif isinstance(data, (dict, list, str, int, float, bool, type(None))):
                         json_data[data_type] = data
-                
+                    else:
+                        self.logger.warning(f"No se puede serializar el tipo {type(data)} para '{data_type}', se omitirá.")
+                        json_data[data_type] = str(data)
                 with open(output_path_obj, 'w') as f:
                     json.dump(json_data, f, default=str, indent=2)
-                
                 self.logger.info(f"Datos consolidados exportados a {output_path_obj}")
-            
             return True
-            
         except Exception as e:
             self.logger.error(f"Error exportando datos: {e}")
             return False
@@ -1001,123 +1067,6 @@ class DataManager:
 
     # ===================== FUNCIONES DE INVESTIGACIÓN Y VALIDACIÓN CIENTÍFICA =====================
     
-    def _to_float(self, val: Any) -> float:
-        """Convierte un valor a float de forma segura."""
-        try:
-            return float(val)
-        except (ValueError, TypeError):
-            return 0.0
-
-    def extract_float_from_tuple(self, data: Any, index: int = 0, default: float = 0.0) -> float:
-        """
-        Extrae un valor numérico de una tupla de forma segura.
-        
-        Args:
-            data: Tupla que contiene el valor.
-            index: Índice del valor a extraer.
-            default: Valor por defecto si la tupla es inválida.
-            
-        Returns:
-            float: Valor numérico extraído.
-        """
-        if isinstance(data, tuple) and len(data) > index:
-            try:
-                return float(data[index])
-            except (ValueError, TypeError):
-                return default
-        elif isinstance(data, (int, float)):
-            return float(data)
-        return default
-
-    def validate_numeric_column(self, df: pd.DataFrame, column: str) -> bool:
-        """
-        Valida si una columna es numérica y contiene datos válidos.
-        
-        Args:
-            df: DataFrame a validar
-            column: Nombre de la columna
-            
-        Returns:
-            True si la columna es válida, False en caso contrario
-        """
-        try:
-            if column not in df.columns:
-                return False
-            # Convertir a numérico
-            df[column] = pd.to_numeric(df[column], errors='coerce')
-            # Verificar que no sea todo NaN
-            is_all_nan = bool(df[column].isna().all())
-            if is_all_nan:
-                return False
-            return True
-        except Exception as e:
-            self.logger.warning(f"Error validando columna {column}: {e}")
-            return False
-
-    def calculate_basic_stats(self, df: pd.DataFrame, column: str) -> Dict[str, float]:
-        """
-        Calcula estadísticas básicas de una columna.
-        
-        Args:
-            df: DataFrame
-            column: Nombre de la columna
-            
-        Returns:
-            Diccionario con estadísticas básicas
-        """
-        try:
-            if not self.validate_numeric_column(df, column):
-                return {}
-            stats_dict = {
-                'mean': df[column].mean(),
-                'std': df[column].std(),
-                'min': df[column].min(),
-                'max': df[column].max(),
-                'median': df[column].median(),
-                'count': df[column].count()
-            }
-            return stats_dict
-        except Exception as e:
-            self.logger.error(f"Error calculando estadísticas de {column}: {e}")
-            return {}
-
-    def detect_outliers_iqr(self, df: pd.DataFrame, column: str, factor: float = 1.5) -> Dict[str, Any]:
-        """
-        Detecta outliers usando el método IQR.
-        
-        Args:
-            df: DataFrame
-            column: Nombre de la columna
-            factor: Factor para el cálculo de outliers
-            
-        Returns:
-            Diccionario con información de outliers
-        """
-        try:
-            if not self.validate_numeric_column(df, column):
-                return {'outliers': [], 'count': 0, 'percentage': 0.0}
-                
-            Q1 = df[column].quantile(0.25)
-            Q3 = df[column].quantile(0.75)
-            IQR = Q3 - Q1
-            
-            lower_bound = Q1 - factor * IQR
-            upper_bound = Q3 + factor * IQR
-            
-            outliers = df[(df[column] < lower_bound) | (df[column] > upper_bound)]
-                
-            return {
-                'outliers': outliers[column].tolist(),
-                'count': len(outliers),
-                'percentage': len(outliers) / len(df) * 100,
-                'lower_bound': lower_bound,
-                'upper_bound': upper_bound
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error detectando outliers en {column}: {e}")
-            return {'outliers': [], 'count': 0, 'percentage': 0.0}
-
     def analyze_data_quality(self, df: pd.DataFrame, numeric_columns: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Analiza la calidad de los datos con estadísticas y detección de outliers.
@@ -1145,8 +1094,8 @@ class DataManager:
             
             for col in numeric_columns:
                 if col in df.columns:
-                    stats = self.calculate_basic_stats(df, col)
-                    outliers = self.detect_outliers_iqr(df, col)
+                    stats = calculate_basic_stats(df, col)
+                    outliers = detect_outliers_iqr(df, col)
                     
                     analysis['column_analysis'][col] = {
                         'stats': stats,
@@ -1159,6 +1108,137 @@ class DataManager:
         except Exception as e:
             self.logger.error(f"Error en análisis de calidad: {e}")
             return {}
+
+    def get_clean_data(self, file_path: Optional[str] = None, extra_columns: Optional[list] = None) -> pd.DataFrame:
+        """
+        Devuelve un DataFrame limpio solo con columnas estándar y opcionales.
+        Args:
+            file_path: Ruta al archivo a cargar (si no se ha cargado aún)
+            extra_columns: Lista de columnas adicionales a conservar
+        Returns:
+            DataFrame limpio
+        """
+        if file_path:
+            df = self.load_and_prepare_data_pipeline(file_path)
+        elif self._kpis_data is not None:
+            df = self._kpis_data.copy()
+        else:
+            self.logger.error("No hay datos cargados para limpiar.")
+            return pd.DataFrame()
+            
+        # Eliminar columnas duplicadas primero
+        df = df.loc[:, ~df.columns.duplicated()]
+        
+        standard_cols = [
+            'strategy_name', 'cagr_is', 'cagr_oos', 'sharpe_ratio_is',
+            'sharpe_ratio_oos', 'profit_factor_is', 'profit_factor_oos',
+            'max_dd_pct', 'number_of_trades', 'winning_percent_is',
+            'winning_percent_oos', 'net_profit_is', 'net_profit_oos',
+            'calmarratio_is', 'calmarratio_oos'
+        ]
+        if extra_columns:
+            standard_cols += extra_columns
+            
+        # Seleccionar solo las columnas estándar que existen
+        cols_final = [col for col in standard_cols if col in df.columns]
+        df_clean = df[cols_final].copy()
+        
+        self.logger.info(f"DataFrame limpio generado: {df_clean.shape[1]} columnas estándar")
+        return df_clean
+
+    def save_analysis_result(self, name: str, df: pd.DataFrame) -> bool:
+        """
+        Guarda un resultado de análisis en results/ con nombre único.
+        Args:
+            name: Nombre identificador
+            df: DataFrame de resultados
+        Returns:
+            True si se guardó correctamente
+        """
+        try:
+            path = Path('results') / f"analysis_{name}.csv"
+            df.to_csv(path, index=False)
+            self.logger.info(f"Resultado de análisis guardado: {path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error guardando resultado de análisis: {e}")
+            return False
+
+    def load_analysis_result(self, name: str) -> pd.DataFrame:
+        """
+        Carga un resultado de análisis guardado.
+        Args:
+            name: Nombre identificador
+        Returns:
+            DataFrame de resultados
+        """
+        try:
+            path = Path('results') / f"analysis_{name}.csv"
+            df = pd.read_csv(path)
+            self.logger.info(f"Resultado de análisis cargado: {path}")
+            return df
+        except Exception as e:
+            self.logger.error(f"Error cargando resultado de análisis: {e}")
+            return pd.DataFrame()
+
+    def list_analysis_results(self) -> list:
+        """
+        Lista los resultados de análisis disponibles en results/.
+        Returns:
+            Lista de nombres
+        """
+        results_dir = Path('results')
+        results_dir.mkdir(exist_ok=True)
+        files = list(results_dir.glob('analysis_*.csv'))
+        return [f.stem.replace('analysis_', '') for f in files]
+
+    def save_test_result(self, name: str, log_text: str) -> bool:
+        """
+        Guarda un resultado de test (log) en logs/ con nombre único.
+        Args:
+            name: Nombre identificador
+            log_text: Texto del log
+        Returns:
+            True si se guardó correctamente
+        """
+        try:
+            path = Path('logs') / f"test_{name}.log"
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(log_text)
+            self.logger.info(f"Log de test guardado: {path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error guardando log de test: {e}")
+            return False
+
+    def load_test_result(self, name: str) -> str:
+        """
+        Carga un log de test guardado.
+        Args:
+            name: Nombre identificador
+        Returns:
+            Texto del log
+        """
+        try:
+            path = Path('logs') / f"test_{name}.log"
+            with open(path, 'r', encoding='utf-8') as f:
+                log_text = f.read()
+            self.logger.info(f"Log de test cargado: {path}")
+            return log_text
+        except Exception as e:
+            self.logger.error(f"Error cargando log de test: {e}")
+            return ""
+
+    def list_test_results(self) -> list:
+        """
+        Lista los logs de test disponibles en logs/.
+        Returns:
+            Lista de nombres
+        """
+        logs_dir = Path('logs')
+        logs_dir.mkdir(exist_ok=True)
+        files = list(logs_dir.glob('test_*.log'))
+        return [f.stem.replace('test_', '') for f in files]
 
 
 # ===================== FUNCIONES DE UTILIDAD =====================

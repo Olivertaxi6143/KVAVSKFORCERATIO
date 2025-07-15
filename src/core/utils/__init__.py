@@ -1,26 +1,59 @@
 """
-Módulo de utilidades del core engine.
+Utils Específicos del Core Engine
+=================================
 
-Este módulo contiene todas las utilidades auxiliares:
-- Data Utils
-- Error Handler
-- Type Converters
-- Validation Utils
+Este módulo proporciona acceso a utilidades específicas del core engine:
+- error_handler: Manejo centralizado de errores
+- validation_utils: Validación específica del core (NO de datos)
+
+NOTA: Todas las funciones de tratamiento de datos han sido migradas a src/data/
+Autor: Sistema de Análisis Cuantitativo
+Fecha: 2025-01-27
 """
 
-from .data_utils import safe_sum, safe_values, improve_missing_data_handling, safe_float
-from .error_handler import RobustErrorHandler
-from .type_converters import convert_types, validate_types
-from .validation_utils import validate_dataframe, validate_config
+# Imports de error handling
+from .error_handler import (
+    RobustErrorHandler,
+    retry_on_error,
+    handle_specific_errors,
+    validate_input,
+    log_execution_time,
+    GUIAnalysisError
+)
 
+# Imports de validación específica del core
+from .validation_utils import (
+    validate_config,
+    validate_kpi_config,
+    validate_trading_style_config,
+    validate_file_path,
+    validate_numeric_range,
+    validate_percentage,
+    validate_probability,
+    validate_series_quality,
+    validate_correlation_matrix,
+    validate_analysis_results
+)
+
+# Lista de funciones exportadas (solo core-specific)
 __all__ = [
-    'safe_sum',
-    'safe_values', 
-    'improve_missing_data_handling',
-    'safe_float',
+    # Error handling
     'RobustErrorHandler',
-    'convert_types',
-    'validate_types',
-    'validate_dataframe',
-    'validate_config'
-] 
+    'retry_on_error',
+    'handle_specific_errors',
+    'validate_input',
+    'log_execution_time',
+    'GUIAnalysisError',
+    
+    # Core validation
+    'validate_config',
+    'validate_kpi_config',
+    'validate_trading_style_config',
+    'validate_file_path',
+    'validate_numeric_range',
+    'validate_percentage',
+    'validate_probability',
+    'validate_series_quality',
+    'validate_correlation_matrix',
+    'validate_analysis_results'
+]

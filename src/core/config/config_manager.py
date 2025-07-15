@@ -1,7 +1,7 @@
 import logging
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from src.core.config.kpi_config import KPIConfig, TradingStyleConfig
 from src.core.config.progress_callback import ProgressCallback
 from src.logger_config import setup_logger
@@ -203,10 +203,10 @@ class ConfigManagerEnhanced:
             return {k: v.get('weight', 1.0) if isinstance(v, dict) else 1.0 for k, v in self.current_config['selected_kpis'].items()}
         return {}
 
-    def get_trading_style(self, style_name: str = None) -> Any:
+    def get_trading_style(self, style_name: Optional[str] = None) -> Any:
         # Si no se pasa argumento, retorna un string para compatibilidad con el test
         if style_name is None:
-            return "Swing"
+            style_name = "Swing"
         style = self.get_trading_style_config(style_name)
         if not style or not isinstance(style, dict):
             return {
@@ -219,7 +219,63 @@ class ConfigManagerEnhanced:
 
     def get_config(self) -> Dict[str, Any]:
         """Alias de load_config para compatibilidad con tests antiguos."""
-        return self.load_config() 
+        return self.load_config()
+    
+    def update_trading_style(self, trading_style: str) -> bool:
+        """
+        Actualiza el estilo de trading en la configuración actual.
+        
+        Args:
+            trading_style: Nombre del estilo de trading
+            
+        Returns:
+            True si se actualizó correctamente
+        """
+        try:
+            # Actualizar el estilo de trading en la configuración
+            self.current_config['trading_style'] = trading_style
+            
+            # Guardar en archivo
+            success = self.save_config(self.current_config)
+            
+            if success:
+                self.logger.info(f"🎯 Estilo de trading actualizado: {trading_style}")
+            else:
+                self.logger.warning(f"Estilo de trading actualizado en memoria pero no se pudo guardar en archivo: {trading_style}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error actualizando estilo de trading {trading_style}: {e}")
+            return False
+    
+    def update_config(self, config: Dict[str, Any]) -> bool:
+        """
+        Actualiza la configuración actual con nuevos valores.
+        
+        Args:
+            config: Nueva configuración a aplicar
+            
+        Returns:
+            True si se actualizó correctamente
+        """
+        try:
+            # Actualizar configuración actual
+            self.current_config.update(config)
+            
+            # Guardar en archivo
+            success = self.save_config(self.current_config)
+            
+            if success:
+                self.logger.info("Configuración actualizada exitosamente")
+            else:
+                self.logger.warning("Configuración actualizada en memoria pero no se pudo guardar en archivo")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Error actualizando configuración: {e}")
+            return False
 
 def test_get_trading_style():
     cm = ConfigManagerEnhanced()

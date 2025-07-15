@@ -31,8 +31,9 @@ from src.core.market_regime_analyzer import MarketRegimeDetector
 from src.core.predictability_analyzer import PredictabilityAnalyzer
 from src.core.robustness_analyzer import RobustnessAnalyzer
 from src.data.data_manager import DataManager
-from src.core.utils.type_converters import ensure_numeric_columns
+from src.data.data_utils import ensure_numeric_columns
 from src.core.config.progress_callback import ProgressCallback
+from src.gui.utils import GUIAnalysisError
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -43,11 +44,8 @@ logger = logging.getLogger(__name__)
 
 # Eliminar definición local de ProgressCallback y UnifiedEvaluatorEnhanced
 
-
-class GUIAnalysisError(Exception):
-    """Excepción específica para errores de análisis en GUI."""
-    pass
-
+# Clase GUIAnalysisError eliminada - usar src/gui/utils.py en su lugar
+# from src.gui.utils import GUIAnalysisError
 
 # Elimino la clase local ConfigManagerEnhanced (definición y métodos)
 
@@ -453,54 +451,390 @@ def validate_dataframe(df: pd.DataFrame) -> bool:
 
 
 def generate_insights(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    """Genera insights basados en los resultados."""
+    """
+    Genera insights automáticos basados en los datos.
+    
+    Args:
+        df: DataFrame con análisis completado
+        
+    Returns:
+        Lista de insights generados
+    """
     insights = []
     
     try:
-        # Insight sobre correlaciones
-        if 'Unified_Score' in df.columns:
-            score_correlations = {}
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
-            for col in numeric_cols:
-                if col != 'Unified_Score':
-                    try:
-                        unified_series = pd.to_numeric(df['Unified_Score'], errors='coerce')
-                        col_series = pd.to_numeric(df[col], errors='coerce')
-                        if not isinstance(unified_series, pd.Series):
-                            unified_series = pd.Series(unified_series, index=df.index)
-                        if not isinstance(col_series, pd.Series):
-                            col_series = pd.Series(col_series, index=df.index)
-                        corr = unified_series.corr(col_series)
-                        if abs(corr) > 0.5:
-                            score_correlations[col] = corr
-                    except Exception:
-                        continue
+        # Insight 1: Mejores estrategias por Factor K
+        if 'Factor_K' in df.columns:
+            top_factor_k = df.nlargest(3, 'Factor_K')
+            insights.append({
+                'type': 'top_performers',
+                'title': 'Top 3 Estrategias por Factor K',
+                'data': top_factor_k[['Strategy Name', 'Factor_K']].to_dict(orient='records')
+            })
+        
+        # Insight 2: Análisis de riesgo
+        if 'Max_DD_%' in df.columns:
+            low_risk = df[df['Max_DD_%'] < df['Max_DD_%'].quantile(0.25)]
+            insights.append({
+                'type': 'risk_analysis',
+                'title': 'Estrategias de Bajo Riesgo',
+                'data': low_risk[['Strategy Name', 'Max_DD_%']].to_dict(orient='records')
+            })
+        
+        # Insight 3: Análisis de rentabilidad
+        if 'CAGR' in df.columns:
+            high_growth = df.nlargest(3, 'CAGR')
+            insights.append({
+                'type': 'growth_analysis',
+                'title': 'Top 3 Estrategias por Crecimiento',
+                'data': high_growth[['Strategy Name', 'CAGR']].to_dict(orient='records')
+            })
             
-            if score_correlations:
-                best_corr_col = max(score_correlations.items(), key=lambda x: abs(x[1]))
-                insights.append({
-                    'type': 'insight',
-                    'message': f"La métrica más correlacionada con el score es {best_corr_col[0]} (r={best_corr_col[1]:.3f})",
-                    'priority': 'medium'
-                })
-        
-        # Insight sobre distribución
-        if 'Unified_Score' in df.columns:
-            scores = df['Unified_Score'].dropna()
-            if len(scores) > 0:
-                mean_score = float(scores.mean())
-                std_score = float(scores.std())
-                insights.append({
-                    'type': 'statistic',
-                    'message': f"Score promedio: {mean_score:.3f} ± {std_score:.3f}",
-                    'priority': 'low'
-                })
-        
-        return insights
-        
     except Exception as e:
         logger.error(f"Error generando insights: {e}")
-        return []
+        insights.append({
+            'type': 'error',
+            'title': 'Error generando insights',
+            'message': str(e)
+        })
+    
+    return insights
+
+
+# ============================================================================
+# FUNCIONES DE COMPATIBILIDAD (reemplazan las de core_engine_enhanced.py)
+# ============================================================================
+
+def run_unified_analysis_enhanced(df: pd.DataFrame, config: Optional[Dict] = None) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Función de compatibilidad que ejecuta análisis unificado mejorado.
+    
+    Args:
+        df: DataFrame con datos de estrategias
+        config: Configuración opcional
+        
+    Returns:
+        Tuple con DataFrame procesado y resumen de resultados
+    """
+    try:
+        logger.info("Ejecutando análisis unificado mejorado...")
+        
+        # Validar entrada
+        if df.empty:
+            raise ValueError("DataFrame vacío")
+        
+        # Crear instancia del motor
+        engine = FactorKElite96Enhanced(config=config)
+        
+        # Ejecutar análisis completo
+        result_df = engine.run_complete_analysis(df)
+        
+        # Generar resumen
+        summary = {
+            'total_strategies': len(result_df),
+            'analysis_completed': True,
+            'timestamp': datetime.now().isoformat(),
+            'columns_processed': list(result_df.columns)
+        }
+        
+        # Añadir métricas si están disponibles
+        if 'Factor_K' in result_df.columns:
+            summary['factor_k_stats'] = {
+                'mean': float(result_df['Factor_K'].mean()),
+                'max': float(result_df['Factor_K'].max()),
+                'min': float(result_df['Factor_K'].min())
+            }
+        
+        if 'QVA_Score' in result_df.columns:
+            summary['qva_stats'] = {
+                'mean': float(result_df['QVA_Score'].mean()),
+                'max': float(result_df['QVA_Score'].max()),
+                'min': float(result_df['QVA_Score'].min())
+            }
+        
+        logger.info("Análisis unificado completado exitosamente")
+        return result_df, summary
+        
+    except Exception as e:
+        logger.error(f"Error en análisis unificado: {e}")
+        raise GUIAnalysisError(f"Error en análisis unificado: {e}")
+
+
+def categorize_quality(df: pd.DataFrame, score_col: str = "Unified_Score") -> pd.DataFrame:
+    """
+    Categoriza la calidad de las estrategias basada en el score.
+    
+    Args:
+        df: DataFrame con estrategias
+        score_col: Nombre de la columna de score
+        
+    Returns:
+        DataFrame con columna de categoría añadida
+    """
+    try:
+        if df.empty:
+            return df
+        
+        # Determinar qué columna usar para categorización
+        available_scores = ['Factor_K', 'QVA_Score', 'Unified_Score', 'predictability_score']
+        score_column = None
+        
+        for col in available_scores:
+            if col in df.columns:
+                score_column = col
+                break
+        
+        if score_column is None:
+            logger.warning("No se encontró columna de score para categorización")
+            df['Quality_Category'] = 'Unknown'
+            return df
+        
+        # Definir umbrales de categorización
+        thresholds = {
+            'Elite': 9.2,
+            'Excellent': 8.2,
+            'Very Good': 7.2,
+            'Good': 6.2,
+            'Average': 5.2,
+            'Below Average': 4.2,
+            'Poor': 3.2,
+            'Very Poor': 0.0
+        }
+        
+        # Aplicar categorización
+        df['Quality_Category'] = 'Very Poor'
+        
+        for category, threshold in thresholds.items():
+            df.loc[df[score_column] >= threshold, 'Quality_Category'] = category
+        
+        logger.info(f"Categorización completada usando {score_column}")
+        return df
+        
+    except Exception as e:
+        logger.error(f"Error en categorización: {e}")
+        df['Quality_Category'] = 'Error'
+        return df
+
+
+def predictividad_is_oos_empirica(df: pd.DataFrame, is_oos_split: float = 0.75) -> pd.DataFrame:
+    """
+    Calcula la predictividad IS/OOS usando PredictabilityAnalyzer.
+    
+    Args:
+        df: DataFrame con datos de estrategias
+        is_oos_split: Proporción para split IS/OOS (default 0.75)
+        
+    Returns:
+        DataFrame con métricas de predictividad añadidas
+    """
+    try:
+        if df.empty:
+            logger.warning("DataFrame vacío para análisis de predictividad")
+            return df
+        
+        # Importar PredictabilityAnalyzer
+        from src.core.predictability_analyzer import PredictabilityAnalyzer
+        
+        # Crear instancia del analizador
+        analyzer = PredictabilityAnalyzer()
+        
+        # Verificar si ya existen columnas IS/OOS
+        is_oos_pairs = analyzer._identify_is_oos_pairs(df)
+        
+        if is_oos_pairs:
+            # Si hay pares IS/OOS, usar análisis directo
+            logger.info(f"Encontrados {len(is_oos_pairs)} pares IS/OOS para análisis")
+            
+            # Analizar correlaciones IS/OOS
+            correlations = analyzer.analyze_is_oos_correlations(df)
+            
+            # Analizar calidad predictiva
+            quality_metrics = analyzer.analyze_predictive_quality_metrics(df)
+            
+            # Calcular score promedio de predictibilidad
+            if correlations:
+                avg_correlation = sum(correlations.values()) / len(correlations)
+                predictability_score = max(0.0, min(1.0, avg_correlation))
+            else:
+                predictability_score = 0.5
+                
+            # Añadir métricas al DataFrame
+            df['predictability_score'] = predictability_score
+            df['is_oos_correlation'] = avg_correlation if correlations else 0.0
+            
+            # Añadir correlaciones específicas si existen
+            for pair_name, correlation in correlations.items():
+                df[f'correlation_{pair_name}'] = correlation
+                
+            # Añadir métricas de calidad si existen
+            if 'predictive_quality_scores' in quality_metrics:
+                for metric_name, quality_score in quality_metrics['predictive_quality_scores'].items():
+                    df[f'quality_{metric_name}'] = quality_score
+                    
+        else:
+            # Si no hay pares IS/OOS, simular split como antes
+            logger.info("No se encontraron pares IS/OOS, simulando split...")
+            
+            # Verificar columnas necesarias para simulación
+            required_columns = ['CAGR', 'Sharpe_Ratio', 'Profit_factor']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                logger.warning(f"Columnas faltantes para predictividad: {missing_columns}")
+                df['predictability_score'] = 0.5
+                df['is_oos_correlation'] = 0.0
+                return df
+            
+            # Simular split IS/OOS
+            n_strategies = len(df)
+            is_size = int(n_strategies * is_oos_split)
+            
+            # Crear índices aleatorios para simular split
+            np.random.seed(42)  # Para reproducibilidad
+            indices = np.random.permutation(n_strategies)
+            is_indices = indices[:is_size]
+            oos_indices = indices[is_size:]
+            
+            # Calcular métricas IS
+            df_is = df.iloc[is_indices]
+            is_cagr_mean = df_is['CAGR'].mean()
+            is_sharpe_mean = df_is['Sharpe_Ratio'].mean()
+            is_profit_factor_mean = df_is['Profit_factor'].mean()
+            
+            # Calcular métricas OOS
+            df_oos = df.iloc[oos_indices]
+            oos_cagr_mean = df_oos['CAGR'].mean()
+            oos_sharpe_mean = df_oos['Sharpe_Ratio'].mean()
+            oos_profit_factor_mean = df_oos['Profit_factor'].mean()
+            
+            # Calcular correlaciones usando PredictabilityAnalyzer
+            cagr_correlation = 0.0
+            sharpe_correlation = 0.0
+            
+            if len(df_is) > 1 and len(df_oos) > 1:
+                try:
+                    # Crear DataFrame temporal con pares IS/OOS
+                    temp_df = pd.DataFrame({
+                        'CAGR_IS': df_is['CAGR'].values,
+                        'CAGR_OOS': df_oos['CAGR'].values,
+                        'Sharpe_Ratio_IS': df_is['Sharpe_Ratio'].values,
+                        'Sharpe_Ratio_OOS': df_oos['Sharpe_Ratio'].values
+                    })
+                    
+                    # Usar PredictabilityAnalyzer para correlaciones
+                    temp_correlations = analyzer.analyze_is_oos_correlations(temp_df)
+                    
+                    if 'CAGR_IS_vs_CAGR_OOS' in temp_correlations:
+                        cagr_correlation = temp_correlations['CAGR_IS_vs_CAGR_OOS']
+                    if 'Sharpe_Ratio_IS_vs_Sharpe_Ratio_OOS' in temp_correlations:
+                        sharpe_correlation = temp_correlations['Sharpe_Ratio_IS_vs_Sharpe_Ratio_OOS']
+                        
+                except Exception as e:
+                    logger.warning(f"Error calculando correlaciones con PredictabilityAnalyzer: {e}")
+                    # Fallback a cálculo manual
+                    try:
+                        cagr_corr_matrix = np.corrcoef(df_is['CAGR'], df_oos['CAGR'])
+                        cagr_correlation = cagr_corr_matrix[0, 1] if not np.isnan(cagr_corr_matrix[0, 1]) else 0.0
+                    except Exception:
+                        cagr_correlation = 0.0
+                        
+                    try:
+                        sharpe_corr_matrix = np.corrcoef(df_is['Sharpe_Ratio'], df_oos['Sharpe_Ratio'])
+                        sharpe_correlation = sharpe_corr_matrix[0, 1] if not np.isnan(sharpe_corr_matrix[0, 1]) else 0.0
+                    except Exception:
+                        sharpe_correlation = 0.0
+            
+            # Calcular score de predictibilidad
+            predictability_score = (cagr_correlation + sharpe_correlation) / 2.0
+            predictability_score = max(0.0, min(1.0, predictability_score))  # Clamp entre 0 y 1
+            
+            # Añadir métricas al DataFrame
+            df['predictability_score'] = predictability_score
+            df['is_oos_correlation'] = (cagr_correlation + sharpe_correlation) / 2.0
+            df['is_cagr_mean'] = is_cagr_mean
+            df['oos_cagr_mean'] = oos_cagr_mean
+            df['is_sharpe_mean'] = is_sharpe_mean
+            df['oos_sharpe_mean'] = oos_sharpe_mean
+        
+        logger.info(f"Predictibilidad calculada usando PredictabilityAnalyzer: score={predictability_score:.3f}")
+        return df
+        
+    except Exception as e:
+        logger.error(f"Error calculando predictibilidad: {e}")
+        df['predictability_score'] = 0.5
+        df['is_oos_correlation'] = 0.0
+        return df
+
+
+# ============================================================================
+# FUNCIONES DE UTILIDAD ADICIONALES
+# ============================================================================
+
+def get_analysis_summary(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Genera un resumen completo del análisis.
+    
+    Args:
+        df: DataFrame con análisis completado
+        
+    Returns:
+        Diccionario con resumen del análisis
+    """
+    summary = {
+        'total_strategies': len(df),
+        'analysis_timestamp': datetime.now().isoformat(),
+        'available_metrics': list(df.columns)
+    }
+    
+    # Estadísticas por métrica
+    numeric_columns = df.select_dtypes(include=[np.number]).columns
+    
+    for col in numeric_columns:
+        if col in df.columns and not df[col].isna().all():
+            summary[f'{col}_stats'] = {
+                'mean': float(df[col].mean()),
+                'std': float(df[col].std()),
+                'min': float(df[col].min()),
+                'max': float(df[col].max()),
+                'median': float(df[col].median())
+            }
+    
+    # Categorías si existen
+    if 'Quality_Category' in df.columns:
+        category_counts = df['Quality_Category'].value_counts().to_dict()
+        summary['quality_distribution'] = category_counts
+    
+    return summary
+
+
+def export_analysis_results(df: pd.DataFrame, output_path: str, format: str = 'csv') -> bool:
+    """
+    Exporta los resultados del análisis.
+    
+    Args:
+        df: DataFrame con resultados
+        output_path: Ruta de salida
+        format: Formato de exportación ('csv', 'excel', 'json')
+        
+    Returns:
+        True si la exportación fue exitosa
+    """
+    try:
+        if format.lower() == 'csv':
+            df.to_csv(output_path, index=False)
+        elif format.lower() == 'excel':
+            df.to_excel(output_path, index=False)
+        elif format.lower() == 'json':
+            df.to_json(output_path, orient='records', indent=2)
+        else:
+            raise ValueError(f"Formato no soportado: {format}")
+        
+        logger.info(f"Resultados exportados exitosamente a {output_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error exportando resultados: {e}")
+        return False
 
 
 # ============================================================================
@@ -518,6 +852,12 @@ __all__ = [
     'safe_float',
     'validate_dataframe',
     'generate_insights',
+    # Funciones de compatibilidad añadidas
+    'run_unified_analysis_enhanced',
+    'categorize_quality',
+    'predictividad_is_oos_empirica',
+    'get_analysis_summary',
+    'export_analysis_results',
     # Exportar importadas para compatibilidad
     'UnifiedEvaluatorEnhanced',
     'ProgressCallback',

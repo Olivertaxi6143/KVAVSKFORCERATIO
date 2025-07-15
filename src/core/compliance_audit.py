@@ -33,12 +33,14 @@ import warnings
 from collections import defaultdict, OrderedDict
 import traceback
 import sys
+from core.logger_config import setup_logger
+logger = setup_logger(__name__)
 
 # Configurar warnings
 warnings.filterwarnings("ignore")
 
 # Configurar logging
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # This line is now redundant as logger is set globally
 
 class ComplianceLevel(Enum):
     """Niveles de compliance."""

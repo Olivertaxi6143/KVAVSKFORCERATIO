@@ -241,31 +241,5 @@ def log_execution_time(func: Callable):
     return wrapper
 
 
-class GUIAnalysisError(Exception):
-    """
-    Excepción personalizada para errores de análisis en la GUI.
-    """
-    
-    def __init__(self, message: str, error_type: str = "general", details: Optional[Dict] = None):
-        """
-        Inicializa la excepción.
-        
-        Args:
-            message: Mensaje de error
-            error_type: Tipo de error
-            details: Detalles adicionales del error
-        """
-        super().__init__(message)
-        self.error_type = error_type
-        self.details = details or {}
-        
-    def __str__(self):
-        return f"{self.error_type}: {super().__str__()}"
-        
-    def get_details(self) -> Dict[str, Any]:
-        """Obtiene los detalles del error."""
-        return {
-            'message': str(self),
-            'error_type': self.error_type,
-            'details': self.details
-        } 
+# Clase GUIAnalysisError eliminada - usar src/gui/utils.py en su lugar
+# from src.gui.utils import GUIAnalysisError 
