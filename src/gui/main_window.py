@@ -21,6 +21,8 @@ from .steps.step2_configure import Step2ConfigureFrame
 
 # Importar módulos de análisis avanzado
 from src.analysis.tail_risk_metrics import TailRiskAnalyzer
+from src.analysis.axi_select_analysis import AXISelectPredictiveSystem, ModelType
+from src.analysis.scientific_analysis import ScientificAnalysisFilter, ScientificVisualizationManager, AnalysisType
 
 # Importar utilidades GUI
 from .utils import (
@@ -364,6 +366,12 @@ class MainWindow(tk.Tk):
 
         # Pestaña de Análisis de Tail Risk
         self._create_tail_risk_tab()
+        
+        # Pestaña de Análisis AXISelect
+        self._create_axi_select_tab()
+        
+        # Pestaña de Análisis Científico
+        self._create_scientific_analysis_tab()
     
     def _create_log_tab(self):
         """Crea la pestaña de log."""
@@ -821,6 +829,447 @@ class MainWindow(tk.Tk):
             self.clipboard_append(results_text)
             show_info_message("Éxito", "Resultados de Tail Risk copiados al portapapeles")
             logger.info("📋 Resultados de Tail Risk copiados al portapapeles")
+        except Exception as e:
+            logger.error(f"❌ Error copiando resultados: {e}")
+            show_error_message("Error", f"Error copiando resultados: {str(e)}")
+    
+    def _create_axi_select_tab(self):
+        """Crea la pestaña de análisis AXISelect."""
+        axi_select_frame = ttk.Frame(self.notebook)
+        
+        # Título
+        title_label = ttk.Label(
+            axi_select_frame, 
+            text="🎯 Análisis AXISelect Predictivo", 
+            font=("Arial", 14, "bold")
+        )
+        title_label.pack(pady=10)
+        
+        # Frame principal con scroll
+        main_scroll = ttk.Scrollbar(axi_select_frame, orient="vertical")
+        main_scroll.pack(side="right", fill="y")
+        
+        canvas = tk.Canvas(axi_select_frame, yscrollcommand=main_scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        main_scroll.config(command=canvas.yview)
+        
+        # Frame interno para contenido
+        content_frame = ttk.Frame(canvas)
+        canvas.create_window((0, 0), window=content_frame, anchor="nw")
+        
+        # Sección 1: Información del Sistema Predictivo
+        axi_info_frame = ttk.LabelFrame(content_frame, text="📊 Sistema Predictivo AXISelect", padding=10)
+        axi_info_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.axi_summary_label = ttk.Label(axi_info_frame, text="Resumen: No disponible")
+        self.axi_summary_label.pack(anchor="w")
+        
+        self.axi_models_label = ttk.Label(axi_info_frame, text="Modelos disponibles: N/A")
+        self.axi_models_label.pack(anchor="w")
+        
+        self.axi_confidence_label = ttk.Label(axi_info_frame, text="Confianza: N/A")
+        self.axi_confidence_label.pack(anchor="w")
+        
+        # Sección 2: Configuración de Modelos
+        config_frame = ttk.LabelFrame(content_frame, text="⚙️ Configuración de Modelos", padding=10)
+        config_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Variables de control para modelos
+        self.axi_models_vars = {}
+        model_types = [
+            ("Random Forest", "random_forest"),
+            ("Linear Regression", "linear_regression"),
+            ("Gradient Boosting", "gradient_boosting"),
+            ("MLP Sklearn", "mlp_sklearn"),
+            ("LightGBM", "lightgbm"),
+            ("CatBoost", "catboost"),
+            ("PyTorch NN", "pytorch_nn")
+        ]
+        
+        for i, (name, key) in enumerate(model_types):
+            var = tk.BooleanVar(value=True)
+            self.axi_models_vars[key] = var
+            
+            cb = ttk.Checkbutton(config_frame, text=f"📊 {name}", variable=var)
+            cb.grid(row=i//2, column=i%2, sticky=tk.W, pady=2, padx=5)
+        
+        # Sección 3: Botones de Control
+        control_frame = ttk.Frame(content_frame)
+        control_frame.pack(fill="x", padx=10, pady=10)
+        
+        self.analyze_axi_button = ttk.Button(
+            control_frame, 
+            text="🎯 Ejecutar Análisis AXISelect",
+            command=self._analyze_axi_select
+        )
+        self.analyze_axi_button.pack(side="left", padx=5)
+        
+        self.axi_results_button = ttk.Button(
+            control_frame, 
+            text="📈 Ver Resultados",
+            command=self._view_axi_select_results
+        )
+        self.axi_results_button.pack(side="left", padx=5)
+        
+        # Configurar scroll
+        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        
+        self.notebook.add(axi_select_frame, text="🎯 AXISelect")
+    
+    def _analyze_axi_select(self):
+        """Ejecuta el análisis AXISelect."""
+        try:
+            logger.info("🎯 Analizando AXISelect...")
+            
+            strategies = self.shared_data.get('loaded_data')
+            if strategies is None:
+                show_error_message("Error", "No hay estrategias cargadas para analizar AXISelect")
+                return
+            
+            # Crear instancia del sistema predictivo
+            axi_system = AXISelectPredictiveSystem()
+            
+            # Preparar datos para predicción (usar CAGR como target)
+            if 'CAGR' not in strategies.columns:
+                show_error_message("Error", "No se encontró la columna CAGR para análisis AXISelect")
+                return
+            
+            # Seleccionar modelos activos
+            active_models = [key for key, var in self.axi_models_vars.items() if var.get()]
+            
+            # Realizar predicción híbrida
+            results = axi_system.predict_hybrid(strategies, 'CAGR')
+            
+            # Actualizar interfaz
+            self.axi_summary_label.config(text=f"Resumen: {len(active_models)} modelos activos")
+            self.axi_models_label.config(text=f"Modelos: {', '.join(active_models)}")
+            self.axi_confidence_label.config(text=f"Confianza: {results.get('confidence', 0):.2f}")
+            
+            # Guardar resultados
+            self.shared_data['axi_select_results'] = results
+            
+            logger.info(f"✅ AXISelect analizado. Modelos: {len(active_models)}")
+            show_info_message("Éxito", "Análisis AXISelect completado correctamente")
+            
+        except Exception as e:
+            logger.error(f"❌ Error analizando AXISelect: {e}")
+            show_error_message("Error", f"Error analizando AXISelect: {str(e)}")
+    
+    def _view_axi_select_results(self):
+        """Muestra los resultados del análisis AXISelect."""
+        try:
+            results = self.shared_data.get('axi_select_results')
+            if results is None:
+                show_error_message("Error", "No hay resultados de AXISelect para mostrar")
+                return
+            
+            # Crear una ventana emergente para mostrar los resultados
+            axi_window = tk.Toplevel(self)
+            axi_window.title("Resultados de Análisis AXISelect")
+            axi_window.geometry("900x700")
+            center_window(axi_window, 900, 700)
+
+            # Frame principal con scroll
+            main_frame = ttk.Frame(axi_window)
+            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # Título
+            title_label = ttk.Label(main_frame, text="🎯 Resultados de Análisis AXISelect Predictivo", 
+                                   font=("Arial", 12, "bold"))
+            title_label.pack(pady=(0, 10))
+
+            # Texto para mostrar los resultados detallados
+            results_text = "=== RESULTADOS DE AXISELECT ===\n\n"
+            
+            # Información general
+            results_text += f"🔸 Confianza General: {results.get('confidence', 'N/A'):.4f}\n"
+            results_text += f"🔸 Modelos Utilizados: {len(results.get('models', {}))}\n"
+            results_text += f"🔸 Métricas de Performance:\n"
+            
+            # Métricas de performance
+            performance = results.get('performance', {})
+            for metric, value in performance.items():
+                results_text += f"   - {metric}: {value:.4f}\n"
+            
+            results_text += "\n🔸 Importancia de Features:\n"
+            
+            # Feature importance
+            feature_importance = results.get('feature_importance', {})
+            for feature, importance in sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:10]:
+                results_text += f"   - {feature}: {importance:.4f}\n"
+            
+            results_text += "\n🔸 Análisis SHAP:\n"
+            
+            # SHAP analysis
+            shap_analysis = results.get('shap_analysis', {})
+            for key, value in shap_analysis.items():
+                if isinstance(value, (int, float)):
+                    results_text += f"   - {key}: {value:.4f}\n"
+                else:
+                    results_text += f"   - {key}: {value}\n"
+            
+            # Widget de texto con scroll
+            text_frame = ttk.Frame(main_frame)
+            text_frame.pack(fill="both", expand=True)
+            
+            text_widget = tk.Text(text_frame, font=("Consolas", 9), wrap=tk.WORD)
+            scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            text_widget.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            text_widget.insert(tk.END, results_text)
+            text_widget.configure(state=tk.DISABLED)
+
+            # Botones de acción
+            button_frame = ttk.Frame(main_frame)
+            button_frame.pack(fill="x", pady=10)
+            
+            # Botón para copiar resultados
+            copy_btn = ttk.Button(button_frame, text="📋 Copiar Resultados", 
+                                 command=lambda: self._copy_axi_select_results(results_text))
+            copy_btn.pack(side="left", padx=5)
+            
+            # Botón para cerrar
+            close_button = ttk.Button(button_frame, text="Cerrar", command=axi_window.destroy)
+            close_button.pack(side="right", padx=5)
+
+            logger.info("📈 Mostrando resultados detallados de AXISelect")
+            
+        except Exception as e:
+            logger.error(f"❌ Error mostrando resultados de AXISelect: {e}")
+            show_error_message("Error", f"Error mostrando resultados de AXISelect: {str(e)}")
+    
+    def _copy_axi_select_results(self, results_text: str):
+        """Copia los resultados de AXISelect al portapapeles."""
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(results_text)
+            show_info_message("Éxito", "Resultados de AXISelect copiados al portapapeles")
+            logger.info("📋 Resultados de AXISelect copiados al portapapeles")
+        except Exception as e:
+            logger.error(f"❌ Error copiando resultados: {e}")
+            show_error_message("Error", f"Error copiando resultados: {str(e)}")
+    
+    def _create_scientific_analysis_tab(self):
+        """Crea la pestaña de análisis científico."""
+        scientific_frame = ttk.Frame(self.notebook)
+        
+        # Título
+        title_label = ttk.Label(
+            scientific_frame, 
+            text="🔬 Análisis Científico Avanzado", 
+            font=("Arial", 14, "bold")
+        )
+        title_label.pack(pady=10)
+        
+        # Frame principal con scroll
+        main_scroll = ttk.Scrollbar(scientific_frame, orient="vertical")
+        main_scroll.pack(side="right", fill="y")
+        
+        canvas = tk.Canvas(scientific_frame, yscrollcommand=main_scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        main_scroll.config(command=canvas.yview)
+        
+        # Frame interno para contenido
+        content_frame = ttk.Frame(canvas)
+        canvas.create_window((0, 0), window=content_frame, anchor="nw")
+        
+        # Sección 1: Información del Análisis Científico
+        scientific_info_frame = ttk.LabelFrame(content_frame, text="📊 Análisis Científico", padding=10)
+        scientific_info_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.scientific_summary_label = ttk.Label(scientific_info_frame, text="Resumen: No disponible")
+        self.scientific_summary_label.pack(anchor="w")
+        
+        self.scientific_strategies_label = ttk.Label(scientific_info_frame, text="Estrategias filtradas: N/A")
+        self.scientific_strategies_label.pack(anchor="w")
+        
+        self.scientific_analysis_label = ttk.Label(scientific_info_frame, text="Análisis activo: N/A")
+        self.scientific_analysis_label.pack(anchor="w")
+        
+        # Sección 2: Tipos de Análisis Disponibles
+        analysis_frame = ttk.LabelFrame(content_frame, text="🔍 Tipos de Análisis", padding=10)
+        analysis_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Variables de control para tipos de análisis
+        self.scientific_analysis_vars = {}
+        analysis_types = [
+            ("Predictabilidad Core", "predictability"),
+            ("Predictabilidad Empírica", "empirical_predictability"),
+            ("Regímenes de Mercado", "market_regimes"),
+            ("Robustez", "robustness"),
+            ("Walk Forward", "walk_forward"),
+            ("Simulación Nula", "null_simulation"),
+            ("Tail Risk", "tail_risk"),
+            ("Análisis Comprehensivo", "comprehensive")
+        ]
+        
+        for i, (name, key) in enumerate(analysis_types):
+            var = tk.BooleanVar(value=True)
+            self.scientific_analysis_vars[key] = var
+            
+            cb = ttk.Checkbutton(analysis_frame, text=f"🔬 {name}", variable=var)
+            cb.grid(row=i//2, column=i%2, sticky=tk.W, pady=2, padx=5)
+        
+        # Sección 3: Botones de Control
+        control_frame = ttk.Frame(content_frame)
+        control_frame.pack(fill="x", padx=10, pady=10)
+        
+        self.analyze_scientific_button = ttk.Button(
+            control_frame, 
+            text="🔬 Ejecutar Análisis Científico",
+            command=self._analyze_scientific
+        )
+        self.analyze_scientific_button.pack(side="left", padx=5)
+        
+        self.scientific_results_button = ttk.Button(
+            control_frame, 
+            text="📈 Ver Resultados",
+            command=self._view_scientific_results
+        )
+        self.scientific_results_button.pack(side="left", padx=5)
+        
+        # Configurar scroll
+        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        
+        self.notebook.add(scientific_frame, text="🔬 Científico")
+    
+    def _analyze_scientific(self):
+        """Ejecuta el análisis científico."""
+        try:
+            logger.info("🔬 Analizando científico...")
+            
+            strategies = self.shared_data.get('loaded_data')
+            if strategies is None:
+                show_error_message("Error", "No hay estrategias cargadas para análisis científico")
+                return
+            
+            # Crear filtro de análisis científico
+            scientific_filter = ScientificAnalysisFilter(strategies)
+            
+            # Seleccionar tipos de análisis activos
+            active_analyses = [key for key, var in self.scientific_analysis_vars.items() if var.get()]
+            
+            # Ejecutar análisis comprehensivo
+            results = {}
+            for analysis_type in active_analyses:
+                try:
+                    result = scientific_filter.apply_scientific_analysis(analysis_type)
+                    results[analysis_type] = result
+                    logger.info(f"✅ Análisis {analysis_type} completado")
+                except Exception as e:
+                    logger.error(f"❌ Error en análisis {analysis_type}: {e}")
+                    results[analysis_type] = {"error": str(e)}
+            
+            # Actualizar interfaz
+            self.scientific_summary_label.config(text=f"Resumen: {len(active_analyses)} análisis ejecutados")
+            self.scientific_strategies_label.config(text=f"Estrategias: {len(strategies)} disponibles")
+            self.scientific_analysis_label.config(text=f"Análisis: {', '.join(active_analyses)}")
+            
+            # Guardar resultados
+            self.shared_data['scientific_results'] = results
+            
+            logger.info(f"✅ Análisis científico completado. Tipos: {len(active_analyses)}")
+            show_info_message("Éxito", "Análisis científico completado correctamente")
+            
+        except Exception as e:
+            logger.error(f"❌ Error analizando científico: {e}")
+            show_error_message("Error", f"Error analizando científico: {str(e)}")
+    
+    def _view_scientific_results(self):
+        """Muestra los resultados del análisis científico."""
+        try:
+            results = self.shared_data.get('scientific_results')
+            if results is None:
+                show_error_message("Error", "No hay resultados científicos para mostrar")
+                return
+            
+            # Crear una ventana emergente para mostrar los resultados
+            scientific_window = tk.Toplevel(self)
+            scientific_window.title("Resultados de Análisis Científico")
+            scientific_window.geometry("1000x800")
+            center_window(scientific_window, 1000, 800)
+
+            # Frame principal con scroll
+            main_frame = ttk.Frame(scientific_window)
+            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # Título
+            title_label = ttk.Label(main_frame, text="🔬 Resultados de Análisis Científico Avanzado", 
+                                   font=("Arial", 12, "bold"))
+            title_label.pack(pady=(0, 10))
+
+            # Texto para mostrar los resultados detallados
+            results_text = "=== RESULTADOS DE ANÁLISIS CIENTÍFICO ===\n\n"
+            
+            # Mostrar resultados por tipo de análisis
+            for analysis_type, result in results.items():
+                results_text += f"🔸 ANÁLISIS: {analysis_type.upper()}\n"
+                results_text += f"   Estado: {'✅ Exitoso' if result.success else '❌ Error'}\n"
+                
+                if result.success:
+                    results_text += f"   Estrategias analizadas: {result.filtered_strategies_count}\n"
+                    results_text += f"   Timestamp: {result.timestamp}\n"
+                    
+                    # Mostrar resultados específicos
+                    analysis_results = result.results
+                    if isinstance(analysis_results, dict):
+                        for key, value in analysis_results.items():
+                            if isinstance(value, (int, float)):
+                                results_text += f"   - {key}: {value:.4f}\n"
+                            elif isinstance(value, str):
+                                results_text += f"   - {key}: {value}\n"
+                            elif isinstance(value, dict):
+                                results_text += f"   - {key}: {len(value)} elementos\n"
+                            else:
+                                results_text += f"   - {key}: {type(value).__name__}\n"
+                else:
+                    results_text += f"   Error: {result.error_message}\n"
+                
+                results_text += "-" * 50 + "\n\n"
+            
+            # Widget de texto con scroll
+            text_frame = ttk.Frame(main_frame)
+            text_frame.pack(fill="both", expand=True)
+            
+            text_widget = tk.Text(text_frame, font=("Consolas", 9), wrap=tk.WORD)
+            scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            text_widget.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            text_widget.insert(tk.END, results_text)
+            text_widget.configure(state=tk.DISABLED)
+
+            # Botones de acción
+            button_frame = ttk.Frame(main_frame)
+            button_frame.pack(fill="x", pady=10)
+            
+            # Botón para copiar resultados
+            copy_btn = ttk.Button(button_frame, text="📋 Copiar Resultados", 
+                                 command=lambda: self._copy_scientific_results(results_text))
+            copy_btn.pack(side="left", padx=5)
+            
+            # Botón para cerrar
+            close_button = ttk.Button(button_frame, text="Cerrar", command=scientific_window.destroy)
+            close_button.pack(side="right", padx=5)
+
+            logger.info("📈 Mostrando resultados detallados de análisis científico")
+            
+        except Exception as e:
+            logger.error(f"❌ Error mostrando resultados científicos: {e}")
+            show_error_message("Error", f"Error mostrando resultados científicos: {str(e)}")
+    
+    def _copy_scientific_results(self, results_text: str):
+        """Copia los resultados científicos al portapapeles."""
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(results_text)
+            show_info_message("Éxito", "Resultados científicos copiados al portapapeles")
+            logger.info("📋 Resultados científicos copiados al portapapeles")
         except Exception as e:
             logger.error(f"❌ Error copiando resultados: {e}")
             show_error_message("Error", f"Error copiando resultados: {str(e)}")
