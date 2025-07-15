@@ -36,7 +36,8 @@ import warnings
 from src.logger_config import setup_logger
 from src.core.analysis.factor_k_analyzer import FactorKElite96Enhanced
 from src.core.analysis.qva_analyzer import QVAScorerEnhanced
-from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced, ProgressCallback
+from src.core.config.config_manager import ConfigManagerEnhanced
+from src.core.config.progress_callback import ProgressCallback
 from src.analysis.tail_risk_metrics import TailRiskAnalyzer
 
 warnings.filterwarnings("ignore")
@@ -58,7 +59,8 @@ class UnifiedEvaluatorEnhanced:
         self.logger = setup_logger("kforce")
         self.progress_callback = progress_callback
         self.factor_k = FactorKElite96Enhanced(progress_callback=progress_callback)
-        self.qva_scorer = QVAScorerEnhanced(self.getattr(factor_k, 'config', None)_manager, progress_callback=progress_callback)
+        self.config_manager = ConfigManagerEnhanced()
+        self.qva_scorer = QVAScorerEnhanced(self.config_manager, progress_callback=progress_callback)
         self.tail_risk_analyzer = TailRiskAnalyzer()
     
     def _ensure_series_type(self, data: Any, index: pd.Index, default_value: float = 0.5) -> pd.Series:
@@ -101,11 +103,12 @@ class UnifiedEvaluatorEnhanced:
         """
         try:
             # Convertir a numérico y manejar NaN
-            numeric_series = pd.to_numeric(series, errors='coerce').fillna(0.5)
-            
-            # Asegurar que sea una Series
+            numeric_series = pd.to_numeric(series, errors='coerce')
+            # Si no es Series, convierto
             if not isinstance(numeric_series, pd.Series):
                 numeric_series = pd.Series(numeric_series, index=series.index)
+            # fillna solo sobre Series
+            numeric_series = numeric_series.fillna(0.5)
             
             if numeric_series.empty or numeric_series.isna().all():
                 return pd.Series(0.5, index=series.index)
@@ -134,25 +137,45 @@ class UnifiedEvaluatorEnhanced:
     def _get_factor_k_scores(self, df_fk: pd.DataFrame) -> pd.Series:
         """
         Obtiene y normaliza los scores de Factor K.
-        
-        Args:
-            df_fk: DataFrame con resultados de Factor K
-            
-        Returns:
-            pd.Series: Scores de Factor K normalizados
         """
         if 'FK96_Elite_Enhanced_Normalized' in df_fk.columns:
             scores = df_fk['FK96_Elite_Enhanced_Normalized']
             # Asegurar que sea una Series
             if isinstance(scores, pd.DataFrame):
                 scores = scores.iloc[:, 0]
-            return scores.fillna(0.5)
+            if isinstance(scores, (float, int)):
+                return pd.Series(0.5 if pd.isna(scores) else scores, index=df_fk.index)
+            elif isinstance(scores, np.ndarray):
+                scores_series = pd.Series(scores.astype(float), index=df_fk.index)
+                # Usar np.nan_to_num en vez de fillna para ndarrays
+                scores_series = pd.Series(np.nan_to_num(scores_series, nan=0.5), index=df_fk.index)
+                return scores_series
+            elif isinstance(scores, pd.Series):
+                return scores.fillna(0.5)
+            elif isinstance(scores, pd.DataFrame):
+                return scores.iloc[:, 0].fillna(0.5)
+            else:
+                return pd.Series(0.5, index=df_fk.index)
         elif 'FK96_Elite_Enhanced' in df_fk.columns:
-            fk_raw = df_fk['FK96_Elite_Enhanced'].fillna(0.5)
-            # Asegurar que sea una Series antes de normalizar
-            if isinstance(fk_raw, pd.DataFrame):
-                fk_raw = fk_raw.iloc[:, 0]
-            return self._normalize_series(fk_raw)
+            fk_raw = df_fk['FK96_Elite_Enhanced']
+            if isinstance(fk_raw, (float, int)):
+                fk_raw = 0.5 if pd.isna(fk_raw) else fk_raw
+                fk_raw = pd.Series(fk_raw, index=df_fk.index)
+                return fk_raw
+            elif isinstance(fk_raw, np.ndarray):
+                fk_raw = pd.Series(fk_raw.astype(float), index=df_fk.index)
+                fk_raw = pd.Series(np.nan_to_num(fk_raw, nan=0.5), index=df_fk.index)
+                return fk_raw
+            elif isinstance(fk_raw, pd.Series):
+                fk_raw = fk_raw.fillna(0.5)
+                return self._normalize_series(fk_raw)
+            elif isinstance(fk_raw, pd.DataFrame):
+                fk_raw = fk_raw.iloc[:, 0].fillna(0.5)
+                return self._normalize_series(fk_raw)
+            else:
+                fk_raw = pd.Series(fk_raw, index=df_fk.index)
+                fk_raw = pd.Series(np.nan_to_num(fk_raw, nan=0.5), index=df_fk.index)
+                return self._normalize_series(fk_raw)
         else:
             self.logger.warning("No se encontraron scores de Factor K, usando valor por defecto")
             return pd.Series(0.5, index=df_fk.index)
@@ -177,63 +200,45 @@ class UnifiedEvaluatorEnhanced:
     def _apply_tail_risk_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Aplica análisis de tail risk metrics al DataFrame.
-        
-        Args:
-            df: DataFrame con datos de estrategias
-            
-        Returns:
-            pd.DataFrame: DataFrame con métricas de tail risk añadidas
         """
         try:
             self.logger.info("🔬 Aplicando análisis de Tail Risk Metrics...")
-            
             if self.progress_callback:
                 self.progress_callback.update_progress("Tail Risk", 0, 100, "Iniciando análisis de tail risk...")
-            
-            # Verificar si hay datos de retornos disponibles
             required_columns = ['Strategy_Name']
             if not all(col in df.columns for col in required_columns):
                 self.logger.warning("Columnas requeridas no disponibles para tail risk analysis")
                 return df
-            
-            # Intentar encontrar columnas de retornos o métricas de riesgo
-            risk_columns = [col for col in df.columns if any(keyword in col.lower() 
-                           for keyword in ['return', 'profit', 'loss', 'drawdown', 'sharpe', 'var'])]
-            
+            risk_columns = [col for col in df.columns if any(keyword in col.lower() for keyword in ['return', 'profit', 'loss', 'drawdown', 'sharpe', 'var'])]
             if not risk_columns:
                 self.logger.warning("No se encontraron columnas de riesgo para tail risk analysis")
                 return df
-            
             self.logger.info(f"Columnas de riesgo encontradas: {risk_columns}")
-            
-            # Aplicar análisis de tail risk
-            tail_risk_results = self.tail_risk_analyzer.analyze_strategies(df)
-            
+            # Usar el método correcto según disponibilidad
+            if hasattr(self.tail_risk_analyzer, 'analyze_strategies') and callable(getattr(self.tail_risk_analyzer, 'analyze_strategies', None)):
+                tail_risk_results = self.tail_risk_analyzer.analyze_strategies(df)  # type: ignore[reportAttributeAccessIssue]  # Protegido con hasattr y callable
+            elif hasattr(self.tail_risk_analyzer, 'analyze_tail_risk_metrics') and callable(getattr(self.tail_risk_analyzer, 'analyze_tail_risk_metrics', None)):
+                tail_risk_results = self.tail_risk_analyzer.analyze_tail_risk_metrics(df)
+            else:
+                self.logger.warning('TailRiskAnalyzer no tiene método de análisis disponible')
+                return df
             if isinstance(tail_risk_results, dict):
-                # Si el resultado es un diccionario, extraer métricas principales
                 for strategy_name, metrics in tail_risk_results.items():
                     if strategy_name in df.index or strategy_name in df['Strategy_Name'].values:
-                        # Encontrar el índice correspondiente
                         if strategy_name in df.index:
                             idx = strategy_name
                         else:
                             idx = df[df['Strategy_Name'] == strategy_name].index[0]
-                        
-                        # Añadir métricas principales al DataFrame
                         for metric_name, value in metrics.items():
                             if isinstance(value, (int, float)) and not pd.isna(value):
                                 col_name = f"TailRisk_{metric_name}"
                                 df.loc[idx, col_name] = value
-                
                 self.logger.info("✅ Métricas de tail risk añadidas al DataFrame")
             else:
                 self.logger.warning("Resultado de tail risk analysis no es un diccionario válido")
-            
             if self.progress_callback:
                 self.progress_callback.update_progress("Tail Risk", 100, 100, "Análisis de tail risk completado")
-            
             return df
-            
         except Exception as e:
             self.logger.error(f"Error aplicando análisis de tail risk: {e}")
             return df
@@ -411,6 +416,14 @@ class UnifiedEvaluatorEnhanced:
                             sharpe_mean = df.loc[regime_mask, 'Sharpe_Ratio'].mean() if 'Sharpe_Ratio' in df.columns else None
                             self.logger.info(f"📊 Régimen {regime}: {size} estrategias, score promedio: {regime_score:.4f}, Sharpe medio: {sharpe_mean}")
                             df.loc[regime_mask, 'Regime_Score'] = regime_score
+                    else:
+                        # Si no tiene .any(), uso np.any
+                        if np.any(regime_mask):
+                            regime_score = df.loc[regime_mask, 'FK96_Elite_Enhanced'].mean()
+                            size = int(np.sum(regime_mask))
+                            sharpe_mean = df.loc[regime_mask, 'Sharpe_Ratio'].mean() if 'Sharpe_Ratio' in df.columns else None
+                            self.logger.info(f"📊 Régimen {regime}: {size} estrategias, score promedio: {regime_score:.4f}, Sharpe medio: {sharpe_mean}")
+                            df.loc[regime_mask, 'Regime_Score'] = regime_score
             else:
                 self.logger.warning(f"⚠️ Insuficientes métricas para clustering: {available_metrics}")
             return df
@@ -422,28 +435,38 @@ class UnifiedEvaluatorEnhanced:
         """Aplica análisis HMM para Unified_Score solo si hay datos secuenciales reales."""
         try:
             self.logger.info("🔬 Aplicando análisis HMM para Unified_Score...")
-            # Comprobar si el analizador HMM es real y hay datos secuenciales
             hmm_analyzer = getattr(self.factor_k, 'hmm_analyzer', None)
             if hmm_analyzer is None or getattr(hmm_analyzer, 'is_simulation', True):
                 self.logger.info("⚠️ HMM no ejecutado: no hay analizador real o datos secuenciales.")
                 return df
-            # Seleccionar métricas para HMM
             hmm_metrics = ['Sharpe_Ratio', 'Max_DD_%', 'CAGR']
             available_metrics = [m for m in hmm_metrics if m in df.columns]
             self.logger.info(f"📊 Métricas disponibles para HMM: {available_metrics}")
             if len(available_metrics) >= 2:
                 X = df[available_metrics].fillna(0).values
-                # Aquí se llamaría al analizador HMM real
                 states = hmm_analyzer.predict_states(X)
                 df['HMM_State'] = states
                 self.logger.info(f"✅ Estados HMM asignados: {len(df)} estrategias")
                 for state in np.unique(states):
                     state_mask = df['HMM_State'] == state
                     # Refuerzo: aseguro que state_mask es un array booleano y nunca se usa como condicional directo
-                    if hasattr(state_mask, 'any') and callable(state_mask.any):
+                    if isinstance(state_mask, pd.Series):
                         if state_mask.any():
                             state_score = df.loc[state_mask, 'FK96_Elite_Enhanced'].mean()
                             size = int(state_mask.sum())
+                            self.logger.info(f"📊 Estado HMM {state}: {size} estrategias, score promedio: {state_score:.4f}")
+                            df.loc[state_mask, 'HMM_Score'] = state_score
+                    elif isinstance(state_mask, np.ndarray):
+                        if np.any(state_mask):
+                            state_score = df.loc[state_mask, 'FK96_Elite_Enhanced'].mean()
+                            size = int(np.sum(state_mask))
+                            self.logger.info(f"📊 Estado HMM {state}: {size} estrategias, score promedio: {state_score:.4f}")
+                            df.loc[state_mask, 'HMM_Score'] = state_score
+                    else:
+                        # Para otros tipos, usar conversión a bool
+                        if bool(state_mask):
+                            state_score = df.loc[state_mask, 'FK96_Elite_Enhanced'].mean()
+                            size = int(np.sum(state_mask))
                             self.logger.info(f"📊 Estado HMM {state}: {size} estrategias, score promedio: {state_score:.4f}")
                             df.loc[state_mask, 'HMM_Score'] = state_score
             else:
@@ -543,7 +566,7 @@ class UnifiedEvaluatorEnhanced:
             
             # Verificar métricas de tail risk calculadas
             tail_risk_columns = [col for col in df.columns if col.startswith('TailRisk_')]
-            if tail_risk_columns:
+            if isinstance(tail_risk_columns, (list, np.ndarray, pd.Series)) and bool(len(tail_risk_columns) > 0):
                 summary['tail_risk_metrics_calculated'] = tail_risk_columns
                 summary['tail_risk_metrics_count'] = len(tail_risk_columns)
                 
@@ -560,7 +583,18 @@ class UnifiedEvaluatorEnhanced:
             if len(score_cols) > 1:
                 score_data = df.loc[:, score_cols].astype(float)
                 correlations = score_data.corr(method='pearson')
-                summary['score_correlations'] = correlations.to_dict()
+                # Corrección: solo agregar si correlations tiene al menos un valor válido
+                if isinstance(correlations, pd.DataFrame):
+                    if correlations.values.any():  # Usar .values.any() para DataFrame
+                        summary['score_correlations'] = correlations.to_dict()
+                elif isinstance(correlations, np.ndarray):
+                    if np.any(correlations):
+                        # Convertir ndarray a dict manualmente
+                        summary['score_correlations'] = {f'col_{i}': correlations[i].tolist() for i in range(len(correlations))}
+                else:
+                    # Para otros tipos, verificar si hay algún valor no cero
+                    if correlations is not None and isinstance(correlations, (dict, list)):
+                        summary['score_correlations'] = correlations
             
             # Top 5 estrategias por Unified_Score_Scientific (si existe)
             if 'Unified_Score_Scientific' in df.columns:
@@ -581,23 +615,32 @@ class UnifiedEvaluatorEnhanced:
                 summary['hmm_state_counts'] = hmm_counts
             
             # Información de tail risk por estrategia
-            if tail_risk_columns and 'Strategy_Name' in df.columns:
-                tail_risk_summary = {}
-                for _, row in df.iterrows():
-                    strategy_name = row.get('Strategy_Name', 'Unknown')
-                    strategy_metrics = {}
-                    for col in tail_risk_columns:
-                        if col in row and pd.notna(row[col]):
-                            strategy_metrics[col] = row[col]
-                    if len(strategy_metrics) > 0:
-                        tail_risk_summary[strategy_name] = strategy_metrics
-                
-                if len(tail_risk_summary) > 0:
-                    summary['tail_risk_by_strategy'] = tail_risk_summary
+            if isinstance(tail_risk_columns, (list, np.ndarray, pd.Series)) and bool(len(tail_risk_columns) > 0):
+                if 'Strategy_Name' in df.columns:
+                    tail_risk_summary = {}
+                    for _, row in df.iterrows():
+                        strategy_name = row.get('Strategy_Name', 'Unknown')
+                        strategy_metrics = {}
+                        for col in tail_risk_columns:
+                            if col in row:
+                                # Corrección para Pyright: convertir a escalar antes de evaluar
+                                value = row[col]
+                                if isinstance(value, (pd.Series, np.ndarray)):
+                                    # Si es Series o NDArray, verificar si tiene algún valor no nulo
+                                    if len(value) > 0 and not pd.isna(value).all():
+                                        strategy_metrics[col] = float(value.iloc[0]) if isinstance(value, pd.Series) else float(value[0])
+                                else:
+                                    # Para escalares, usar pd.notna directamente
+                                    if pd.notna(value):
+                                        strategy_metrics[col] = value
+                        if bool(len(strategy_metrics) > 0):
+                            tail_risk_summary[strategy_name] = strategy_metrics
+                    if bool(len(tail_risk_summary) > 0):
+                        summary['tail_risk_by_strategy'] = tail_risk_summary
             
             # Advertencia si hay columnas temporales
             temp_cols = [col for col in ['Market_Regime', 'HMM_State'] if col in df.columns]
-            if temp_cols:
+            if isinstance(temp_cols, (list, np.ndarray, pd.Series)) and bool(len(temp_cols) > 0):
                 summary['warning'] = f"Columnas temporales presentes: {temp_cols}. Considera limpiarlas si no son necesarias en la salida final."
             
             # TODO: Limpiar columnas temporales si no se requieren (decisión de negocio)

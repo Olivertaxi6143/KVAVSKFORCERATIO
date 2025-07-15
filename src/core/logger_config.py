@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import traceback
+import io
 
 # Constantes de formato y nivel de logging
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -26,11 +27,12 @@ class UnicodeSafeStreamHandler(logging.StreamHandler):
             msg = self.format(record)
             # Encode como UTF-8 y luego decode para evitar problemas de encoding
             if hasattr(sys.stdout, 'reconfigure'):
-                # Python 3.7+
-                try:
-                    sys.stdout.reconfigure(encoding='utf-8')
-                except:
-                    pass
+                # Python 3.7+ y solo si es TextIOWrapper
+                if isinstance(sys.stdout, io.TextIOWrapper):
+                    try:
+                        sys.stdout.reconfigure(encoding='utf-8')
+                    except Exception:
+                        pass
             stream = self.stream
             stream.write(msg)
             stream.write(self.terminator)
@@ -145,9 +147,10 @@ def configure_system_encoding():
         # Forzar UTF-8 en Windows
         if os.name == 'nt':
             os.environ['PYTHONIOENCODING'] = 'utf-8'
-            if hasattr(sys.stdout, 'reconfigure'):
+            import io
+            if hasattr(sys.stdout, 'reconfigure') and isinstance(sys.stdout, io.TextIOWrapper):
                 sys.stdout.reconfigure(encoding='utf-8')
-            if hasattr(sys.stderr, 'reconfigure'):
+            if hasattr(sys.stderr, 'reconfigure') and isinstance(sys.stderr, io.TextIOWrapper):
                 sys.stderr.reconfigure(encoding='utf-8')
     except Exception:
         pass

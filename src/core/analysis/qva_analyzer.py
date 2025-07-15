@@ -30,8 +30,8 @@ warnings.filterwarnings('ignore')
 from src.data.data_manager import DataManager, create_data_manager
 from src.data.data_utils import read_and_prepare
 from src.gui.utils import validate_dataframe
-from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced
-from src.getattr(core, 'config', None).progress_callback import ProgressCallback
+from src.core.config.config_manager import ConfigManagerEnhanced
+from src.core.config.progress_callback import ProgressCallback
 from src.logger_config import setup_logger
 
 # Importar ExtraKPIManager desde el módulo dedicado
@@ -40,7 +40,7 @@ from src.core.analysis.extra_kpi_manager import ExtraKPIManager
 # Importar librerías de ML para funcionalidades avanzadas (opcionales)
 try:
     from sklearn.ensemble import RandomForestRegressor, IsolationForest
-    from getattr(sklearn, 'model', None)_selection import cross_val_score
+    from sklearn.model_selection import cross_val_score
     from sklearn.preprocessing import StandardScaler
     from sklearn.cluster import KMeans
     import shap
@@ -101,7 +101,7 @@ class QVAScorerEnhanced:
             enable_advanced_features: Activar funcionalidades avanzadas (ML, explicabilidad, etc.)
         """
         self.logger = setup_logger("qva_unified")
-        getattr(self, 'config', None)_manager = config_manager or ConfigManagerEnhanced()
+        self.config_manager = config_manager or ConfigManagerEnhanced()
         self.progress_callback = progress_callback
         self.extra_kpi_manager = ExtraKPIManager(config_manager)
         
@@ -221,10 +221,10 @@ class QVAScorerEnhanced:
     def _get_data_from_manager(self) -> pd.DataFrame:
         """Obtiene datos del DataManager."""
         try:
-            if self.data_manager:
+            if self.data_manager and hasattr(self.data_manager, 'get_kpis_data'):
                 return self.data_manager.get_kpis_data()
             else:
-                self.logger.warning("⚠️ DataManager no disponible")
+                self.logger.warning("⚠️ DataManager no disponible o método get_kpis_data no existe")
                 return pd.DataFrame()
         except Exception as e:
             self.logger.error(f"❌ Error obteniendo datos del DataManager: {e}")
@@ -254,11 +254,11 @@ class QVAScorerEnhanced:
                 return pd.Series(0.5, index=df.index)
             
             # Obtener KPIs habilitados
-            enabled_kpis = getattr(self, 'config', None)_manager.get_enabled_kpis()
+            enabled_kpis = self.config_manager.get_enabled_kpis()
             self.logger.info(f"📊 KPIs habilitados: {len(enabled_kpis)}")
             
             # Obtener estilo de trading actual
-            trading_style = getattr(self, 'config', None)_manager.current_config.get('trading_style', 'General')
+            trading_style = self.config_manager.current_config.get('trading_style', 'General')
             self.logger.info(f"🎯 Estilo de trading: {trading_style}")
             
             # Obtener pesos para el estilo de trading
@@ -722,8 +722,8 @@ class QVAScorerEnhanced:
             Diccionario con componentes del score
         """
         try:
-            enabled_kpis = getattr(self, 'config', None)_manager.get_enabled_kpis()
-            trading_style = getattr(self, 'config', None)_manager.current_config.get('trading_style', 'General')
+            enabled_kpis = self.config_manager.get_enabled_kpis()
+            trading_style = self.config_manager.current_config.get('trading_style', 'General')
             
             breakdown = {
                 'profitability': self._calculate_profitability_component_robust(df, enabled_kpis),
@@ -1643,7 +1643,7 @@ class QVAScorerEnhanced:
         """
         try:
             # Actualizar configuración
-            getattr(self, 'config', None)_manager.current_config['trading_style'] = trading_style
+            self.config_manager.current_config['trading_style'] = trading_style
             
             # Optimizar pesos automáticamente
             optimized_weights = self.auto_optimize_weights_by_trading_style(trading_style, df)
@@ -1708,4 +1708,67 @@ class QVAScorerEnhanced:
                 'trading_style': trading_style,
                 'data_shape': df.shape,
                 'optimization_status': 'failed'
+            } 
+
+    def regime_adaptive_scoring(self, market_data: pd.DataFrame, strategies: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Implementa scoring adaptativo por régimen de mercado.
+        
+        Args:
+            market_data: Datos de mercado para detección de régimen
+            strategies: Estrategias a evaluar
+            
+        Returns:
+            Dict con scores adaptados por régimen
+        """
+        try:
+            self.logger.info("🎯 Iniciando scoring adaptativo por régimen...")
+            
+            # Importar MarketRegimeAnalyzer
+            from src.core.market_regime_analyzer import MarketRegimeDetector
+            
+            # Inicializar detector de régimen
+            regime_detector = MarketRegimeDetector()
+            
+            # 1. Detectar régimen actual
+            current_regime = regime_detector.detect_current_regime(market_data)
+            self.logger.info(f"📊 Régimen detectado: {current_regime}")
+            
+            # 2. Calcular rendimiento histórico por régimen
+            regime_performance = regime_detector.calculate_regime_performance(strategies, current_regime)
+            self.logger.info(f"📈 Rendimiento por régimen calculado")
+            
+            # 3. Optimizar pesos por régimen
+            optimized_weights = regime_detector.optimize_weights_by_regime(regime_performance, current_regime)
+            self.logger.info(f"⚙️ Pesos optimizados: {optimized_weights}")
+            
+            # 4. Aplicar scoring adaptativo
+            adaptive_scores = regime_detector.apply_adaptive_scoring(strategies, optimized_weights)
+            self.logger.info(f"✅ Scoring adaptativo aplicado a {len(adaptive_scores)} estrategias")
+            
+            # 5. Preparar resultados
+            results = {
+                'current_regime': current_regime,
+                'regime_performance': regime_performance,
+                'optimized_weights': optimized_weights,
+                'adaptive_scores': adaptive_scores,
+                'top_strategies': adaptive_scores.head(10)['Strategy_Name'].tolist() if len(adaptive_scores) > 0 else [],
+                'regime_optimal_count': len(regime_performance.get('regime_optimal_strategies', [])),
+                'implementation_status': 'success'
+            }
+            
+            self.logger.info(f"🎉 Scoring adaptativo completado: {len(results['top_strategies'])} estrategias top")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en scoring adaptativo: {e}")
+            return {
+                'current_regime': 'sideways',
+                'regime_performance': {},
+                'optimized_weights': {'profitability': 0.4, 'risk': 0.3, 'consistency': 0.3, 'ml': 0.15},
+                'adaptive_scores': strategies,
+                'top_strategies': [],
+                'regime_optimal_count': 0,
+                'implementation_status': 'error',
+                'error_message': str(e)
             } 

@@ -206,7 +206,7 @@ class TailRiskAnalyzer:
             self.logger.error(f"❌ Error analizando tail risk del portafolio: {e}")
             return {"error": str(e)}
 
-    def analyze_tail_risk_for_dataframe(self, df: pd.DataFrame, returns_column: str = "Returns", strategy_column: str = "Strategy") -> Dict[str, Any]:
+    def analyze_tail_risk_metrics(self, df: pd.DataFrame, returns_column: str = "Returns", strategy_column: str = "Strategy") -> Dict[str, Any]:
         """
         Analiza tail risk para cada estrategia en un DataFrame.
         Args:

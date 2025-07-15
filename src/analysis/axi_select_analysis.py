@@ -254,10 +254,26 @@ class AXISelectPredictiveSystem:
             
             # Manejar valores faltantes
             for col in X.columns:
-                # Usar pandas de manera segura
-                if X[col].isna().any():
-                    median_val = X[col].median()
-                    X[col] = X[col].fillna(median_val)
+                col_data = X[col]
+                # Si es un ndarray, convierto a Series para usar isna y fillna
+                if isinstance(col_data, np.ndarray):
+                    # np.isnan para ndarrays
+                    if np.isnan(col_data).any():
+                        median_val = np.nanmedian(col_data)
+                        X[col] = np.where(np.isnan(col_data), median_val, col_data)
+                elif isinstance(col_data, pd.Series):
+                    if col_data.isna().any():
+                        median_val = col_data.median()
+                        X[col] = col_data.fillna(median_val)
+                else:
+                    # Si es otro tipo, intento convertir a Series y aplicar fillna
+                    try:
+                        col_series = pd.Series(col_data)
+                        if col_series.isna().any():
+                            median_val = col_series.median()
+                            X[col] = col_series.fillna(median_val)
+                    except Exception:
+                        pass
             
             # Crear características adicionales
             if 'cagr_is' in X.columns and 'cagr_oos' in X.columns:

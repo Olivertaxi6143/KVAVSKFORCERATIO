@@ -26,10 +26,11 @@ class UnicodeSafeStreamHandler(logging.StreamHandler):
         try:
             msg = self.format(record)
             # Encode como UTF-8 y luego decode para evitar problemas de encoding
-            if hasattr(sys.stdout, 'reconfigure'):
+            reconfigure_func = getattr(sys.stdout, 'reconfigure', None)
+            if reconfigure_func is not None:
                 # Python 3.7+
                 try:
-                    sys.stdout.reconfigure(encoding='utf-8')
+                    reconfigure_func(encoding='utf-8')
                 except Exception:
                     pass
             stream = self.stream
@@ -147,14 +148,16 @@ def configure_system_encoding():
         if os.name == 'nt':
             os.environ['PYTHONIOENCODING'] = 'utf-8'
             # Verificar si reconfigure está disponible
-            if hasattr(sys.stdout, 'reconfigure'):
+            stdout_reconfigure = getattr(sys.stdout, 'reconfigure', None)
+            if stdout_reconfigure is not None:
                 try:
-                    sys.stdout.reconfigure(encoding='utf-8')
+                    stdout_reconfigure(encoding='utf-8')
                 except Exception:
                     pass
-            if hasattr(sys.stderr, 'reconfigure'):
+            stderr_reconfigure = getattr(sys.stderr, 'reconfigure', None)
+            if stderr_reconfigure is not None:
                 try:
-                    sys.stderr.reconfigure(encoding='utf-8')
+                    stderr_reconfigure(encoding='utf-8')
                 except Exception:
                     pass
     except Exception:

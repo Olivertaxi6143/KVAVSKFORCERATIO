@@ -306,7 +306,11 @@ class ScientificAnalysisFilter:
             logger.info("🔍 Ejecutando análisis de tail risk...")
             # Verificar si el método existe, si no, usar método alternativo
             if hasattr(self.tail_risk_analyzer, 'analyze_tail_risk_metrics'):
-                results: Dict[str, Any] = self.tail_risk_analyzer.analyze_tail_risk_metrics(strategies_df)
+                try:
+                    results: Dict[str, Any] = self.tail_risk_analyzer.analyze_tail_risk_metrics(strategies_df)
+                except AttributeError:
+                    results = {"error": "Método analyze_tail_risk_metrics no implementado"}
+                    logger.warning("⚠️ Método analyze_tail_risk_metrics no disponible en TailRiskAnalyzer")
             else:
                 # Método alternativo o stub temporal
                 results = {"error": "Método analyze_tail_risk_metrics no implementado"}

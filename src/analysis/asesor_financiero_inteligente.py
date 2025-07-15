@@ -29,7 +29,7 @@ import os
 from sklearn.ensemble import RandomForestRegressor, IsolationForest
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit, cross_val_score
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, silhouette_score
 import shap
 import matplotlib.pyplot as plt
@@ -68,7 +68,7 @@ class AsesorFinancieroInteligente:
         self.estrategias = estrategias_filtradas.copy() if estrategias_filtradas is not None else pd.DataFrame()
         self.kpis = kpis_seleccionados if kpis_seleccionados is not None else []
         self.scaler = StandardScaler()
-        getattr(self, 'model', None) = RandomForestRegressor(
+        self.model = RandomForestRegressor(
             n_estimators=100, 
             max_depth=10, 
             min_samples_leaf=5, 
@@ -206,6 +206,9 @@ class AsesorFinancieroInteligente:
         para asegurar robustez estadística.
         """
         df_filtrado = df.copy()
+        # Asegurar que es un DataFrame
+        if not isinstance(df_filtrado, pd.DataFrame):
+            df_filtrado = pd.DataFrame(df_filtrado)
         filtros_aplicados = []
         
         try:
@@ -228,7 +231,7 @@ class AsesorFinancieroInteligente:
                 logger.info(f"📅 Filtro meses mínimos: {antes} -> {len(df_filtrado)} estrategias")
             
             # 3. Sharpe ratio mínimo (ajustado según temporalidad)
-            if 'Sharpe_Ratio' in df_filtrado.columns:
+            if isinstance(df_filtrado, pd.DataFrame) and 'Sharpe_Ratio' in df_filtrado.columns:
                 antes = len(df_filtrado)
                 sharpe_min = 0.5 * self.factor_ajuste_temporalidad
                 df_filtrado = df_filtrado[df_filtrado['Sharpe_Ratio'] >= sharpe_min]
@@ -236,14 +239,14 @@ class AsesorFinancieroInteligente:
                 logger.info(f"📊 Filtro Sharpe mínimo ({sharpe_min:.2f}): {antes} -> {len(df_filtrado)} estrategias")
             
             # 4. Profit factor mínimo
-            if 'Profit_factor' in df_filtrado.columns:
+            if isinstance(df_filtrado, pd.DataFrame) and 'Profit_factor' in df_filtrado.columns:
                 antes = len(df_filtrado)
                 df_filtrado = df_filtrado[df_filtrado['Profit_factor'] >= 1.1]
                 filtros_aplicados.append(f"Profit factor mínimo: {antes} -> {len(df_filtrado)}")
                 logger.info(f"💹 Filtro profit factor mínimo: {antes} -> {len(df_filtrado)} estrategias")
             
             # 5. Drawdown máximo permitido
-            if 'Max_Drawdown' in df_filtrado.columns:
+            if isinstance(df_filtrado, pd.DataFrame) and 'Max_Drawdown' in df_filtrado.columns:
                 antes = len(df_filtrado)
                 drawdown_max = 0.25  # 25% máximo
                 df_filtrado = df_filtrado[df_filtrado['Max_Drawdown'] <= drawdown_max]
@@ -251,7 +254,7 @@ class AsesorFinancieroInteligente:
                 logger.info(f"📉 Filtro drawdown máximo ({drawdown_max*100}%): {antes} -> {len(df_filtrado)} estrategias")
             
             # 6. Win rate mínimo
-            if 'Winning_Percent' in df_filtrado.columns:
+            if isinstance(df_filtrado, pd.DataFrame) and 'Winning_Percent' in df_filtrado.columns:
                 antes = len(df_filtrado)
                 winrate_min = 0.4  # 40% mínimo
                 df_filtrado = df_filtrado[df_filtrado['Winning_Percent'] >= winrate_min]
@@ -259,7 +262,7 @@ class AsesorFinancieroInteligente:
                 logger.info(f"🎯 Filtro win rate mínimo ({winrate_min*100}%): {antes} -> {len(df_filtrado)} estrategias")
             
             # 7. Consistencia IS/OOS mínima
-            if 'Predictividad_IS_OOS' in df_filtrado.columns:
+            if isinstance(df_filtrado, pd.DataFrame) and 'Predictividad_IS_OOS' in df_filtrado.columns:
                 antes = len(df_filtrado)
                 consistencia_min = 0.6  # 60% mínimo
                 df_filtrado = df_filtrado[df_filtrado['Predictividad_IS_OOS'] >= consistencia_min]
@@ -335,11 +338,30 @@ class AsesorFinancieroInteligente:
     def _check_nulls(self, df, series):
         """Función auxiliar para verificar valores nulos de forma segura."""
         if isinstance(df, pd.DataFrame):
-            df_has_nulls = df.isnull().any().any()
+            # Verificar nulos en DataFrame usando numpy para evitar problemas de tipado
+            try:
+                # Convertir DataFrame a numpy array para verificar nulos
+                df_numpy = df.to_numpy()
+                df_has_nulls = bool(np.isnan(df_numpy).any())
+            except (AttributeError, TypeError):
+                df_has_nulls = False
         else:
-            # Si es un ndarray, usar numpy
-            df_has_nulls = np.isnan(df).any() if hasattr(df, 'any') else False
-        series_has_nulls = series.isnull().any()
+            # Si es un ndarray, usar numpy de forma segura
+            try:
+                df_has_nulls = bool(np.isnan(df).any())
+            except (AttributeError, TypeError):
+                df_has_nulls = False
+        # Verificar series de forma segura
+        try:
+            if hasattr(series, 'isnull'):
+                # Usar numpy para evitar problemas de tipado
+                series_numpy = np.array(series)
+                nan_mask = np.isnan(series_numpy)
+                series_has_nulls = bool(nan_mask.any())
+            else:
+                series_has_nulls = False
+        except (AttributeError, TypeError):
+            series_has_nulls = False
         return df_has_nulls or series_has_nulls
     
     def analizar_correlacion_is_oos(self) -> Dict[str, Any]:
@@ -364,12 +386,27 @@ class AsesorFinancieroInteligente:
                 mask = is_values.notnull() & oos_values.notnull()
                 if mask.sum() > 2:
                     try:
-                        corr_result = spearmanr(is_values[mask].values, oos_values[mask].values)
+                        # Convertir a numpy de forma segura
+                        is_masked = is_values[mask]
+                        oos_masked = oos_values[mask]
+                        
+                        # Convertir a numpy arrays
+                        if isinstance(is_masked, pd.Series):
+                            is_numpy = is_masked.to_numpy()
+                        else:
+                            is_numpy = np.array(is_masked)
+                            
+                        if isinstance(oos_masked, pd.Series):
+                            oos_numpy = oos_masked.to_numpy()
+                        else:
+                            oos_numpy = np.array(oos_masked)
+                            
+                        corr_result = spearmanr(is_numpy, oos_numpy)
                         if isinstance(corr_result, tuple):
                             val = corr_result[0]
                         else:
                             val = corr_result
-                        spearman_corr = float(val) if val is not None else 0.0 if val is not None else 0.0 if isinstance(val, (int, float, np.floating, np.integer)) else float('nan')
+                        spearman_corr = float(val) if val is not None and isinstance(val, (int, float, np.floating, np.integer)) else float('nan')
                     except Exception:
                         spearman_corr = float('nan')
                 else:
@@ -497,7 +534,7 @@ class AsesorFinancieroInteligente:
             
             logger.info(f"🔍 Detección de outliers: {len(outlier_indices)} outliers detectados")
             return {
-                'outliers': ((outlier_indices.tolist() if hasattr(outlier_indices, 'tolist') else list(outlier_indices)) if hasattr(outlier_indices, 'tolist') else list(outlier_indices)),
+                'outliers': outlier_indices.tolist() if hasattr(outlier_indices, 'tolist') else list(outlier_indices),
                 'buenos_outliers': buenos_outliers,
                 'malos_outliers': malos_outliers,
                 'consejos': consejos
@@ -596,8 +633,8 @@ class AsesorFinancieroInteligente:
             
             logger.info(f"🎯 Clustering completado: {n_clusters} clusters, score={silhouette_score_final:.3f}")
             return {
-                'clusters': ((clusters.tolist() if hasattr(clusters, 'tolist') else list(clusters)) if hasattr(clusters, 'tolist') else list(clusters)),
-                'centers': kmeans.((cluster_centers_.tolist() if hasattr(cluster_centers_, 'tolist') else list(cluster_centers_)) if hasattr(cluster_centers_, 'tolist') else list(cluster_centers_)),
+                'clusters': clusters.tolist() if hasattr(clusters, 'tolist') else list(clusters),
+                'centers': kmeans.cluster_centers_.tolist() if hasattr(kmeans.cluster_centers_, 'tolist') else list(kmeans.cluster_centers_),
                 'silhouette_score': silhouette_score_final,
                 'cluster_analysis': cluster_analysis,
                 'consejos': consejos
@@ -642,10 +679,10 @@ class AsesorFinancieroInteligente:
                 }
             
             # Entrenar modelo
-            getattr(self, 'model', None).fit(X, y)
+            self.model.fit(X, y)
             
             # Calcular importancia SHAP
-            explainer = shap.TreeExplainer(getattr(self, 'model', None))
+            explainer = shap.TreeExplainer(self.model)
             shap_values = explainer.shap_values(X)
             
             # Calcular importancia promedio
@@ -718,19 +755,19 @@ class AsesorFinancieroInteligente:
             # Validación cruzada con TimeSeriesSplit para respetar orden temporal
             if len(self.estrategias) >= 10:
                 tscv = TimeSeriesSplit(n_splits=min(5, len(self.estrategias) // 2))
-                scores = cross_val_score(getattr(self, 'model', None), X, y, cv=tscv, scoring='r2')
+                scores = cross_val_score(self.model, X, y, cv=tscv, scoring='r2')
                 r2_mean = scores.mean()
                 r2_std = scores.std()
             else:
                 # Para pocos datos, usar validación simple
-                getattr(self, 'model', None).fit(X, y)
-                predictions = getattr(self, 'model', None).predict(X)
+                self.model.fit(X, y)
+                predictions = self.model.predict(X)
                 r2_mean = r2_score(y, predictions)
                 r2_std = 0
             
             # Entrenar modelo final
-            getattr(self, 'model', None).fit(X, y)
-            predictions = getattr(self, 'model', None).predict(X)
+            self.model.fit(X, y)
+            predictions = self.model.predict(X)
             
             # Calcular métricas adicionales
             mae = mean_absolute_error(y, predictions)
@@ -1144,7 +1181,7 @@ class AsesorFinancieroInteligente:
             }
             
         except Exception as e:
-            self.logger.error(f"Error aplicando filtros de predictibilidad Asesor: {e}")
+            logger.error(f"Error aplicando filtros de predictibilidad Asesor: {e}")
             return {"passed": [], "failed": [], "total_passed": 0, "total_filters": 0}
     
     def _analyze_predictability_all_strategies(self) -> Dict[str, Any]:
@@ -1198,7 +1235,7 @@ class AsesorFinancieroInteligente:
                     predictability_results["strategies_analyzed"] += 1
                     
                 except Exception as e:
-                    self.logger.error(f"Error analizando predictibilidad de estrategia {idx}: {e}")
+                    logger.error(f"Error analizando predictibilidad de estrategia {idx}: {e}")
                     continue
             
             # Calcular promedio
@@ -1213,7 +1250,7 @@ class AsesorFinancieroInteligente:
             return predictability_results
             
         except Exception as e:
-            self.logger.error(f"Error en análisis de predictibilidad: {e}")
+            logger.error(f"Error en análisis de predictibilidad: {e}")
             return {"error": str(e)}
     
     def _check_is_oos_consistency_asesor(self, strategy_data: pd.Series) -> bool:
@@ -1236,7 +1273,7 @@ class AsesorFinancieroInteligente:
             return metrics.is_oos_consistency >= min_consistency
             
         except Exception as e:
-            self.logger.error(f"Error verificando consistencia IS/OOS Asesor: {e}")
+            logger.error(f"Error verificando consistencia IS/OOS Asesor: {e}")
             return False
     
     def _check_temporal_robustness_asesor(self, strategy_data: pd.Series) -> bool:
@@ -1259,7 +1296,7 @@ class AsesorFinancieroInteligente:
             return metrics.temporal_robustness >= min_robustness
             
         except Exception as e:
-            self.logger.error(f"Error verificando robustez temporal Asesor: {e}")
+            logger.error(f"Error verificando robustez temporal Asesor: {e}")
             return False
     
     def _check_overfitting_detection_asesor(self, strategy_data: pd.Series) -> bool:
@@ -1282,7 +1319,7 @@ class AsesorFinancieroInteligente:
             return metrics.overfitting_detection >= min_overfitting_detection
             
         except Exception as e:
-            self.logger.error(f"Error verificando detección de sobreajuste Asesor: {e}")
+            logger.error(f"Error verificando detección de sobreajuste Asesor: {e}")
             return False
     
     def _check_stability_score_asesor(self, strategy_data: pd.Series) -> bool:
@@ -1305,7 +1342,7 @@ class AsesorFinancieroInteligente:
             return metrics.stability_score >= min_stability
             
         except Exception as e:
-            self.logger.error(f"Error verificando score de estabilidad Asesor: {e}")
+            logger.error(f"Error verificando score de estabilidad Asesor: {e}")
             return False
 
     def _safe_float(self, value) -> float:
@@ -1321,7 +1358,7 @@ class AsesorFinancieroInteligente:
         try:
             if pd.isna(value) or value is None:
                 return 0.0
-            return float(value) if value is not None else 0.0 if value is not None else 0.0
+            return float(value) if value is not None else 0.0
         except (ValueError, TypeError):
             return 0.0
 
