@@ -19,6 +19,9 @@ from pathlib import Path
 from .steps.step1_load import Step1LoadFrame
 from .steps.step2_configure import Step2ConfigureFrame
 
+# Importar módulos de análisis avanzado
+from src.analysis.tail_risk_metrics import TailRiskAnalyzer
+
 # Importar utilidades GUI
 from .utils import (
     create_styled_button, create_styled_label, show_info_message,
@@ -358,6 +361,9 @@ class MainWindow(tk.Tk):
         
         # Pestaña de Régimen Adaptativo
         self._create_regime_tab()
+
+        # Pestaña de Análisis de Tail Risk
+        self._create_tail_risk_tab()
     
     def _create_log_tab(self):
         """Crea la pestaña de log."""
@@ -519,6 +525,66 @@ class MainWindow(tk.Tk):
         
         self.notebook.add(regime_frame, text="🎯 Régimen")
     
+    def _create_tail_risk_tab(self):
+        """Crea la pestaña de análisis de Tail Risk."""
+        tail_risk_frame = ttk.Frame(self.notebook)
+        
+        # Título
+        title_label = ttk.Label(
+            tail_risk_frame, 
+            text="🧱 Análisis de Tail Risk", 
+            font=("Arial", 14, "bold")
+        )
+        title_label.pack(pady=10)
+        
+        # Frame principal con scroll
+        main_scroll = ttk.Scrollbar(tail_risk_frame, orient="vertical")
+        main_scroll.pack(side="right", fill="y")
+        
+        canvas = tk.Canvas(tail_risk_frame, yscrollcommand=main_scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        main_scroll.config(command=canvas.yview)
+        
+        # Frame interno para contenido
+        content_frame = ttk.Frame(canvas)
+        canvas.create_window((0, 0), window=content_frame, anchor="nw")
+        
+        # Sección 1: Información de Tail Risk
+        tail_risk_info_frame = ttk.LabelFrame(content_frame, text="📊 Información de Tail Risk", padding=10)
+        tail_risk_info_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.tail_risk_summary_label = ttk.Label(tail_risk_info_frame, text="Resumen: No disponible")
+        self.tail_risk_summary_label.pack(anchor="w")
+        
+        self.tail_risk_max_drawdown_label = ttk.Label(tail_risk_info_frame, text="Máx. Drawdown: N/A")
+        self.tail_risk_max_drawdown_label.pack(anchor="w")
+        
+        self.tail_risk_tail_ratio_label = ttk.Label(tail_risk_info_frame, text="Tail Ratio: N/A")
+        self.tail_risk_tail_ratio_label.pack(anchor="w")
+        
+        # Sección 2: Botones de Control
+        control_frame = ttk.Frame(content_frame)
+        control_frame.pack(fill="x", padx=10, pady=10)
+        
+        self.analyze_tail_risk_button = ttk.Button(
+            control_frame, 
+            text="📊 Analizar Tail Risk",
+            command=self._analyze_tail_risk
+        )
+        self.analyze_tail_risk_button.pack(side="left", padx=5)
+        
+        self.tail_risk_results_button = ttk.Button(
+            control_frame, 
+            text="📈 Ver Resultados",
+            command=self._view_tail_risk_results
+        )
+        self.tail_risk_results_button.pack(side="left", padx=5)
+        
+        # Configurar scroll
+        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        
+        self.notebook.add(tail_risk_frame, text="🧱 Tail Risk")
+    
     def _detect_current_regime(self):
         """Detecta el régimen de mercado actual."""
         try:
@@ -633,6 +699,131 @@ class MainWindow(tk.Tk):
         except Exception as e:
             logger.error(f"❌ Error aplicando scoring adaptativo: {e}")
             show_error_message("Error", f"Error aplicando scoring adaptativo: {str(e)}")
+    
+    def _analyze_tail_risk(self):
+        """Ejecuta el análisis de Tail Risk."""
+        try:
+            logger.info("📊 Analizando Tail Risk...")
+            
+            strategies = self.shared_data.get('loaded_data')
+            if strategies is None:
+                show_error_message("Error", "No hay estrategias cargadas para analizar Tail Risk")
+                return
+            
+            # Crear instancia del analizador de Tail Risk
+            tail_risk_analyzer = TailRiskAnalyzer()
+            
+            # Realizar análisis usando el método correcto
+            results = tail_risk_analyzer.analyze_tail_risk_metrics(strategies)
+            
+            if "error" in results:
+                show_error_message("Error", f"Error en análisis de Tail Risk: {results['error']}")
+                return
+            
+            # Calcular métricas agregadas
+            summary = f"Analizadas {len(results)} estrategias"
+            max_drawdown = max([r.get('max_drawdown', 0) for r in results.values() if not pd.isna(r.get('max_drawdown', 0))], default=0)
+            avg_var_95 = np.mean([r.get('var_95', 0) for r in results.values() if not pd.isna(r.get('var_95', 0))])
+            
+            # Actualizar interfaz
+            self.tail_risk_summary_label.config(text=f"Resumen: {summary}")
+            self.tail_risk_max_drawdown_label.config(text=f"Máx. Drawdown: {max_drawdown:.2f}%")
+            self.tail_risk_tail_ratio_label.config(text=f"Avg VaR 95%: {avg_var_95:.4f}")
+            
+            # Guardar resultados
+            self.shared_data['tail_risk_results'] = results
+            
+            logger.info(f"✅ Tail Risk analizado. {summary}")
+            show_info_message("Éxito", "Tail Risk analizado correctamente")
+            
+        except Exception as e:
+            logger.error(f"❌ Error analizando Tail Risk: {e}")
+            show_error_message("Error", f"Error analizando Tail Risk: {str(e)}")
+    
+    def _view_tail_risk_results(self):
+        """Muestra los resultados del análisis de Tail Risk."""
+        try:
+            results = self.shared_data.get('tail_risk_results')
+            if results is None:
+                show_error_message("Error", "No hay resultados de Tail Risk para mostrar")
+                return
+            
+            # Crear una ventana emergente para mostrar los resultados
+            tail_risk_window = tk.Toplevel(self)
+            tail_risk_window.title("Resultados de Tail Risk")
+            tail_risk_window.geometry("800x600")
+            center_window(tail_risk_window, 800, 600)
+
+            # Frame principal con scroll
+            main_frame = ttk.Frame(tail_risk_window)
+            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # Título
+            title_label = ttk.Label(main_frame, text="📊 Resultados de Análisis de Tail Risk", 
+                                   font=("Arial", 12, "bold"))
+            title_label.pack(pady=(0, 10))
+
+            # Texto para mostrar los resultados detallados
+            results_text = "=== RESULTADOS DE TAIL RISK ===\n\n"
+            
+            for strategy_name, metrics in results.items():
+                if strategy_name == "error":
+                    continue
+                    
+                results_text += f"🔸 ESTRATEGIA: {strategy_name}\n"
+                results_text += f"   VaR 95%: {metrics.get('var_95', 'N/A'):.4f}\n"
+                results_text += f"   CVaR 95%: {metrics.get('cvar_95', 'N/A'):.4f}\n"
+                results_text += f"   Expected Shortfall: {metrics.get('expected_shortfall', 'N/A'):.4f}\n"
+                results_text += f"   Max Drawdown: {metrics.get('max_drawdown', 'N/A'):.2f}%\n"
+                results_text += f"   Tail Concentration: {metrics.get('tail_concentration', 'N/A'):.4f}\n"
+                results_text += f"   Extreme Loss Prob: {metrics.get('extreme_loss_probability', 'N/A'):.4f}\n"
+                results_text += f"   Skewness: {metrics.get('skewness', 'N/A'):.4f}\n"
+                results_text += f"   Kurtosis: {metrics.get('kurtosis', 'N/A'):.4f}\n"
+                results_text += "-" * 50 + "\n\n"
+            
+            # Widget de texto con scroll
+            text_frame = ttk.Frame(main_frame)
+            text_frame.pack(fill="both", expand=True)
+            
+            text_widget = tk.Text(text_frame, font=("Consolas", 9), wrap=tk.WORD)
+            scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            text_widget.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            text_widget.insert(tk.END, results_text)
+            text_widget.configure(state=tk.DISABLED)
+
+            # Botones de acción
+            button_frame = ttk.Frame(main_frame)
+            button_frame.pack(fill="x", pady=10)
+            
+            # Botón para copiar resultados
+            copy_btn = ttk.Button(button_frame, text="📋 Copiar Resultados", 
+                                 command=lambda: self._copy_tail_risk_results(results_text))
+            copy_btn.pack(side="left", padx=5)
+            
+            # Botón para cerrar
+            close_button = ttk.Button(button_frame, text="Cerrar", command=tail_risk_window.destroy)
+            close_button.pack(side="right", padx=5)
+
+            logger.info("📈 Mostrando resultados detallados de Tail Risk")
+            
+        except Exception as e:
+            logger.error(f"❌ Error mostrando resultados de Tail Risk: {e}")
+            show_error_message("Error", f"Error mostrando resultados de Tail Risk: {str(e)}")
+    
+    def _copy_tail_risk_results(self, results_text: str):
+        """Copia los resultados de Tail Risk al portapapeles."""
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(results_text)
+            show_info_message("Éxito", "Resultados de Tail Risk copiados al portapapeles")
+            logger.info("📋 Resultados de Tail Risk copiados al portapapeles")
+        except Exception as e:
+            logger.error(f"❌ Error copiando resultados: {e}")
+            show_error_message("Error", f"Error copiando resultados: {str(e)}")
     
     def _setup_navigation(self):
         """Configura la navegación entre pasos."""
