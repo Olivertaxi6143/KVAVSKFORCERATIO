@@ -42,11 +42,11 @@ class PredictabilityAnalyzer:
         self._metrics_cache = {}  # Cache para evitar recálculos
         
         # Cargar configuración
-        getattr(self, 'config', None)_manager = config_manager or PredictabilityConfigManager()
+        self.config_manager = config_manager or PredictabilityConfigManager()
         self._load_configuration()
         
         # Configurar logging según configuración
-        logging_settings = getattr(self, 'config', None)_manager.get_logging_settings()
+        logging_settings = self.config_manager.get_logging_settings()
         if logging_settings.get("enable_debug", False):
             self.logger.setLevel(logging.DEBUG)
     
@@ -54,10 +54,10 @@ class PredictabilityAnalyzer:
         """Carga configuración desde el gestor de configuración."""
         try:
             # Cargar umbrales
-            consistency_thresholds = getattr(self, 'config', None)_manager.get_thresholds("consistency")
-            temporal_thresholds = getattr(self, 'config', None)_manager.get_thresholds("temporal_robustness")
-            overfitting_thresholds = getattr(self, 'config', None)_manager.get_thresholds("overfitting_detection")
-            stability_thresholds = getattr(self, 'config', None)_manager.get_thresholds("stability")
+            consistency_thresholds = self.config_manager.get_thresholds("consistency")
+            temporal_thresholds = self.config_manager.get_thresholds("temporal_robustness")
+            overfitting_thresholds = self.config_manager.get_thresholds("overfitting_detection")
+            stability_thresholds = self.config_manager.get_thresholds("stability")
             
             # Combinar todos los umbrales
             self.thresholds = {
@@ -68,10 +68,10 @@ class PredictabilityAnalyzer:
             }
             
             # Cargar pesos de scoring
-            self.scoring_weights = getattr(self, 'config', None)_manager.get_scoring_weights()
+            self.scoring_weights = self.config_manager.get_scoring_weights()
             
             # Cargar configuración de validación
-            self.validation_settings = getattr(self, 'config', None)_manager.get_validation_settings()
+            self.validation_settings = self.config_manager.get_validation_settings()
             
             self.logger.info("Configuración de predictibilidad cargada correctamente")
             
@@ -128,7 +128,7 @@ class PredictabilityAnalyzer:
         
         self._metrics_cache[strategy_id] = metrics
         
-        if getattr(self, 'config', None)_manager.get_logging_settings().get("log_cache_hits", True):
+        if self.config_manager.get_logging_settings().get("log_cache_hits", True):
             self.logger.debug(f"Métricas cacheadas para estrategia: {strategy_id}")
     
     def _validate_numeric_value(self, value: Any) -> Optional[float]:
@@ -521,7 +521,7 @@ class PredictabilityAnalyzer:
             config_updates: Diccionario con actualizaciones de configuración
         """
         try:
-            getattr(self, 'config', None)_manager.update_config(config_updates)
+            self.config_manager.update_config(config_updates)
             self._load_configuration()
             self.logger.info("Configuración actualizada dinámicamente")
         except Exception as e:

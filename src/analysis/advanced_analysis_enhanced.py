@@ -1,4 +1,4 @@
-from typing import Optional, Any, Union
+
 #!/usr/bin/env python3
 """
 Módulo de Análisis Avanzado Mejorado Integrado
@@ -13,7 +13,7 @@ del análisis actual (Factor K, QVA, Unificado).
 Autor: Sistema de Análisis Cuantitativo
 Fecha: 2025-01-27
 """
-
+from typing import Optional, Any, Union
 import pandas as pd
 import numpy as np
 import logging
@@ -24,7 +24,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
-from getattr(sklearn, 'model', None)_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, VotingRegressor
 from sklearn.svm import SVR
@@ -55,7 +55,7 @@ except ImportError:
 
 # Importar librerías para reducción de dimensionalidad avanzada
 try:
-    import umap
+    import umap  # type: ignore  # Dependencia opcional, solo si está instalado
     UMAP_AVAILABLE = True
 except ImportError:
     UMAP_AVAILABLE = False
@@ -102,7 +102,7 @@ class AdvancedAnalysisEnhanced:
             config: Configuración opcional del análisis
         """
         self.filtered_strategies = filtered_strategies_df.copy()
-        getattr(self, 'config', None) = config or {}
+        self.config = config or {}
         self.scaler = StandardScaler()
         self.imputer = SimpleImputer(strategy='median')
         self.pca = PCA(n_components=0.95)
@@ -197,9 +197,11 @@ class AdvancedAnalysisEnhanced:
                 self.filtered_strategies[col] = self.filtered_strategies[col].clip(lower=lower_bound, upper=upper_bound)
             
             # Imputar valores faltantes
-            if self.filtered_strategies[self.numeric_columns].isna().any().any():
-                imputer = SimpleImputer(strategy='median')
-                self.filtered_strategies[self.numeric_columns] = imputer.fit_transform(self.filtered_strategies[self.numeric_columns])
+            if len(self.numeric_columns) > 0:
+                na_matrix = self.filtered_strategies[self.numeric_columns].isna()
+                if na_matrix.to_numpy().any():
+                    imputer = SimpleImputer(strategy='median')
+                    self.filtered_strategies[self.numeric_columns] = imputer.fit_transform(self.filtered_strategies[self.numeric_columns])
             
             logger.info(f"✅ Datos preparados: {len(self.filtered_strategies)} estrategias, {len(self.numeric_columns)} columnas numéricas")
             
@@ -1594,13 +1596,16 @@ class AdvancedAnalysisEnhanced:
                     raise ValueError(f"Método de detección no soportado: {method}")
                 
                 try:
-                    if method == "lof":
+                    if isinstance(detector, LocalOutlierFactor):
                         labels = detector.fit_predict(features_scaled)
                         scores = detector.negative_outlier_factor_
                     else:
                         detector.fit(features_scaled)
                         labels = detector.predict(features_scaled)
-                        scores = detector.decision_function(features_scaled)
+                        if hasattr(detector, "decision_function"):
+                            scores = detector.decision_function(features_scaled)
+                        else:
+                            scores = np.zeros(features_scaled.shape[0])
                     
                     n_anomalies = np.sum(labels == -1)
                     anomaly_percentage = (n_anomalies / len(labels)) * 100
