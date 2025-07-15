@@ -172,6 +172,15 @@ def safe_float(val: Any) -> float:
 # Función validate_numeric_column eliminada - usar src/gui/utils.py en su lugar
 # from src.gui.utils import validate_numeric_column
 
+# Intentar importar validate_numeric_column, si no existe, definir dummy
+try:
+    from src.gui.utils import validate_numeric_column  # type: ignore[import-not-found]
+except Exception:
+    def validate_numeric_column(df, column):
+        # Dummy: True si la columna es numérica
+        return column in df.columns and pd.api.types.is_numeric_dtype(df[column])
+
+
 def calculate_basic_stats(df: pd.DataFrame, column: str) -> Dict[str, float]:
     """Calcula estadísticas básicas de una columna numérica.
     
@@ -756,10 +765,26 @@ def ensure_numeric_columns(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame
             try:
                 column_data = df_processed[column]
                 if isinstance(column_data, pd.Series):
-                    # Forzar conversión a float SIEMPRE
-                    df_processed[column] = pd.to_numeric(column_data, errors='coerce').astype(float)
+                    numeric_result = pd.to_numeric(column_data, errors='coerce')
+                    if isinstance(numeric_result, pd.Series):
+                        df_processed[column] = numeric_result.astype(float)
+                    else:
+                        df_processed[column] = np.nan
+                elif isinstance(column_data, np.ndarray):
+                    if column_data.ndim == 1 and np.issubdtype(column_data.dtype, np.number):
+                        df_processed[column] = column_data.astype(float)
+                    else:
+                        df_processed[column] = np.array(column_data, dtype=float)
+                elif isinstance(column_data, list):
+                    df_processed[column] = np.array(column_data, dtype=float)
+                elif isinstance(column_data, pd.DataFrame):
+                    logger.warning(f"Columna '{column}' es un DataFrame, no se puede convertir a float")
+                elif isinstance(column_data, (float, int, str)):
+                    df_processed[column] = float(column_data)
+                elif column_data is None:
+                    df_processed[column] = np.nan
                 else:
-                    logger.warning(f"Columna '{column}' no es una Series válida")
+                    logger.warning(f"Columna '{column}' no es convertible a float")
             except Exception as e:
                 logger.error(f"Error procesando columna '{column}': {e}")
     

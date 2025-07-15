@@ -68,7 +68,7 @@ class DataManager:
         Args:
             config: Configuración opcional del sistema
         """
-        getattr(self, 'config', None) = config or {}
+        self.config = config or {}
         self.logger = logging.getLogger(__name__)
         
         # Datos cargados - inicializar con tipos correctos
@@ -122,11 +122,11 @@ class DataManager:
         }
         
         # Actualizar configuración
-        getattr(self, 'config', None).update(self.default_config)
+        self.config.update(self.default_config)
         
         # Crear directorio de caché si está habilitado
-        if getattr(self, 'config', None)['cache']['enable_cache']:
-            cache_dir = Path(getattr(self, 'config', None)['cache']['cache_dir'])
+        if self.config['cache']['enable_cache']:
+            cache_dir = Path(self.config['cache']['cache_dir'])
             cache_dir.mkdir(exist_ok=True)
         
         # Mapeo de columnas críticas para INPUTTEST y datos reales
@@ -188,7 +188,7 @@ class DataManager:
         """Carga datos automáticamente si están disponibles."""
         try:
             # Intentar cargar datos de INPUTTEST primero
-            if getattr(self, 'config', None)['development']['use_inputtest']:
+            if self.config['development']['use_inputtest']:
                 inputtest_data = load_inputtest_data_pipeline()
                 kpis_data = inputtest_data.get('kpis')
                 if kpis_data is not None and not kpis_data.empty:
@@ -198,7 +198,7 @@ class DataManager:
                     return
             
             # Intentar cargar datos por defecto
-            default_kpis = getattr(self, 'config', None)['default_files']['kpis_file']
+            default_kpis = self.config['default_files']['kpis_file']
             if os.path.exists(default_kpis):
                 success = self.load_kpis_data(default_kpis)
                 if success and self._kpis_data is not None:
@@ -264,17 +264,17 @@ class DataManager:
             self.logger.info("Iniciando carga completa de datos...")
             
             # Determinar rutas según configuración
-            if getattr(self, 'config', None)['development']['use_inputtest']:
+            if self.config['development']['use_inputtest']:
                 # Usar INPUTTEST para desarrollo
-                strategies_path = strategies_path or f"{getattr(self, 'config', None)['development']['inputtest_path']}/M1_NDX_UP_MQL4_136_STOP"
-                market_path = market_path or f"{getattr(self, 'config', None)['development']['inputtest_path']}/DATOSMQL5.csv"
-                kpis_path = kpis_path or f"{getattr(self, 'config', None)['development']['inputtest_path']}/DatabankExport_M1.csv"
+                strategies_path = strategies_path or f"{self.config['development']['inputtest_path']}/M1_NDX_UP_MQL4_136_STOP"
+                market_path = market_path or f"{self.config['development']['inputtest_path']}/DATOSMQL5.csv"
+                kpis_path = kpis_path or f"{self.config['development']['inputtest_path']}/DatabankExport_M1.csv"
                 self.logger.info("Usando datos de INPUTTEST para desarrollo")
             else:
                 # Usar rutas de usuario para producción
-                strategies_path = strategies_path or getattr(self, 'config', None)['default_files']['strategies_folder']
-                market_path = market_path or getattr(self, 'config', None)['default_files']['market_file']
-                kpis_path = kpis_path or getattr(self, 'config', None)['default_files']['kpis_file']
+                strategies_path = strategies_path or self.config['default_files']['strategies_folder']
+                market_path = market_path or self.config['default_files']['market_file']
+                kpis_path = kpis_path or self.config['default_files']['kpis_file']
                 self.logger.info("Usando rutas de usuario para producción")
             
             # Cargar datos
@@ -380,7 +380,7 @@ class DataManager:
                         df = pd.read_csv(
                             file_path,
                             sep=delimiter,
-                            decimal=getattr(self, 'config', None).get('csv_decimal', '.'),
+                            decimal=self.config.get('csv_decimal', '.'),
                             encoding='utf-8',
                             low_memory=False
                         )
@@ -398,8 +398,8 @@ class DataManager:
                 try:
                     df = pd.read_csv(
                         file_path,
-                        sep=getattr(self, 'config', None)['csv_delimiter'],
-                        decimal=getattr(self, 'config', None).get('csv_decimal', '.'),
+                        sep=self.config['csv_delimiter'],
+                        decimal=self.config.get('csv_decimal', '.'),
                         encoding='utf-8',
                         low_memory=False
                     )
@@ -500,7 +500,7 @@ class DataManager:
             return False, errors
         
         # Verificar columnas requeridas (más flexible)
-        required_columns = getattr(self, 'config', None)['required_columns']
+        required_columns = self.config['required_columns']
         missing_required = [col for col in required_columns if col not in df.columns]
         if missing_required:
             self.logger.warning(f"Columnas requeridas faltantes: {missing_required}. SUGERENCIA: Verifica el mapeo y la normalización de columnas en el archivo fuente. Puedes editar el archivo o ajustar el mapeo en DataManager.COLUMN_MAPPINGS.")
@@ -875,6 +875,24 @@ class DataManager:
             self.logger.error(f"Error obteniendo datos para core engine: {e}")
             return pd.DataFrame()
     
+    def get_kpis_data(self) -> pd.DataFrame:
+        """
+        Obtiene datos de KPIs preparados.
+        
+        Returns:
+            DataFrame con datos de KPIs
+        """
+        try:
+            if self._kpis_data is not None and not self._kpis_data.empty:
+                return self._kpis_data.copy()
+            else:
+                self.logger.warning("No hay datos de KPIs disponibles")
+                return pd.DataFrame()
+                
+        except Exception as e:
+            self.logger.error(f"Error obteniendo datos de KPIs: {e}")
+            return pd.DataFrame()
+    
     def get_data_for_asesor_financiero(self) -> Dict[str, Any]:
         """
         Obtiene datos preparados para el asesor financiero.
@@ -912,10 +930,10 @@ class DataManager:
             True si se guardó exitosamente
         """
         try:
-            if not getattr(self, 'config', None)['cache']['enable_cache']:
+            if not self.config['cache']['enable_cache']:
                 return False
             
-            cache_file = Path(getattr(self, 'config', None)['cache']['cache_dir']) / f"{key}.pkl.gz"
+            cache_file = Path(self.config['cache']['cache_dir']) / f"{key}.pkl.gz"
             
             with gzip.open(cache_file, 'wb') as f:
                 pickle.dump(data, f)
@@ -938,17 +956,17 @@ class DataManager:
             Datos cargados o None
         """
         try:
-            if not getattr(self, 'config', None)['cache']['enable_cache']:
+            if not self.config['cache']['enable_cache']:
                 return None
             
-            cache_file = Path(getattr(self, 'config', None)['cache']['cache_dir']) / f"{key}.pkl.gz"
+            cache_file = Path(self.config['cache']['cache_dir']) / f"{key}.pkl.gz"
             
             if not cache_file.exists():
                 return None
     
             # Verificar antigüedad
             cache_age = time.time() - cache_file.stat().st_mtime
-            max_age = getattr(self, 'config', None)['cache']['cache_duration_hours'] * 3600
+            max_age = self.config['cache']['cache_duration_hours'] * 3600
             
             if cache_age > max_age:
                 self.logger.info(f"Caché expirado: {key}")
@@ -1016,7 +1034,7 @@ class DataManager:
             'load_status': self._load_status.copy(),
             'data_counts': {},
             'last_update': datetime.now().isoformat(),
-            'development_mode': getattr(self, 'config', None)['development']['use_inputtest']
+            'development_mode': self.config['development']['use_inputtest']
         }
         
         if self._strategies_data is not None:
@@ -1038,10 +1056,10 @@ class DataManager:
             True si se limpió exitosamente
         """
         try:
-            if not getattr(self, 'config', None)['cache']['enable_cache']:
+            if not self.config['cache']['enable_cache']:
                 return False
             
-            cache_dir = Path(getattr(self, 'config', None)['cache']['cache_dir'])
+            cache_dir = Path(self.config['cache']['cache_dir'])
             if cache_dir.exists():
                 for cache_file in cache_dir.glob("*.pkl.gz"):
                     cache_file.unlink()
@@ -1057,14 +1075,14 @@ class DataManager:
         """
         Cambia a modo desarrollo usando INPUTTEST.
         """
-        getattr(self, 'config', None)['development']['use_inputtest'] = True
+        self.config['development']['use_inputtest'] = True
         self.logger.info("Cambiado a modo desarrollo (INPUTTEST)")
     
     def switch_to_production_mode(self) -> None:
         """
         Cambia a modo producción usando rutas de usuario.
         """
-        getattr(self, 'config', None)['development']['use_inputtest'] = False
+        self.config['development']['use_inputtest'] = False
         self.logger.info("Cambiado a modo producción (rutas de usuario)")
 
     # ===================== FUNCIONES DE INVESTIGACIÓN Y VALIDACIÓN CIENTÍFICA =====================
@@ -1084,7 +1102,7 @@ class DataManager:
             self.logger.info(f"[DEBUG] DataFrame shape: {df.shape}")
             self.logger.info(f"[DEBUG] DataFrame dtypes: {df.dtypes}")
             if numeric_columns is None:
-                numeric_columns = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+                numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
             
             analysis = {
                 'total_rows': len(df),
