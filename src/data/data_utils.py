@@ -1,3 +1,5 @@
+from typing import Optional, Any, Union
+import warnings
 """
 Utilidades para manejo de datos y validación.
 Módulo simplificado con solo las funciones esenciales utilizadas en el flujo.
@@ -151,7 +153,7 @@ def extract_float_from_tuple(data: Any, index: int = 0, default: float = 0.0) ->
         except (ValueError, TypeError):
             return default
     elif isinstance(data, (int, float)):
-        return float(data)
+        return float(data) if data is not None else 0.0 if data is not None else 0.0
     return default
 
 def safe_float(val: Any) -> float:
@@ -159,7 +161,7 @@ def safe_float(val: Any) -> float:
     try:
         if isinstance(val, str):
             val = val.replace(',', '.').replace(' ', '')
-        return float(val)
+        return float(val) if val is not None else 0.0 if val is not None else 0.0
     except (ValueError, TypeError):
         return 0.0
 
@@ -217,7 +219,7 @@ def calculate_basic_stats(df: pd.DataFrame, column: str) -> Dict[str, float]:
             'min': min_val,
             'max': max_val,
             'median': median_val,
-            'count': float(count_val)
+            'count': float(count_val) if count_val is not None else 0.0 if count_val is not None else 0.0
         }
         return stats_dict
     except Exception as e:
@@ -249,8 +251,8 @@ def detect_outliers_iqr(df: pd.DataFrame, column: str, factor: float = 1.5) -> D
             'outliers': outliers[column].tolist(),
             'count': int(len(outliers)),
             'percentage': float(len(outliers)) / float(len(df)) * 100 if len(df) > 0 else 0.0,
-            'lower_bound': float(lower_bound),
-            'upper_bound': float(upper_bound)
+            'lower_bound': float(lower_bound) if lower_bound is not None else 0.0 if lower_bound is not None else 0.0,
+            'upper_bound': float(upper_bound) if upper_bound is not None else 0.0 if upper_bound is not None else 0.0
         }
     except Exception as e:
         logger.error(f"Error detectando outliers en {column}: {e}")
@@ -332,7 +334,7 @@ def safe_sum(mask: Union[pd.Series, pd.DataFrame, np.ndarray, Any]) -> int:
     elif isinstance(mask, pd.DataFrame):
         return int(mask.values.sum())
     else:
-        return int(mask)
+        return int(mask) if mask is not None else 0 if mask is not None else 0
 
 
 def safe_values(obj: Union[pd.Series, pd.DataFrame, Any]) -> Union[np.ndarray, Any]:
@@ -379,7 +381,7 @@ def improve_missing_data_handling(df: pd.DataFrame) -> pd.DataFrame:
                 # Para métricas de riesgo, usar percentil 75 (conservador)
                 elif any(metric in col.lower() for metric in ['drawdown', 'risk', 'var', 'cvar']):
                     quantile_value = df_improved[col].quantile(0.75)
-                    df_improved[col] = df_improved[col].fillna(float(quantile_value))
+                    df_improved[col] = df_improved[col].fillna(float(quantile_value) if quantile_value is not None else 0.0 if quantile_value is not None else 0.0)
                 # Para otras métricas numéricas, usar media
                 else:
                     df_improved[col] = df_improved[col].fillna(df_improved[col].mean())
@@ -535,9 +537,9 @@ def convert_types(data: Any, target_type: str) -> Any:
     """
     try:
         if target_type == 'float':
-            return safe_float(data)
+            return safe_float(data) if data is not None else 0.0 if data is not None else 0.0
         elif target_type == 'int':
-            return safe_int(data)
+            return safe_int(data) if data is not None else 0 if data is not None else 0
         elif target_type == 'str':
             return safe_str(data)
         elif target_type == 'bool':
@@ -561,7 +563,7 @@ def safe_int(val: Any) -> int:
         int: Valor convertido o 0 si falla
     """
     try:
-        return int(float(val))
+        return int(float(val) if val is not None else 0.0 if val is not None else 0.0)
     except (ValueError, TypeError):
         return 0
 
@@ -617,9 +619,9 @@ def convert_series_types(series: pd.Series, target_type: str) -> Union[pd.Series
         if type(series) is np.ndarray:
             return series.astype(target_type)
         if target_type == 'float':
-            return float(series)
+            return float(series) if series is not None else 0.0 if series is not None else 0.0
         if target_type == 'int':
-            return int(series)
+            return int(series) if series is not None else 0 if series is not None else 0
         if target_type == 'str':
             return str(series)
         try:
@@ -673,10 +675,10 @@ def validate_types(data: Any, expected_type: type) -> bool:
         if isinstance(data, expected_type):
             return True
         elif expected_type == float and isinstance(data, (int, str)):
-            float(data)  # Probar conversión
+            float(data) if data is not None else 0.0 if data is not None else 0.0  # Probar conversión
             return True
         elif expected_type == int and isinstance(data, (float, str)):
-            int(float(data))  # Probar conversión
+            int(float(data) if data is not None else 0.0 if data is not None else 0.0)  # Probar conversión
             return True
         else:
             return False
@@ -828,7 +830,7 @@ def safe_replace_date(dt, year=None, month=None):
         if isinstance(val, int) and not isinstance(val, bool):
             return val
         if isinstance(val, float) and val.is_integer():
-            return int(val)
+            return int(val) if val is not None else 0 if val is not None else 0
         return None
     y = to_int_or_none(year)
     m = to_int_or_none(month)

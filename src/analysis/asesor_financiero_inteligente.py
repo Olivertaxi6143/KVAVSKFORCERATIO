@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 #!/usr/bin/env python3
 """
 Asesor Financiero Inteligente para Estrategias de Trading
@@ -28,7 +29,7 @@ import os
 from sklearn.ensemble import RandomForestRegressor, IsolationForest
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit, cross_val_score
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, silhouette_score
 import shap
 import matplotlib.pyplot as plt
@@ -67,7 +68,7 @@ class AsesorFinancieroInteligente:
         self.estrategias = estrategias_filtradas.copy() if estrategias_filtradas is not None else pd.DataFrame()
         self.kpis = kpis_seleccionados if kpis_seleccionados is not None else []
         self.scaler = StandardScaler()
-        self.model = RandomForestRegressor(
+        getattr(self, 'model', None) = RandomForestRegressor(
             n_estimators=100, 
             max_depth=10, 
             min_samples_leaf=5, 
@@ -368,7 +369,7 @@ class AsesorFinancieroInteligente:
                             val = corr_result[0]
                         else:
                             val = corr_result
-                        spearman_corr = float(val) if isinstance(val, (int, float, np.floating, np.integer)) else float('nan')
+                        spearman_corr = float(val) if val is not None else 0.0 if val is not None else 0.0 if isinstance(val, (int, float, np.floating, np.integer)) else float('nan')
                     except Exception:
                         spearman_corr = float('nan')
                 else:
@@ -496,7 +497,7 @@ class AsesorFinancieroInteligente:
             
             logger.info(f"🔍 Detección de outliers: {len(outlier_indices)} outliers detectados")
             return {
-                'outliers': outlier_indices.tolist(),
+                'outliers': ((outlier_indices.tolist() if hasattr(outlier_indices, 'tolist') else list(outlier_indices)) if hasattr(outlier_indices, 'tolist') else list(outlier_indices)),
                 'buenos_outliers': buenos_outliers,
                 'malos_outliers': malos_outliers,
                 'consejos': consejos
@@ -595,8 +596,8 @@ class AsesorFinancieroInteligente:
             
             logger.info(f"🎯 Clustering completado: {n_clusters} clusters, score={silhouette_score_final:.3f}")
             return {
-                'clusters': clusters.tolist(),
-                'centers': kmeans.cluster_centers_.tolist(),
+                'clusters': ((clusters.tolist() if hasattr(clusters, 'tolist') else list(clusters)) if hasattr(clusters, 'tolist') else list(clusters)),
+                'centers': kmeans.((cluster_centers_.tolist() if hasattr(cluster_centers_, 'tolist') else list(cluster_centers_)) if hasattr(cluster_centers_, 'tolist') else list(cluster_centers_)),
                 'silhouette_score': silhouette_score_final,
                 'cluster_analysis': cluster_analysis,
                 'consejos': consejos
@@ -641,10 +642,10 @@ class AsesorFinancieroInteligente:
                 }
             
             # Entrenar modelo
-            self.model.fit(X, y)
+            getattr(self, 'model', None).fit(X, y)
             
             # Calcular importancia SHAP
-            explainer = shap.TreeExplainer(self.model)
+            explainer = shap.TreeExplainer(getattr(self, 'model', None))
             shap_values = explainer.shap_values(X)
             
             # Calcular importancia promedio
@@ -717,19 +718,19 @@ class AsesorFinancieroInteligente:
             # Validación cruzada con TimeSeriesSplit para respetar orden temporal
             if len(self.estrategias) >= 10:
                 tscv = TimeSeriesSplit(n_splits=min(5, len(self.estrategias) // 2))
-                scores = cross_val_score(self.model, X, y, cv=tscv, scoring='r2')
+                scores = cross_val_score(getattr(self, 'model', None), X, y, cv=tscv, scoring='r2')
                 r2_mean = scores.mean()
                 r2_std = scores.std()
             else:
                 # Para pocos datos, usar validación simple
-                self.model.fit(X, y)
-                predictions = self.model.predict(X)
+                getattr(self, 'model', None).fit(X, y)
+                predictions = getattr(self, 'model', None).predict(X)
                 r2_mean = r2_score(y, predictions)
                 r2_std = 0
             
             # Entrenar modelo final
-            self.model.fit(X, y)
-            predictions = self.model.predict(X)
+            getattr(self, 'model', None).fit(X, y)
+            predictions = getattr(self, 'model', None).predict(X)
             
             # Calcular métricas adicionales
             mae = mean_absolute_error(y, predictions)
@@ -750,7 +751,7 @@ class AsesorFinancieroInteligente:
             
             logger.info(f"🔮 Predicción completada: R²={r2_mean:.3f} ± {r2_std:.3f}")
             return {
-                'predictions': predictions.tolist(),
+                'predictions': ((predictions.tolist() if hasattr(predictions, 'tolist') else list(predictions)) if hasattr(predictions, 'tolist') else list(predictions)),
                 'r2_mean': r2_mean,
                 'r2_std': r2_std,
                 'mae': mae,
@@ -1320,7 +1321,7 @@ class AsesorFinancieroInteligente:
         try:
             if pd.isna(value) or value is None:
                 return 0.0
-            return float(value)
+            return float(value) if value is not None else 0.0 if value is not None else 0.0
         except (ValueError, TypeError):
             return 0.0
 

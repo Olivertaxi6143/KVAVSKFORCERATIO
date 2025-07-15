@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 #!/usr/bin/env python3
 """
 Sistema Predictivo Híbrido AXI SELECT Mejorado
@@ -27,7 +28,7 @@ import warnings
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from core.logger_config import setup_logger
+from src.core.logger_config import setup_logger
 logger = setup_logger(__name__)
 
 # Configurar warnings
@@ -187,9 +188,7 @@ class AXISelectPredictiveSystem:
                     verbose=False
                 )
             
-            if TORCH_AVAILABLE:
-                # Red neuronal PyTorch se creará dinámicamente
-                pass
+            # Red neuronal PyTorch se creará dinámicamente si está disponible
             
             # Escaladores
             self.scalers['standard'] = StandardScaler()
@@ -248,7 +247,7 @@ class AXISelectPredictiveSystem:
             
             if not valid_features:
                 logger.warning("⚠️ No se encontraron características válidas")
-                return pd.DataFrame(), pd.Series()
+                return pd.DataFrame(), pd.Series(dtype=float)
             
             # Crear características
             X = data[valid_features].copy()
@@ -272,24 +271,21 @@ class AXISelectPredictiveSystem:
             
             # Preparar variable objetivo
             if target_column in data.columns:
-                y = data[target_column].copy()
-                # Manejar valores faltantes en la variable objetivo
-                notna_mask = y.notna()
-                if not notna_mask.all():
+                y = pd.Series(data[target_column].copy(), index=data.index if hasattr(data, 'index') else None)
+                if y.isna().any():
                     y.fillna(y.median(), inplace=True)
             else:
-                # Si no existe la columna objetivo, usar una columna por defecto
                 default_targets = ['cagr_is', 'sharpe_ratio_is', 'profit_factor_is']
+                y = None
                 for target in default_targets:
                     if target in data.columns:
-                        y = data[target].copy()
-                        notna_mask = y.notna()
-                        if not notna_mask.all():
+                        y = pd.Series(data[target].copy(), index=data.index if hasattr(data, 'index') else None)
+                        if y.isna().any():
                             y.fillna(y.median(), inplace=True)
                         break
-                else:
+                if y is None:
                     logger.error(f"❌ No se encontró columna objetivo válida")
-                    return pd.DataFrame(), pd.Series()
+                    return pd.DataFrame(), pd.Series(dtype=float)
             
             logger.info(f"✅ Características preparadas: {X.shape[1]} características, {X.shape[0]} muestras")
             return X, y
@@ -335,7 +331,7 @@ class AXISelectPredictiveSystem:
                 valid_preds = [pred for pred in predictions.values() if isinstance(pred, (list, np.ndarray))]
                 if valid_preds:
                     ensemble_pred = np.mean(valid_preds, axis=0)
-                    predictions['ensemble'] = ensemble_pred.tolist()
+                    predictions['ensemble'] = ((ensemble_pred.tolist() if hasattr(ensemble_pred, 'tolist') else list(ensemble_pred)) if hasattr(ensemble_pred, 'tolist') else list(ensemble_pred))
             
             # Calcular confianza
             confidence = self._calculate_confidence(predictions)
@@ -408,7 +404,7 @@ class AXISelectPredictiveSystem:
                     'model': model,
                     'r2_score': r2,
                     'rmse': rmse,
-                    'feature_importance': self._get_feature_importance(model, X.columns.tolist())
+                    'feature_importance': self._get_feature_importance(model, list(X.columns))
                 }
                 
         except Exception as e:
@@ -483,7 +479,7 @@ class AXISelectPredictiveSystem:
         try:
             if hasattr(model, 'feature_importances_'):
                 importances = model.feature_importances_
-                return dict(zip(feature_names, importances.tolist()))
+                return dict(zip(feature_names, ((importances.tolist() if hasattr(importances, 'tolist') else list(importances)) if hasattr(importances, 'tolist') else list(importances))))
             else:
                 return {name: 0.0 for name in feature_names}
         except Exception as e:
@@ -498,7 +494,7 @@ class AXISelectPredictiveSystem:
             # Para PyTorch, usar pesos de la primera capa como aproximación
             if hasattr(model, '0') and hasattr(model['0'], 'weight'):
                 weights = model['0'].weight.data.abs().mean(dim=0).numpy()
-                return dict(zip(feature_names, weights.tolist()))
+                return dict(zip(feature_names, ((weights.tolist() if hasattr(weights, 'tolist') else list(weights)) if hasattr(weights, 'tolist') else list(weights))))
             else:
                 return {name: 0.0 for name in feature_names}
         except Exception as e:
@@ -548,7 +544,7 @@ class AXISelectPredictiveSystem:
                 if lgb_model is not None:
                     predictions['lightgbm'] = lgb_model.predict(X)
                     feature_importance['lightgbm'] = self._get_feature_importance(
-                        lgb_model, X.columns.tolist()
+                        lgb_model, list(X.columns)
                     )
                     models_trained += 1
             except Exception as e:
@@ -560,7 +556,7 @@ class AXISelectPredictiveSystem:
                 if cat_model is not None:
                     predictions['catboost'] = cat_model.predict(X)
                     feature_importance['catboost'] = self._get_feature_importance(
-                        cat_model, X.columns.tolist()
+                        cat_model, list(X.columns)
                     )
                     models_trained += 1
             except Exception as e:
@@ -574,7 +570,7 @@ class AXISelectPredictiveSystem:
                     if torch_pred is not None:
                         predictions['pytorch'] = torch_pred
                         feature_importance['pytorch'] = self._get_pytorch_importance(
-                            torch_model, X.columns.tolist()
+                            torch_model, list(X.columns)
                         )
                         models_trained += 1
             except Exception as e:
@@ -651,7 +647,7 @@ class AXISelectPredictiveSystem:
                     feature_importance = {col: 0.0 for col in X.columns}
                 
                 return {
-                    'shap_values': shap_values.tolist() if hasattr(shap_values, 'tolist') and shap_values is not None else shap_values,
+                    'shap_values': ((shap_values.tolist() if hasattr(shap_values, 'tolist') else list(shap_values)) if hasattr(shap_values, 'tolist') else list(shap_values)) if hasattr(shap_values, 'tolist') and shap_values is not None else shap_values,
                     'feature_importance': feature_importance
                 }
             
@@ -686,9 +682,9 @@ class AXISelectPredictiveSystem:
             mae = mean_absolute_error(y_true, ensemble_pred)
             
             return {
-                'r2_score': float(r2),
-                'rmse': float(rmse),
-                'mae': float(mae),
+                'r2_score': float(r2) if r2 is not None else 0.0 if r2 is not None else 0.0,
+                'rmse': float(rmse) if rmse is not None else 0.0 if rmse is not None else 0.0,
+                'mae': float(mae) if mae is not None else 0.0 if mae is not None else 0.0,
                 'mean_performance': float(np.mean([r['r2_score'] for r in results.values()]))
             }
         except Exception as e:

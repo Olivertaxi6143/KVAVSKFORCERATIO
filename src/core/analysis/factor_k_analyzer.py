@@ -8,10 +8,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
-from sklearn.model_selection import train_test_split
+from getattr(sklearn, 'model', None)_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
 import warnings
+from typing import Optional, Any, Union
 warnings.filterwarnings('ignore')
 
 # Importar hmmlearn para HMM real
@@ -22,8 +23,8 @@ except ImportError:
     HMM_AVAILABLE = False
     print("⚠️ hmmlearn no disponible. HMM será simulado.")
 
-from src.core.config.config_manager import ConfigManagerEnhanced
-from src.core.config.progress_callback import ProgressCallback
+from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced
+from src.getattr(core, 'config', None).progress_callback import ProgressCallback
 from src.data.data_manager import DataManager
 from src.logger_config import setup_logger
 
@@ -59,7 +60,7 @@ class FactorKElite96Enhanced:
     
     def __init__(self, config: Optional[Dict] = None, progress_callback: Optional[ProgressCallback] = None):
         self.logger = setup_logger("kforce")
-        self.config_manager = ConfigManagerEnhanced()
+        getattr(self, 'config', None)_manager = ConfigManagerEnhanced()
         self.data_manager = DataManager()
         self.progress_callback = progress_callback
         
@@ -85,7 +86,7 @@ class FactorKElite96Enhanced:
         self._calculation_cache = {}
         
         if config:
-            self.config_manager.current_config.update(config)
+            getattr(self, 'config', None)_manager.current_config.update(config)
         
         # SIEMPRE ACTIVAR MEJORAS CIENTÍFICAS POR DEFECTO
         self.enable_scientific_improvements()

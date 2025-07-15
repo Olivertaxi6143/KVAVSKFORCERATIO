@@ -1,3 +1,6 @@
+import numpy as np
+from typing import Optional, Any, Union
+import warnings
 """
 Main Window - Ventana Principal Modularizada
 
@@ -93,15 +96,15 @@ class MainWindow(tk.Tk):
             self.data_manager = DataManager()
             
             # ConfigManager
-            from core.config.config_manager import ConfigManager
-            self.config_manager = ConfigManager()
+            from getattr(core, 'config', None).config_manager import ConfigManager
+            getattr(self, 'config', None)_manager = ConfigManager()
             
             logger.info("✅ Gestores de datos inicializados")
             
         except Exception as e:
             logger.error(f"❌ Error inicializando gestores de datos: {e}")
             self.data_manager = None
-            self.config_manager = None
+            getattr(self, 'config', None)_manager = None
     
     def _init_variables(self):
         """Inicializa variables de la interfaz."""
@@ -120,7 +123,7 @@ class MainWindow(tk.Tk):
         # Variables de estado
         self.analysis_running = False
         self.data_loaded = False
-        self.config_ready = False
+        getattr(self, 'config', None)_ready = False
     
     def _build_interface(self):
         """Construye la interfaz principal."""
@@ -185,7 +188,7 @@ class MainWindow(tk.Tk):
         try:
             step2_frame = Step2ConfigureFrame(
                 self.notebook,
-                config_manager=self.config_manager,
+                config_manager=getattr(self, 'config', None)_manager,
                 on_config_changed=self._on_config_changed,
                 on_next_step=lambda: self._go_to_step(3),
                 on_previous_step=lambda: self._go_to_step(1)
@@ -379,7 +382,7 @@ class MainWindow(tk.Tk):
         # Scrollbar
         scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         scrollbar.pack(side="right", fill="y")
-        self.log_text.configure(yscrollcommand=scrollbar.set)
+        self.getattr(log_text, 'config', None)ure(yscrollcommand=scrollbar.set)
         
         self.notebook.add(log_frame, text="📝 Log")
     
@@ -418,7 +421,7 @@ class MainWindow(tk.Tk):
         )
         help_text_widget.pack(padx=10, pady=10, fill="both", expand=True)
         help_text_widget.insert(tk.END, help_text)
-        help_text_widget.config(state=tk.DISABLED)
+        getattr(help_text_widget, 'config', None)(state=tk.DISABLED)
         
         self.notebook.add(help_frame, text="❓ Ayuda")
     
@@ -495,7 +498,7 @@ class MainWindow(tk.Tk):
                 if hasattr(step2, 'get_configuration'):
                     config = step2.get_configuration()
                     self.shared_data['configuration'] = config
-                    self.config_ready = True
+                    getattr(self, 'config', None)_ready = True
                     
                     logger.info("✅ Configuración actualizada")
             
@@ -517,7 +520,7 @@ class MainWindow(tk.Tk):
                 show_error_message("Error", "Por favor, carga los datos primero")
                 return
             
-            if not self.config_ready:
+            if not getattr(self, 'config', None)_ready:
                 show_error_message("Error", "Por favor, configura el análisis primero")
                 return
             

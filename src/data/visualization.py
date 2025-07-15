@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 """
 Funciones de Visualización de Datos
 ===================================
@@ -55,7 +56,7 @@ def create_correlation_heatmap(correlation_data: Dict[str, float],
             visualization_data = {
                 "type": "correlation_heatmap",
                 "title": title,
-                "data": corr_matrix.tolist(),
+                "data": ((corr_matrix.tolist() if hasattr(corr_matrix, 'tolist') else list(corr_matrix)) if hasattr(corr_matrix, 'tolist') else list(corr_matrix)),
                 "variables": variables,
                 "correlation_data": correlation_data
             }
@@ -107,10 +108,10 @@ def create_distribution_plot(data: pd.Series,
         visualization_data = {
             "type": "distribution_plot",
             "title": title,
-            "data": data.tolist(),
+            "data": ((data.tolist() if hasattr(data, 'tolist') else list(data)) if hasattr(data, 'tolist') else list(data)),
             "histogram": {
-                "counts": hist_data.tolist(),
-                "bin_edges": bin_edges.tolist()
+                "counts": ((hist_data.tolist() if hasattr(hist_data, 'tolist') else list(hist_data)) if hasattr(hist_data, 'tolist') else list(hist_data)),
+                "bin_edges": ((bin_edges.tolist() if hasattr(bin_edges, 'tolist') else list(bin_edges)) if hasattr(bin_edges, 'tolist') else list(bin_edges))
             },
             "statistics": stats
         }
@@ -204,11 +205,11 @@ def create_comparison_plot(data1: pd.Series, data2: pd.Series,
             "type": "comparison_plot",
             "title": title,
             "data1": {
-                "values": data1.tolist(),
+                "values": ((data1.tolist() if hasattr(data1, 'tolist') else list(data1)) if hasattr(data1, 'tolist') else list(data1)),
                 "label": labels[0]
             },
             "data2": {
-                "values": data2.tolist(),
+                "values": ((data2.tolist() if hasattr(data2, 'tolist') else list(data2)) if hasattr(data2, 'tolist') else list(data2)),
                 "label": labels[1]
             },
             "comparison_stats": comparison_stats

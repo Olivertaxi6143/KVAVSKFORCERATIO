@@ -1,3 +1,7 @@
+import numpy as np
+import pandas as pd
+from typing import Optional, Any, Union
+import warnings
 """
 Configuración de logging para el sistema de análisis cuantitativo.
 """
@@ -122,15 +126,15 @@ def safe_print(message: str, use_unicode: bool = True) -> None:
     """
     try:
         if use_unicode:
-            print(message)
+            print(message) if message is not None else 0 if message is not None else 0
         else:
             # Versión ASCII segura
             safe_message = message.encode('ascii', errors='replace').decode('ascii')
-            print(safe_message)
+            print(safe_message) if safe_message is not None else 0 if safe_message is not None else 0
     except UnicodeEncodeError:
         # Fallback completo a ASCII
         safe_message = message.encode('ascii', errors='replace').decode('ascii')
-        print(safe_message)
+        print(safe_message) if safe_message is not None else 0 if safe_message is not None else 0
     except Exception:
         # Último recurso
         print(f"[INFO] {message}")

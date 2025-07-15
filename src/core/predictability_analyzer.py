@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 """
 PREDICTABILITY_ANALYZER.py - Análisis de Predictibilidad
 
@@ -19,7 +20,7 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 import itertools
-from sklearn.model_selection import TimeSeriesSplit
+from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 from pandas import Timestamp, Timedelta
@@ -161,7 +162,7 @@ class PredictabilityAnalyzer:
         
         # Validar que df.columns sea iterable y contenga strings
         try:
-            columns = df.columns.tolist()
+            columns = df.((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
         except (AttributeError, TypeError):
             logger.warning("DataFrame columns no es iterable, usando índices numéricos")
             columns = [str(i) for i in range(len(df.columns))]
@@ -193,7 +194,7 @@ class PredictabilityAnalyzer:
         if not pairs:
             # Buscar métricas que podrían estar relacionadas
             try:
-                numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+                numeric_cols = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
                 # Convertir columnas numéricas a strings
                 numeric_cols = [str(col) if isinstance(col, (int, float)) else col for col in numeric_cols]
                 
@@ -316,9 +317,9 @@ class PredictabilityAnalyzer:
                     stats_info.update({
                         'outliers_count': safe_len(outliers),
                         'outliers_percentage': float(safe_len(outliers) / safe_len(data) * 100) if safe_len(data) > 0 else 0.0,
-                        'iqr': float(IQR),
-                        'lower_bound': float(lower_bound),
-                        'upper_bound': float(upper_bound)
+                        'iqr': float(IQR) if IQR is not None else 0.0 if IQR is not None else 0.0,
+                        'lower_bound': float(lower_bound) if lower_bound is not None else 0.0 if lower_bound is not None else 0.0,
+                        'upper_bound': float(upper_bound) if upper_bound is not None else 0.0 if upper_bound is not None else 0.0
                     })
                     
                     analysis[col] = stats_info
@@ -357,7 +358,7 @@ class PredictabilityAnalyzer:
             # Análisis agregado
             if quality_metrics:
                 avg_quality = np.mean(list(quality_metrics.values()))
-                quality_metrics['overall_quality'] = float(avg_quality)
+                quality_metrics['overall_quality'] = float(avg_quality) if avg_quality is not None else 0.0 if avg_quality is not None else 0.0
                 
                 # Clasificar calidad general
                 if avg_quality >= 0.7:
@@ -486,8 +487,8 @@ class PredictabilityAnalyzer:
             
             return {
                 'significant': p_value < self.significance_level,
-                'p_value': float(p_value),
-                'statistic': float(statistic),
+                'p_value': float(p_value) if p_value is not None else 0.0 if p_value is not None else 0.0,
+                'statistic': float(statistic) if statistic is not None else 0.0 if statistic is not None else 0.0,
                 'sample_size': safe_len(common_index)
             }
             
@@ -540,9 +541,9 @@ class PredictabilityAnalyzer:
             accuracy = 1.0 / (1.0 + mse)
             
             return {
-                'multivariate_r2': float(r2),
-                'prediction_accuracy': float(accuracy),
-                'mse': float(mse),
+                'multivariate_r2': float(r2) if r2 is not None else 0.0 if r2 is not None else 0.0,
+                'prediction_accuracy': float(accuracy) if accuracy is not None else 0.0 if accuracy is not None else 0.0,
+                'mse': float(mse) if mse is not None else 0.0 if mse is not None else 0.0,
                 'n_features': safe_len(is_metrics)
             }
             
@@ -581,10 +582,10 @@ class PredictabilityAnalyzer:
             predictability_score = (avg_correlation + overall_quality + multivariate_r2) / 3
             
             metrics = {
-                'average_correlation': float(avg_correlation),
-                'overall_quality': float(overall_quality),
-                'multivariate_r2': float(multivariate_r2),
-                'predictability_score': float(predictability_score),
+                'average_correlation': float(avg_correlation) if avg_correlation is not None else 0.0 if avg_correlation is not None else 0.0,
+                'overall_quality': float(overall_quality) if overall_quality is not None else 0.0 if overall_quality is not None else 0.0,
+                'multivariate_r2': float(multivariate_r2) if multivariate_r2 is not None else 0.0 if multivariate_r2 is not None else 0.0,
+                'predictability_score': float(predictability_score) if predictability_score is not None else 0.0 if predictability_score is not None else 0.0,
                 'n_correlations': len(correlations)
             }
             
@@ -871,7 +872,7 @@ class PredictabilityAnalyzer:
             lower_bound = np.percentile(bootstrap_metrics, lower_percentile)
             upper_bound = np.percentile(bootstrap_metrics, upper_percentile)
             
-            return float(lower_bound), float(upper_bound), float(original_metric)
+            return float(lower_bound) if lower_bound is not None else 0.0 if lower_bound is not None else 0.0, float(upper_bound) if upper_bound is not None else 0.0 if upper_bound is not None else 0.0, float(original_metric) if original_metric is not None else 0.0 if original_metric is not None else 0.0
             
         except Exception as e:
             logger.error(f"Error en bootstrap CI: {str(e)}")
@@ -966,7 +967,7 @@ class PredictabilityAnalyzer:
             # Normalizar a 0-1
             normalized_score = min(1.0, max(0.0, tail_risk_score))
             
-            return float(normalized_score)
+            return float(normalized_score) if normalized_score is not None else 0.0 if normalized_score is not None else 0.0
             
         except Exception as e:
             logger.error(f"Error calculando tail risk: {str(e)}")
@@ -997,7 +998,7 @@ class PredictabilityAnalyzer:
                 return abs(var)
             
             cvar = tail_losses.mean()
-            return abs(float(cvar))
+            return abs(float(cvar) if cvar is not None else 0.0 if cvar is not None else 0.0)
             
         except Exception as e:
             logger.warning(f"Error calculando CVaR: {str(e)}")
@@ -1027,7 +1028,7 @@ class PredictabilityAnalyzer:
             # Maximum drawdown
             max_dd = drawdown.min()
             
-            return abs(float(max_dd))
+            return abs(float(max_dd) if max_dd is not None else 0.0 if max_dd is not None else 0.0)
             
         except Exception as e:
             logger.warning(f"Error calculando Max DD: {str(e)}")
@@ -1604,7 +1605,7 @@ class WalkForwardAnalyzer:
         
         # Validar que df.columns sea iterable y contenga strings
         try:
-            columns = df.columns.tolist()
+            columns = df.((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
         except (AttributeError, TypeError):
             logger.warning("DataFrame columns no es iterable, usando índices numéricos")
             columns = [str(i) for i in range(len(df.columns))]
@@ -1636,7 +1637,7 @@ class WalkForwardAnalyzer:
         if not pairs:
             # Buscar métricas que podrían estar relacionadas
             try:
-                numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+                numeric_cols = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
                 # Convertir columnas numéricas a strings
                 numeric_cols = [str(col) if isinstance(col, (int, float)) else col for col in numeric_cols]
                 
@@ -1791,7 +1792,7 @@ class WalkForwardAnalyzer:
             predictability_score = (avg_correlation + avg_r_squared + significant_ratio) / 3
             
             # Convertir a float antes de min/max para evitar errores con np.float64
-            predictability_score = float(predictability_score)
+            predictability_score = float(predictability_score) if predictability_score is not None else 0.0 if predictability_score is not None else 0.0
             return max(0.0, min(1.0, predictability_score))
             
         except Exception as e:
@@ -1831,7 +1832,7 @@ class NullSimulationAnalyzer:
             logger.info(f"Realizando simulación de hipótesis nula con {self.n_simulations} iteraciones...")
             
             # Identificar métricas numéricas
-            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            numeric_cols = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
             
             if safe_len(numeric_cols) < 2:
                 return {'error': 'Insufficient numeric columns for simulation'}
@@ -1908,13 +1909,13 @@ class NullSimulationAnalyzer:
             null_correlations = []
             for _ in range(self.n_simulations):
                 # Permutar datos aleatoriamente
-                shuffled_data = data.sample(frac=1.0, random_state=np.random.randint(1000))
+                shuffled_data = data.sample(frac=1.0, random_state=np.random.randint(1000) if 1000 is not None else 0 if 1000 is not None else 0)
                 # Calcular correlación con datos permutados
                 if safe_len(data) >= 10:
                     # pearsonr siempre devuelve (coeficiente, p-valor)
                     corr, _ = cast(Tuple[float, float], pearsonr(data, shuffled_data))
                     null_correlations.append(corr)
-                p_value = np.mean([abs(float(corr)) >= abs(float(original_correlation)) for corr in null_correlations])
+                p_value = np.mean([abs(float(corr) if corr is not None else 0.0 if corr is not None else 0.0) >= abs(float(original_correlation) if original_correlation is not None else 0.0 if original_correlation is not None else 0.0) for corr in null_correlations])
             return {
                 'original_correlation': original_correlation,
                 'null_correlations': null_correlations,
@@ -1956,7 +1957,7 @@ class NullSimulationAnalyzer:
             significant_count = sum(1 for r in valid_results if r.get('significant', False))
             overall_significance = significant_count / len(valid_results)
             
-            return float(overall_significance)
+            return float(overall_significance) if overall_significance is not None else 0.0 if overall_significance is not None else 0.0
             
         except Exception as e:
             logger.error(f"Error calculando significancia general: {str(e)}")
@@ -2178,7 +2179,7 @@ class NullSimulationAnalyzer:
                     for k, v in scenario.items():
                         if k != 'name' and not isinstance(v, float):
                             try:
-                                scenario[k] = float(v)
+                                scenario[k] = float(v) if v is not None else 0.0 if v is not None else 0.0
                             except Exception:
                                 scenario[k] = 0.0
             results = {}
@@ -2243,9 +2244,9 @@ class NullSimulationAnalyzer:
             sharpe_ratio = portfolio_return / portfolio_volatility if portfolio_volatility > 0 else 0.0
             
             return {
-                'portfolio_return': float(portfolio_return),
-                'portfolio_volatility': float(portfolio_volatility),
-                'sharpe_ratio': float(sharpe_ratio),
+                'portfolio_return': float(portfolio_return) if portfolio_return is not None else 0.0 if portfolio_return is not None else 0.0,
+                'portfolio_volatility': float(portfolio_volatility) if portfolio_volatility is not None else 0.0 if portfolio_volatility is not None else 0.0,
+                'sharpe_ratio': float(sharpe_ratio) if sharpe_ratio is not None else 0.0 if sharpe_ratio is not None else 0.0,
                 'max_drawdown': float(min(0, portfolio_return * 0.5)),  # Estimación simple
                 'var_95': float(np.percentile(list(stressed_returns.values()), 5) if stressed_returns else 0.0)
             }
@@ -2358,7 +2359,7 @@ class NullSimulationAnalyzer:
             all_checks = compliance_checks + risk_metrics
             compliance_score = np.mean(all_checks) * 100
             
-            return float(compliance_score)
+            return float(compliance_score) if compliance_score is not None else 0.0 if compliance_score is not None else 0.0
             
         except Exception as e:
             logger.error(f"Error calculando compliance score: {str(e)}")

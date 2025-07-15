@@ -1,3 +1,7 @@
+import numpy as np
+import pandas as pd
+from typing import Optional, Any, Union
+import warnings
 """
 Step 2: Configurar Análisis - Módulo del Wizard
 
@@ -48,7 +52,7 @@ class Step2ConfigureFrame(ttk.Frame):
         """
         super().__init__(parent)
         
-        self.config_manager = config_manager
+        getattr(self, 'config', None)_manager = config_manager
         self.on_config_changed = on_config_changed
         self.on_next_step = on_next_step
         self.on_previous_step = on_previous_step
@@ -283,11 +287,11 @@ class Step2ConfigureFrame(ttk.Frame):
         
         scrollable_frame.bind(
             "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            lambda e: getattr(canvas, 'config', None)ure(scrollregion=canvas.bbox("all"))
         )
         
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        getattr(canvas, 'config', None)ure(yscrollcommand=scrollbar.set)
         
         # Crear checkboxes para métricas
         for i, kpi in enumerate(self.available_kpis):
@@ -334,8 +338,8 @@ class Step2ConfigureFrame(ttk.Frame):
             logger.info(f"✅ Estilo de trading cambiado a: {style}")
             
             # Actualizar configuración si hay config_manager
-            if self.config_manager:
-                self.config_manager.update_trading_style(style)
+            if getattr(self, 'config', None)_manager:
+                getattr(self, 'config', None)_manager.update_trading_style(style)
             
             # Llamar callback si existe
             if self.on_config_changed:
@@ -374,7 +378,7 @@ class Step2ConfigureFrame(ttk.Frame):
             selected_count = sum(1 for var in self.kpi_vars.values() if var.get())
             total_count = len(self.available_kpis)
             
-            self.metrics_status_label.config(
+            self.getattr(metrics_status_label, 'config', None)(
                 text=f"📊 Métricas activas: {selected_count}/{total_count}"
             )
             
@@ -437,8 +441,8 @@ class Step2ConfigureFrame(ttk.Frame):
             }
             
             # Guardar en config_manager si existe
-            if self.config_manager:
-                self.config_manager.update_config(config)
+            if getattr(self, 'config', None)_manager:
+                getattr(self, 'config', None)_manager.update_config(config)
             
             logger.info("✅ Configuración guardada")
             

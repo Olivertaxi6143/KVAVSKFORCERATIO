@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 """
 MARKET_REGIME_ANALYZER.py - Análisis de Regímenes de Mercado
 
@@ -87,7 +88,7 @@ class HiddenMarkovModelAnalyzer:
                 
                 if not feature_columns:
                     # Usar todas las columnas numéricas si no hay características específicas
-                    feature_columns = data.select_dtypes(include=[np.number]).columns.tolist()
+                    feature_columns = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
                 
                 features = data[feature_columns].values
             else:
@@ -250,9 +251,9 @@ class MarketRegimeDetector:
         Args:
             config: Configuración opcional del detector
         """
-        self.config = config or {}
-        self.n_regimes = self.config.get('n_regimes', 4)
-        self.random_state = self.config.get('random_state', 42)
+        getattr(self, 'config', None) = config or {}
+        self.n_regimes = getattr(self, 'config', None).get('n_regimes', 4)
+        self.random_state = getattr(self, 'config', None).get('random_state', 42)
         self.scaler = StandardScaler()
         self.cluster_model = None
         self.is_fitted = False
@@ -334,7 +335,7 @@ class MarketRegimeDetector:
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs))
-        return rsi.fillna(50)
+        return np.nan_to_num(rsi, nan=50)
     
     def _calculate_bollinger_bands(self, prices: pd.Series, period: int = 20, std_dev: int = 2) -> Tuple[pd.Series, pd.Series]:
         """Calcula las bandas de Bollinger."""
@@ -373,7 +374,7 @@ class MarketRegimeDetector:
             self.is_fitted = True
             
             # Mapear clusters a regímenes
-            feature_names_list = df.columns.tolist()
+            feature_names_list = df.((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
             regime_mapping = self._map_clusters_to_regimes(kmeans.cluster_centers_, feature_names_list)
             
             # Caracterizar regímenes
@@ -436,11 +437,11 @@ class MarketRegimeDetector:
             if isinstance(feature, str):
                 feature_lower = feature.lower()
                 if 'volatility' in feature_lower:
-                    volatility_score += abs(float(value))
+                    volatility_score += abs(float(value) if value is not None else 0.0 if value is not None else 0.0)
                 elif 'momentum' in feature_lower:
-                    momentum_score += float(value)
+                    momentum_score += float(value) if value is not None else 0.0 if value is not None else 0.0
                 elif 'volume' in feature_lower:
-                    volume_score += float(value)
+                    volume_score += float(value) if value is not None else 0.0 if value is not None else 0.0
         
         # Clasificar régimen
         if volatility_score > 0.5:
@@ -478,7 +479,7 @@ class MarketRegimeDetector:
                 regime_type = regime_mapping.get(regime_id, f"regime_{regime_id}")
                 
                 regime_info[regime_type] = {
-                    'cluster_id': int(regime_id),
+                    'cluster_id': int(regime_id) if regime_id is not None else 0 if regime_id is not None else 0,
                     'size': int(np.sum(regime_mask)),
                     'percentage': float(np.mean(regime_mask) * 100),
                     'mean_features': regime_features.mean().to_dict(),
@@ -709,10 +710,10 @@ class MarketRegimeDetectorEnhanced(MarketRegimeDetector):
             confidence = next_regime_probs[most_likely_regime]
             
             prediction_result = {
-                'current_regime': int(current_regime),
-                'predicted_regime': int(most_likely_regime),
-                'confidence': float(confidence),
-                'transition_probabilities': next_regime_probs.tolist(),
+                'current_regime': int(current_regime) if current_regime is not None else 0 if current_regime is not None else 0,
+                'predicted_regime': int(most_likely_regime) if most_likely_regime is not None else 0 if most_likely_regime is not None else 0,
+                'confidence': float(confidence) if confidence is not None else 0.0 if confidence is not None else 0.0,
+                'transition_probabilities': ((next_regime_probs.tolist() if hasattr(next_regime_probs, 'tolist') else list(next_regime_probs)) if hasattr(next_regime_probs, 'tolist') else list(next_regime_probs)),
                 'regime_stability': self._calculate_regime_stability(regime_labels)
             }
             
@@ -752,4 +753,4 @@ class MarketRegimeDetectorEnhanced(MarketRegimeDetector):
         recent_regimes = regime_labels[-10:]
         stability = np.mean(recent_regimes == current_regime)
         
-        return float(stability) 
+        return float(stability) if stability is not None else 0.0 if stability is not None else 0.0 

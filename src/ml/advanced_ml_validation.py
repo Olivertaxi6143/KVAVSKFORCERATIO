@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 #!/usr/bin/env python3
 """
 Módulo de Machine Learning Avanzado para Validación de Estrategias
@@ -24,7 +25,7 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.ensemble import IsolationForest, RandomForestRegressor
-from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit, cross_val_score
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -123,8 +124,8 @@ class AdvancedMLValidator:
         self.n_regimes = n_regimes
         self.drift_threshold = drift_threshold
         self.walk_forward_folds = walk_forward_folds
-        self.config = config or WalkForwardConfig()
-        self.model = model
+        getattr(self, 'config', None) = config or WalkForwardConfig()
+        getattr(self, 'model', None) = model
         self.logger = logging.getLogger(__name__)
         
         # Inicializar modelos
@@ -279,10 +280,10 @@ class AdvancedMLValidator:
             
             result = DataDriftResult(
                 drift_scores=drift_scores,
-                overall_drift=float(overall_drift),
+                overall_drift=float(overall_drift) if overall_drift is not None else 0.0 if overall_drift is not None else 0.0,
                 drift_detected=bool(drift_detected),
                 affected_features=affected_features,
-                confidence_level=float(confidence_level)
+                confidence_level=float(confidence_level) if confidence_level is not None else 0.0 if confidence_level is not None else 0.0
             )
             
             self.logger.info(f"✅ Data drift detectado: {drift_detected}")
@@ -355,8 +356,8 @@ class AdvancedMLValidator:
                     'train_size': len(X_train),
                     'test_size': len(X_test),
                     'metrics': fold_metrics,
-                    'predictions': y_pred.tolist(),
-                    'actuals': y_test.tolist()
+                    'predictions': ((y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred)) if hasattr(y_pred, 'tolist') else list(y_pred)),
+                    'actuals': ((y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test)) if hasattr(y_test, 'tolist') else list(y_test))
                 }
                 
                 fold_results.append(fold_result)
@@ -395,7 +396,7 @@ class AdvancedMLValidator:
         
         if len(available_features) < 2:
             # Usar columnas numéricas como fallback
-            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+            numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
             available_features = numeric_cols[:5]  # Top 5 columnas numéricas
         
         return available_features
@@ -410,7 +411,7 @@ class AdvancedMLValidator:
         available_features = [f for f in drift_features if f in data.columns]
         
         if len(available_features) < 2:
-            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+            numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
             available_features = numeric_cols[:3]
         
         return available_features
@@ -418,7 +419,7 @@ class AdvancedMLValidator:
     def _select_walk_forward_features(self, data: pd.DataFrame, target_column: str) -> List[str]:
         """Selecciona características para walk-forward."""
         # Excluir la columna objetivo y columnas no numéricas
-        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
         
         if target_column in numeric_cols:
             numeric_cols.remove(target_column)
@@ -568,7 +569,7 @@ class AdvancedMLValidator:
                     curr_percentiles = np.percentile(curr_data, [25, 50, 75])
                     
                     drift_score = np.mean(np.abs(curr_percentiles - ref_percentiles))
-                    drift_scores[col] = float(drift_score)
+                    drift_scores[col] = float(drift_score) if drift_score is not None else 0.0 if drift_score is not None else 0.0
         
         return drift_scores
     
@@ -589,7 +590,7 @@ class AdvancedMLValidator:
             normalized_scores = [(s - mean_score) / std_score for s in scores]
             confidence = 1.0 - np.mean([abs(s) for s in normalized_scores])
         
-        return max(0.0, min(1.0, float(confidence)))
+        return max(0.0, min(1.0, float(confidence) if confidence is not None else 0.0 if confidence is not None else 0.0))
     
     def _clean_walk_forward_data(self, X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
         """Limpia datos para walk-forward."""
@@ -618,9 +619,9 @@ class AdvancedMLValidator:
             mae = mean_absolute_error(y_true, y_pred)
             
             return {
-                'r2_score': float(r2),
-                'rmse': float(rmse),
-                'mae': float(mae)
+                'r2_score': float(r2) if r2 is not None else 0.0 if r2 is not None else 0.0,
+                'rmse': float(rmse) if rmse is not None else 0.0 if rmse is not None else 0.0,
+                'mae': float(mae) if mae is not None else 0.0 if mae is not None else 0.0
             }
         except Exception as e:
             self.logger.warning(f"Error calculando métricas de fold: {e}")
@@ -649,7 +650,7 @@ class AdvancedMLValidator:
         r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
         stability = 1.0 - np.std(r2_scores)  # Menor std = mayor estabilidad
         
-        return max(0.0, min(1.0, float(stability)))
+        return max(0.0, min(1.0, float(stability) if stability is not None else 0.0 if stability is not None else 0.0))
     
     def _calculate_degradation_score(self, fold_results: List[Dict[str, Any]]) -> float:
         """Calcula score de degradación."""
@@ -729,7 +730,7 @@ class AdvancedMLValidator:
             
             # Configuración por defecto
             if target_column is None:
-                target_column = self.config.target_column
+                target_column = getattr(self, 'config', None).target_column
             
             # Asegurar que target_column no sea None
             if target_column is None:
@@ -741,8 +742,8 @@ class AdvancedMLValidator:
             # Preparar datos
             X, y = self._prepare_temporal_data(data, feature_columns, target_column)
             
-            if len(X) < self.config.min_train_size:
-                self.logger.warning(f"⚠️ Datos insuficientes para validación temporal: {len(X)} < {self.config.min_train_size}")
+            if len(X) < getattr(self, 'config', None).min_train_size:
+                self.logger.warning(f"⚠️ Datos insuficientes para validación temporal: {len(X)} < {getattr(self, 'config', None).min_train_size}")
                 return self._create_empty_temporal_result()
             
             # Realizar walk-forward validation
@@ -751,8 +752,8 @@ class AdvancedMLValidator:
             all_actuals = []
             
             # Configurar TimeSeriesSplit para validación temporal
-            from sklearn.model_selection import TimeSeriesSplit
-            tscv = TimeSeriesSplit(n_splits=self.config.n_splits)
+            from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit
+            tscv = TimeSeriesSplit(n_splits=getattr(self, 'config', None).n_splits)
             
             for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(X)):
                 try:
@@ -761,11 +762,11 @@ class AdvancedMLValidator:
                     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
                     
                     # Entrenar modelo
-                    if self.model is not None:
-                        self.model.fit(X_train, y_train)
+                    if getattr(self, 'model', None) is not None:
+                        getattr(self, 'model', None).fit(X_train, y_train)
                         
                         # Predecir
-                        y_pred = self.model.predict(X_test)
+                        y_pred = getattr(self, 'model', None).predict(X_test)
                     else:
                         # Usar modelo por defecto si no hay uno configurado
                         from sklearn.ensemble import RandomForestRegressor
@@ -785,13 +786,13 @@ class AdvancedMLValidator:
                         'test_size': len(X_test),
                         'metrics': metrics,
                         'feature_importance': feature_importance,
-                        'predictions': y_pred.tolist(),
-                        'actuals': y_test.tolist()
+                        'predictions': ((y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred)) if hasattr(y_pred, 'tolist') else list(y_pred)),
+                        'actuals': ((y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test)) if hasattr(y_test, 'tolist') else list(y_test))
                     }
                     
                     fold_results.append(fold_result)
-                    all_predictions.extend(y_pred.tolist())
-                    all_actuals.extend(y_test.tolist())
+                    all_predictions.extend(((y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred)) if hasattr(y_pred, 'tolist') else list(y_pred)))
+                    all_actuals.extend(((y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test)) if hasattr(y_test, 'tolist') else list(y_test)))
                     
                 except Exception as e:
                     self.logger.warning(f"Error en fold {fold_idx + 1}: {e}")
@@ -835,7 +836,7 @@ class AdvancedMLValidator:
     def _select_temporal_features(self, data: pd.DataFrame, target_column: str) -> List[str]:
         """Selecciona características para validación temporal."""
         # Excluir la columna objetivo y columnas no numéricas
-        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
         
         if target_column in numeric_cols:
             numeric_cols.remove(target_column)
@@ -869,7 +870,7 @@ class AdvancedMLValidator:
         if len(available_features) < 2:
             self.logger.warning("⚠️ Pocas características disponibles para validación temporal")
             # Usar columnas numéricas como fallback
-            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+            numeric_cols = data.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
             if target_column in numeric_cols:
                 numeric_cols.remove(target_column)
             available_features = numeric_cols[:5]
@@ -909,11 +910,11 @@ class AdvancedMLValidator:
             bias = np.mean(y_pred - y_true)
             
             return {
-                'r2_score': float(r2),
-                'rmse': float(rmse),
-                'mae': float(mae),
-                'correlation': float(correlation),
-                'bias': float(bias)
+                'r2_score': float(r2) if r2 is not None else 0.0 if r2 is not None else 0.0,
+                'rmse': float(rmse) if rmse is not None else 0.0 if rmse is not None else 0.0,
+                'mae': float(mae) if mae is not None else 0.0 if mae is not None else 0.0,
+                'correlation': float(correlation) if correlation is not None else 0.0 if correlation is not None else 0.0,
+                'bias': float(bias) if bias is not None else 0.0 if bias is not None else 0.0
             }
         except Exception as e:
             self.logger.warning(f"Error calculando métricas temporales: {e}")
@@ -960,9 +961,9 @@ class AdvancedMLValidator:
         volatility = np.std([fold['metrics']['rmse'] for fold in fold_results])
         
         return {
-            'stability_score': float(max(0.0, min(1.0, float(stability_score)))),
-            'consistency': float(max(0.0, min(1.0, float(consistency)))),
-            'volatility': float(volatility)
+            'stability_score': float(max(0.0, min(1.0, float(stability_score) if stability_score is not None else 0.0 if stability_score is not None else 0.0))),
+            'consistency': float(max(0.0, min(1.0, float(consistency) if consistency is not None else 0.0 if consistency is not None else 0.0))),
+            'volatility': float(volatility) if volatility is not None else 0.0 if volatility is not None else 0.0
         }
     
     def _analyze_temporal_degradation(self, fold_results: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -992,8 +993,8 @@ class AdvancedMLValidator:
         
         return {
             'degradation_score': degradation_score,
-            'trend': float(trend),
-            'acceleration': float(acceleration)
+            'trend': float(trend) if trend is not None else 0.0 if trend is not None else 0.0,
+            'acceleration': float(acceleration) if acceleration is not None else 0.0 if acceleration is not None else 0.0
         }
     
     def _calculate_temporal_robustness(self, fold_results: List[Dict[str, Any]]) -> float:
@@ -1011,7 +1012,7 @@ class AdvancedMLValidator:
         
         robustness = (stability + predictability) / 2.0
         
-        return max(0.0, min(1.0, float(robustness)))
+        return max(0.0, min(1.0, float(robustness) if robustness is not None else 0.0 if robustness is not None else 0.0))
     
     def _calculate_temporal_consistency(self, predictions: List[float], actuals: List[float]) -> float:
         """Calcula consistencia temporal entre predicciones y valores reales."""
@@ -1025,7 +1026,7 @@ class AdvancedMLValidator:
             # Calcular consistencia como medida de estabilidad temporal
             consistency = max(0.0, min(1.0, abs(correlation)))
             
-            return float(consistency)
+            return float(consistency) if consistency is not None else 0.0 if consistency is not None else 0.0
         except Exception as e:
             self.logger.warning(f"Error calculando consistencia temporal: {e}")
             return 0.0
@@ -1067,8 +1068,8 @@ def run_advanced_ml_validation(data: pd.DataFrame,
         # 1. Detección de regímenes
         regime_result = validator.detect_market_regimes(data)
         results['regime_detection'] = {
-            'regime_labels': regime_result.regime_labels.tolist(),
-            'regime_centers': regime_result.regime_centers.tolist(),
+            'regime_labels': regime_result.((regime_labels.tolist() if hasattr(regime_labels, 'tolist') else list(regime_labels)) if hasattr(regime_labels, 'tolist') else list(regime_labels)),
+            'regime_centers': regime_result.((regime_centers.tolist() if hasattr(regime_centers, 'tolist') else list(regime_centers)) if hasattr(regime_centers, 'tolist') else list(regime_centers)),
             'regime_characteristics': regime_result.regime_characteristics,
             'quality_metrics': regime_result.quality_metrics,
             'feature_importance': regime_result.feature_importance

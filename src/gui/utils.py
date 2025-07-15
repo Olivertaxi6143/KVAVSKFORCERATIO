@@ -1,3 +1,5 @@
+from typing import Optional, Any, Union
+import warnings
 """
 GUI Utils - Utilidades para la interfaz gráfica
 
@@ -265,7 +267,7 @@ def validate_dataframe(df: pd.DataFrame, required_columns: Optional[List[str]] =
             errors.append(f"Columnas faltantes: {missing_columns}")
     
     # Verificar que hay columnas numéricas
-    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    numeric_columns = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
     if len(numeric_columns) < 3:
         errors.append("Insuficientes columnas numéricas para análisis")
     
@@ -376,11 +378,11 @@ def create_scrolled_frame(parent):
     
     scrollable_frame.bind(
         "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        lambda e: getattr(canvas, 'config', None)ure(scrollregion=canvas.bbox("all"))
     )
     
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
+    getattr(canvas, 'config', None)ure(yscrollcommand=scrollbar.set)
     
     return scrollable_frame, canvas, scrollbar
 
@@ -463,14 +465,14 @@ def create_status_bar(parent):
 
 def update_status(status_label, message):
     """Actualiza el mensaje de la barra de estado."""
-    status_label.config(text=message)
+    getattr(status_label, 'config', None)(text=message)
     status_label.update_idletasks()
 
 
 def create_menu_bar(parent):
     """Crea una barra de menú básica."""
     menubar = tk.Menu(parent)
-    parent.config(menu=menubar)
+    getattr(parent, 'config', None)(menu=menubar)
     
     # Menú Archivo
     file_menu = tk.Menu(menubar, tearoff=0)
@@ -688,7 +690,7 @@ def create_results_table(parent, columns, data=None):
     # Scrollbars
     vsb = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
     hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
-    tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+    getattr(tree, 'config', None)ure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
     
     # Layout
     tree.grid(row=0, column=0, sticky="nsew")
@@ -806,7 +808,7 @@ def create_help_panel(parent):
     text_widget = tk.Text(help_frame, wrap=tk.WORD, height=15, width=60)
     text_widget.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
     text_widget.insert(tk.END, help_text)
-    text_widget.config(state=tk.DISABLED)
+    getattr(text_widget, 'config', None)(state=tk.DISABLED)
     
     return help_frame
 
@@ -856,20 +858,20 @@ def setup_widget_styles():
     style = ttk.Style()
     
     # Configurar estilo para botones de acento
-    style.configure('Accent.TButton',
+    getattr(style, 'config', None)ure('Accent.TButton',
                    background=WIDGET_STYLES['button_bg'],
                    foreground=WIDGET_STYLES['button_fg'])
     
     # Configurar estilo para etiquetas de título
-    style.configure('Title.TLabel',
+    getattr(style, 'config', None)ure('Title.TLabel',
                    font=WIDGET_STYLES['title_font'])
     
     # Configurar estilo para etiquetas de encabezado
-    style.configure('Header.TLabel',
+    getattr(style, 'config', None)ure('Header.TLabel',
                    font=WIDGET_STYLES['header_font'])
     
     # Configurar estilo para frames de grupo
-    style.configure('Group.TLabelframe',
+    getattr(style, 'config', None)ure('Group.TLabelframe',
                    font=WIDGET_STYLES['header_font'])
 
 

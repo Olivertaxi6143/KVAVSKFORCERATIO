@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 #!/usr/bin/env python3
 """
 QVAScorerEnhanced - Análisis QVA Unificado y Mejorado
@@ -29,8 +30,8 @@ warnings.filterwarnings('ignore')
 from src.data.data_manager import DataManager, create_data_manager
 from src.data.data_utils import read_and_prepare
 from src.gui.utils import validate_dataframe
-from src.core.config.config_manager import ConfigManagerEnhanced
-from src.core.config.progress_callback import ProgressCallback
+from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced
+from src.getattr(core, 'config', None).progress_callback import ProgressCallback
 from src.logger_config import setup_logger
 
 # Importar ExtraKPIManager desde el módulo dedicado
@@ -39,7 +40,7 @@ from src.core.analysis.extra_kpi_manager import ExtraKPIManager
 # Importar librerías de ML para funcionalidades avanzadas (opcionales)
 try:
     from sklearn.ensemble import RandomForestRegressor, IsolationForest
-    from sklearn.model_selection import cross_val_score
+    from getattr(sklearn, 'model', None)_selection import cross_val_score
     from sklearn.preprocessing import StandardScaler
     from sklearn.cluster import KMeans
     import shap
@@ -100,7 +101,7 @@ class QVAScorerEnhanced:
             enable_advanced_features: Activar funcionalidades avanzadas (ML, explicabilidad, etc.)
         """
         self.logger = setup_logger("qva_unified")
-        self.config_manager = config_manager or ConfigManagerEnhanced()
+        getattr(self, 'config', None)_manager = config_manager or ConfigManagerEnhanced()
         self.progress_callback = progress_callback
         self.extra_kpi_manager = ExtraKPIManager(config_manager)
         
@@ -253,11 +254,11 @@ class QVAScorerEnhanced:
                 return pd.Series(0.5, index=df.index)
             
             # Obtener KPIs habilitados
-            enabled_kpis = self.config_manager.get_enabled_kpis()
+            enabled_kpis = getattr(self, 'config', None)_manager.get_enabled_kpis()
             self.logger.info(f"📊 KPIs habilitados: {len(enabled_kpis)}")
             
             # Obtener estilo de trading actual
-            trading_style = self.config_manager.current_config.get('trading_style', 'General')
+            trading_style = getattr(self, 'config', None)_manager.current_config.get('trading_style', 'General')
             self.logger.info(f"🎯 Estilo de trading: {trading_style}")
             
             # Obtener pesos para el estilo de trading
@@ -721,8 +722,8 @@ class QVAScorerEnhanced:
             Diccionario con componentes del score
         """
         try:
-            enabled_kpis = self.config_manager.get_enabled_kpis()
-            trading_style = self.config_manager.current_config.get('trading_style', 'General')
+            enabled_kpis = getattr(self, 'config', None)_manager.get_enabled_kpis()
+            trading_style = getattr(self, 'config', None)_manager.current_config.get('trading_style', 'General')
             
             breakdown = {
                 'profitability': self._calculate_profitability_component_robust(df, enabled_kpis),
@@ -1370,7 +1371,7 @@ class QVAScorerEnhanced:
             
             return {
                 'enabled': True,
-                'threshold': max(3, int(threshold)),
+                'threshold': max(3, int(threshold) if threshold is not None else 0 if threshold is not None else 0),
                 'penalty_factor': max(0.5, min(1.0, penalty_factor))
             }
             
@@ -1410,7 +1411,7 @@ class QVAScorerEnhanced:
             
             return {
                 'enabled': True,
-                'threshold': max(5, int(threshold)),
+                'threshold': max(5, int(threshold) if threshold is not None else 0 if threshold is not None else 0),
                 'penalty_factor': max(0.7, min(1.0, penalty_factor))
             }
             
@@ -1450,7 +1451,7 @@ class QVAScorerEnhanced:
             
             return {
                 'enabled': True,
-                'threshold': max(10, int(threshold)),
+                'threshold': max(10, int(threshold) if threshold is not None else 0 if threshold is not None else 0),
                 'penalty_factor': max(0.6, min(1.0, penalty_factor))
             }
             
@@ -1642,7 +1643,7 @@ class QVAScorerEnhanced:
         """
         try:
             # Actualizar configuración
-            self.config_manager.current_config['trading_style'] = trading_style
+            getattr(self, 'config', None)_manager.current_config['trading_style'] = trading_style
             
             # Optimizar pesos automáticamente
             optimized_weights = self.auto_optimize_weights_by_trading_style(trading_style, df)

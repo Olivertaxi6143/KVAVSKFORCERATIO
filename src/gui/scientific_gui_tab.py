@@ -1,3 +1,5 @@
+from typing import Optional, Any, Union
+import warnings
 #!/usr/bin/env python3
 """
 Pestaña de Análisis Científico
@@ -312,9 +314,9 @@ class ScientificAnalysisTab(ttk.Frame):
         
         # Iniciar análisis en hilo separado
         self.analysis_running = True
-        self.run_btn.config(state=tk.DISABLED)
-        self.stop_btn.config(state=tk.NORMAL)
-        self.status_label.config(text="Ejecutando análisis científico...")
+        self.getattr(run_btn, 'config', None)(state=tk.DISABLED)
+        self.getattr(stop_btn, 'config', None)(state=tk.NORMAL)
+        self.getattr(status_label, 'config', None)(text="Ejecutando análisis científico...")
         
         # Crear hilo para análisis
         analysis_thread = threading.Thread(
@@ -342,7 +344,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 # Actualizar progreso
                 progress = (i / total_analyses) * 100
                 self.progress_var.set(progress)
-                self.status_label.config(text=f"Ejecutando {analysis_type}...")
+                self.getattr(status_label, 'config', None)(text=f"Ejecutando {analysis_type}...")
                 
                 # Ejecutar análisis específico
                 analysis_result = self.scientific_analyzer.apply_scientific_analysis(analysis_type)
@@ -367,9 +369,9 @@ class ScientificAnalysisTab(ttk.Frame):
     def _analysis_completed(self, results: Dict[str, Any]):
         """Maneja la finalización del análisis científico."""
         self.analysis_running = False
-        self.run_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.status_label.config(text="Análisis científico completado")
+        self.getattr(run_btn, 'config', None)(state=tk.NORMAL)
+        self.getattr(stop_btn, 'config', None)(state=tk.DISABLED)
+        self.getattr(status_label, 'config', None)(text="Análisis científico completado")
         
         # Mostrar resultados
         self._display_results(results)
@@ -381,9 +383,9 @@ class ScientificAnalysisTab(ttk.Frame):
     def _analysis_error(self, error_message: str):
         """Maneja errores en el análisis científico."""
         self.analysis_running = False
-        self.run_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.status_label.config(text="Error en análisis científico")
+        self.getattr(run_btn, 'config', None)(state=tk.NORMAL)
+        self.getattr(stop_btn, 'config', None)(state=tk.DISABLED)
+        self.getattr(status_label, 'config', None)(text="Error en análisis científico")
         
         messagebox.showerror("Error en Análisis", 
                            f"Error durante el análisis científico:\n{error_message}")
@@ -391,9 +393,9 @@ class ScientificAnalysisTab(ttk.Frame):
     def _stop_analysis(self):
         """Detiene el análisis científico en progreso."""
         self.analysis_running = False
-        self.run_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.status_label.config(text="Análisis detenido por el usuario")
+        self.getattr(run_btn, 'config', None)(state=tk.NORMAL)
+        self.getattr(stop_btn, 'config', None)(state=tk.DISABLED)
+        self.getattr(status_label, 'config', None)(text="Análisis detenido por el usuario")
         
         logger.info("⏹️ Análisis científico detenido por el usuario")
     
@@ -481,7 +483,7 @@ class ScientificAnalysisTab(ttk.Frame):
         """
         
         details_text.insert(1.0, details_content)
-        details_text.config(state=tk.DISABLED)
+        getattr(details_text, 'config', None)(state=tk.DISABLED)
     
     def _show_correlation_matrix(self):
         """Muestra la matriz de correlación."""
@@ -493,7 +495,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 return
             
             # Actualizar label con información
-            self.viz_label.config(text=f"📊 Matriz de Correlación generada\n"
+            self.getattr(viz_label, 'config', None)(text=f"📊 Matriz de Correlación generada\n"
                                       f"Estrategias analizadas: {results.get('filtered_strategies_count', 0)}")
             
             logger.info("✅ Matriz de correlación mostrada")
@@ -512,7 +514,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 return
             
             # Actualizar label con información
-            self.viz_label.config(text=f"📈 Distribución de Scores generada\n"
+            self.getattr(viz_label, 'config', None)(text=f"📈 Distribución de Scores generada\n"
                                       f"Estrategias analizadas: {results.get('filtered_strategies_count', 0)}")
             
             logger.info("✅ Distribución de scores mostrada")
@@ -531,7 +533,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 return
             
             # Actualizar label con información
-            self.viz_label.config(text=f"📊 Métricas de Rendimiento generadas\n"
+            self.getattr(viz_label, 'config', None)(text=f"📊 Métricas de Rendimiento generadas\n"
                                       f"Estrategias analizadas: {results.get('filtered_strategies_count', 0)}")
             
             logger.info("✅ Métricas de rendimiento mostradas")
@@ -615,7 +617,7 @@ class ScientificAnalysisTab(ttk.Frame):
         """Limpia los resultados actuales."""
         self.current_results = {}
         self.results_text.delete(1.0, tk.END)
-        self.viz_label.config(text="Seleccione un tipo de visualización para comenzar")
+        self.getattr(viz_label, 'config', None)(text="Seleccione un tipo de visualización para comenzar")
         
         messagebox.showinfo("Limpiado", "Resultados científicos limpiados")
 

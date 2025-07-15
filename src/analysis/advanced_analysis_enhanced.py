@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 #!/usr/bin/env python3
 """
 Módulo de Análisis Avanzado Mejorado Integrado
@@ -23,7 +24,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from getattr(sklearn, 'model', None)_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, VotingRegressor
 from sklearn.svm import SVR
@@ -101,7 +102,7 @@ class AdvancedAnalysisEnhanced:
             config: Configuración opcional del análisis
         """
         self.filtered_strategies = filtered_strategies_df.copy()
-        self.config = config or {}
+        getattr(self, 'config', None) = config or {}
         self.scaler = StandardScaler()
         self.imputer = SimpleImputer(strategy='median')
         self.pca = PCA(n_components=0.95)
@@ -313,8 +314,8 @@ class AdvancedAnalysisEnhanced:
             correlation_range = np.max(valid_correlations) - np.min(valid_correlations)
             
             return {
-                "mean_correlation_variance": float(mean_correlation_variance),
-                "correlation_range": float(correlation_range),
+                "mean_correlation_variance": float(mean_correlation_variance) if mean_correlation_variance is not None else 0.0 if mean_correlation_variance is not None else 0.0,
+                "correlation_range": float(correlation_range) if correlation_range is not None else 0.0 if correlation_range is not None else 0.0,
                 "num_windows": int(len(dynamic_correlations)),
                 "mean_correlation": float(np.mean(valid_correlations))
             }
@@ -1007,9 +1008,9 @@ class AdvancedAnalysisEnhanced:
             calinski = calinski_harabasz_score(features_scaled, labels)
             
             return {
-                'silhouette_score': float(silhouette),
-                'calinski_harabasz_score': float(calinski),
-                'n_clusters': int(n_clusters)
+                'silhouette_score': float(silhouette) if silhouette is not None else 0.0 if silhouette is not None else 0.0,
+                'calinski_harabasz_score': float(calinski) if calinski is not None else 0.0 if calinski is not None else 0.0,
+                'n_clusters': int(n_clusters) if n_clusters is not None else 0 if n_clusters is not None else 0
             }
             
         except Exception as e:
@@ -1306,7 +1307,7 @@ class AdvancedAnalysisEnhanced:
                     if diff > 0.1:  # Umbral de cambio
                         changes.append({
                             'position': i * window_size // 2,
-                            'change_magnitude': float(diff)
+                            'change_magnitude': float(diff) if diff is not None else 0.0 if diff is not None else 0.0
                         })
                 
                 regime_changes = {
@@ -1548,8 +1549,8 @@ class AdvancedAnalysisEnhanced:
                         anomaly_percentage = (n_anomalies / len(labels)) * 100
                         
                         anomaly_results[method_name] = {
-                            'n_anomalies': int(n_anomalies),
-                            'anomaly_percentage': float(anomaly_percentage),
+                            'n_anomalies': int(n_anomalies) if n_anomalies is not None else 0 if n_anomalies is not None else 0,
+                            'anomaly_percentage': float(anomaly_percentage) if anomaly_percentage is not None else 0.0 if anomaly_percentage is not None else 0.0,
                             'labels': labels,
                             'scores': scores
                         }
@@ -1574,8 +1575,8 @@ class AdvancedAnalysisEnhanced:
                     # Asegurar que 'scores' esté presente aunque sea una lista de ceros
                     ensemble_scores_array = np.zeros(len(ensemble_labels))
                     anomaly_results['ensemble'] = {
-                        'n_anomalies': int(n_anomalies),
-                        'anomaly_percentage': float(anomaly_percentage),
+                        'n_anomalies': int(n_anomalies) if n_anomalies is not None else 0 if n_anomalies is not None else 0,
+                        'anomaly_percentage': float(anomaly_percentage) if anomaly_percentage is not None else 0.0 if anomaly_percentage is not None else 0.0,
                         'labels': ensemble_labels,
                         'votes': votes,
                         'scores': ensemble_scores_array
@@ -1605,8 +1606,8 @@ class AdvancedAnalysisEnhanced:
                     anomaly_percentage = (n_anomalies / len(labels)) * 100
                     
                     anomaly_results[method] = {
-                        'n_anomalies': int(n_anomalies),
-                        'anomaly_percentage': float(anomaly_percentage),
+                        'n_anomalies': int(n_anomalies) if n_anomalies is not None else 0 if n_anomalies is not None else 0,
+                        'anomaly_percentage': float(anomaly_percentage) if anomaly_percentage is not None else 0.0 if anomaly_percentage is not None else 0.0,
                         'labels': labels,
                         'scores': scores
                     }

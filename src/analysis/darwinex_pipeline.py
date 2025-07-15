@@ -1,3 +1,5 @@
+from typing import Optional, Any, Union
+import warnings
 """
 Implementación del pipeline de 6 filtros DarwinEX según normas de asignación.
 Basado en el feedback específico de DarwinEX para captación de capital de terceros.
@@ -49,7 +51,7 @@ class DarwinEXPipeline:
         self.predictability_analyzer = PredictabilityAnalyzer()
         
         # Cargar configuración externa
-        self.config = self._load_configuration(config_path)
+        getattr(self, 'config', None) = self._load_configuration(config_path)
         
         # Función utilitaria para conversión de floats
         self.to_float = self._create_float_converter()
@@ -149,10 +151,10 @@ class DarwinEXPipeline:
                 if self._is_scalar_na(value):
                     return 0.0
                 if isinstance(value, (int, float)):
-                    return float(value)
+                    return float(value) if value is not None else 0.0 if value is not None else 0.0
                 if isinstance(value, str):
                     cleaned = value.replace(',', '.').strip()
-                    return float(cleaned)
+                    return float(cleaned) if cleaned is not None else 0.0 if cleaned is not None else 0.0
                 return 0.0
             except (ValueError, TypeError):
                 return 0.0
@@ -172,7 +174,7 @@ class DarwinEXPipeline:
         errors = []
         
         # Verificar campos requeridos
-        required_fields = self.config.get("validation", {}).get("required_fields", [
+        required_fields = getattr(self, 'config', None).get("validation", {}).get("required_fields", [
             "Strategy_Name", "D_Score", "Years_Running", "LEA", "OS"
         ])
         
@@ -193,13 +195,13 @@ class DarwinEXPipeline:
                 continue
             
             # Validar campos numéricos
-            numeric_fields = self.config.get("validation", {}).get("numeric_fields", [
+            numeric_fields = getattr(self, 'config', None).get("validation", {}).get("numeric_fields", [
                 "D_Score", "Years_Running", "LEA", "OS", "Sharpe_Ratio", "CAGR", "Max_Drawdown"
             ])
             
             if field in numeric_fields:
                 try:
-                    self.to_float(value)
+                    self.to_float(value) if value is not None else 0.0 if value is not None else 0.0
                 except (ValueError, TypeError):
                     errors.append(f"Campo numérico inválido: {field} = {value}")
         
@@ -216,7 +218,7 @@ class DarwinEXPipeline:
             True si es estrategia nueva
         """
         try:
-            criteria = self.config.get("validation", {}).get("new_strategy_criteria", {})
+            criteria = getattr(self, 'config', None).get("validation", {}).get("new_strategy_criteria", {})
             
             years_running = self.to_float(strategy_data.get('Years_Running', 0))
             total_months = self.to_float(strategy_data.get('Total_Data_Months', 0))
@@ -467,7 +469,7 @@ class DarwinEXPipeline:
             # Usar Max DD % si está disponible
             if 'Max DD %' in strategy_data:
                 max_dd = abs(self.to_float(strategy_data['Max DD %']))
-                return max_dd <= self.config["filters"]["max_drawdown"]
+                return max_dd <= getattr(self, 'config', None)["filters"]["max_drawdown"]
             
             # Fallback a Drawdown si está disponible
             elif 'Drawdown' in strategy_data:
@@ -478,7 +480,7 @@ class DarwinEXPipeline:
                 else:
                     # Interpretar como decimal
                     dd_percent = dd * 100
-                    return dd_percent <= self.config["filters"]["max_drawdown"]
+                    return dd_percent <= getattr(self, 'config', None)["filters"]["max_drawdown"]
             
             return True  # Si no hay datos de drawdown, pasar
             
@@ -496,8 +498,8 @@ class DarwinEXPipeline:
                     if isinstance(d_score, str):
                         d_score = float(d_score.replace(',', '.'))
                     else:
-                        d_score = float(d_score)
-                    return d_score >= self.config["filters"]["gold_access"]["min_d_score"]
+                        d_score = float(d_score) if d_score is not None else 0.0 if d_score is not None else 0.0
+                    return d_score >= getattr(self, 'config', None)["filters"]["gold_access"]["min_d_score"]
                 except (ValueError, TypeError):
                     pass
             
@@ -508,8 +510,8 @@ class DarwinEXPipeline:
                     if isinstance(ranking, str):
                         ranking = float(ranking.replace(',', '.'))
                     else:
-                        ranking = float(ranking)
-                    return ranking <= self.config["filters"]["gold_access"]["top_ranking"]
+                        ranking = float(ranking) if ranking is not None else 0.0 if ranking is not None else 0.0
+                    return ranking <= getattr(self, 'config', None)["filters"]["gold_access"]["top_ranking"]
                 except (ValueError, TypeError):
                     pass
             
@@ -522,12 +524,12 @@ class DarwinEXPipeline:
                     if isinstance(sharpe, str):
                         sharpe = float(sharpe.replace(',', '.'))
                     else:
-                        sharpe = float(sharpe)
+                        sharpe = float(sharpe) if sharpe is not None else 0.0 if sharpe is not None else 0.0
                         
                     if isinstance(cagr, str):
                         cagr = float(cagr.replace(',', '.'))
                     else:
-                        cagr = float(cagr)
+                        cagr = float(cagr) if cagr is not None else 0.0 if cagr is not None else 0.0
                         
                     return sharpe >= 1.5 and cagr >= 15
                 except (ValueError, TypeError):
@@ -553,11 +555,11 @@ class DarwinEXPipeline:
                 start_date = pd.to_datetime(strategy_data['Start_Date'])
                 current_date = pd.Timestamp.now()
                 months_running = (current_date - start_date).days / 30.44
-                return months_running >= self.config["filters"]["track_record"]["min_months_pilot"]
+                return months_running >= getattr(self, 'config', None)["filters"]["track_record"]["min_months_pilot"]
             
             # Fallback: verificar años desde métricas
             if 'Years_Running' in strategy_data:
-                return strategy_data['Years_Running'] >= (self.config["filters"]["track_record"]["min_months_pilot"] / 12)
+                return strategy_data['Years_Running'] >= (getattr(self, 'config', None)["filters"]["track_record"]["min_months_pilot"] / 12)
             
             return False
         except Exception as e:
@@ -577,8 +579,8 @@ class DarwinEXPipeline:
                     if isinstance(lea, str):
                         lea = float(lea.replace(',', '.'))
                     else:
-                        lea = float(lea)
-                    lea_positive = lea > self.config["filters"]["lea_os_positive"]["min_lea"]
+                        lea = float(lea) if lea is not None else 0.0 if lea is not None else 0.0
+                    lea_positive = lea > getattr(self, 'config', None)["filters"]["lea_os_positive"]["min_lea"]
                 except (ValueError, TypeError):
                     pass
             elif 'Expectancy' in strategy_data:
@@ -587,7 +589,7 @@ class DarwinEXPipeline:
                     if isinstance(expectancy, str):
                         expectancy = float(expectancy.replace(',', '.'))
                     else:
-                        expectancy = float(expectancy)
+                        expectancy = float(expectancy) if expectancy is not None else 0.0 if expectancy is not None else 0.0
                     lea_positive = expectancy > 0
                 except (ValueError, TypeError):
                     pass
@@ -599,12 +601,12 @@ class DarwinEXPipeline:
                     if isinstance(win_rate, str):
                         win_rate = float(win_rate.replace(',', '.'))
                     else:
-                        win_rate = float(win_rate)
+                        win_rate = float(win_rate) if win_rate is not None else 0.0 if win_rate is not None else 0.0
                         
                     if isinstance(profit_factor, str):
                         profit_factor = float(profit_factor.replace(',', '.'))
                     else:
-                        profit_factor = float(profit_factor)
+                        profit_factor = float(profit_factor) if profit_factor is not None else 0.0 if profit_factor is not None else 0.0
                         
                     lea_positive = (win_rate * profit_factor - (1 - win_rate)) > 0
                 except (ValueError, TypeError):
@@ -617,8 +619,8 @@ class DarwinEXPipeline:
                     if isinstance(os, str):
                         os = float(os.replace(',', '.'))
                     else:
-                        os = float(os)
-                    os_positive = os > self.config["filters"]["lea_os_positive"]["min_os"]
+                        os = float(os) if os is not None else 0.0 if os is not None else 0.0
+                    os_positive = os > getattr(self, 'config', None)["filters"]["lea_os_positive"]["min_os"]
                 except (ValueError, TypeError):
                     pass
             elif 'Sharpe_Ratio' in strategy_data:
@@ -627,7 +629,7 @@ class DarwinEXPipeline:
                     if isinstance(sharpe, str):
                         sharpe = float(sharpe.replace(',', '.'))
                     else:
-                        sharpe = float(sharpe)
+                        sharpe = float(sharpe) if sharpe is not None else 0.0 if sharpe is not None else 0.0
                     os_positive = sharpe > 0
                 except (ValueError, TypeError):
                     pass
@@ -637,7 +639,7 @@ class DarwinEXPipeline:
                     if isinstance(cagr, str):
                         cagr = float(cagr.replace(',', '.'))
                     else:
-                        cagr = float(cagr)
+                        cagr = float(cagr) if cagr is not None else 0.0 if cagr is not None else 0.0
                     os_positive = cagr > 0
                 except (ValueError, TypeError):
                     pass
@@ -650,7 +652,7 @@ class DarwinEXPipeline:
     def _check_correlation_6m(self, strategy_data: pd.Series) -> bool:
         """Verifica correlación 6m ≤ 0.25 vs Nasdaq, Oro, BTC."""
         try:
-            max_correlation = self.config["filters"]["correlation_6m"]["max_correlation"]
+            max_correlation = getattr(self, 'config', None)["filters"]["correlation_6m"]["max_correlation"]
             
             # Verificar correlaciones específicas
             correlation_fields = [
@@ -684,19 +686,19 @@ class DarwinEXPipeline:
         try:
             # Verificar estabilidad de frecuencia
             if 'Trade_Frequency' in strategy_data and 'Frequency_Stability' in strategy_data:
-                return strategy_data['Frequency_Stability'] >= self.config["filters"]["discipline"]["frequency_stability"]
+                return strategy_data['Frequency_Stability'] >= getattr(self, 'config', None)["filters"]["discipline"]["frequency_stability"]
             
             # Verificar asset drift
             if 'Asset_Drift' in strategy_data:
-                return abs(strategy_data['Asset_Drift']) <= self.config["filters"]["discipline"]["asset_drift_threshold"]
+                return abs(strategy_data['Asset_Drift']) <= getattr(self, 'config', None)["filters"]["discipline"]["asset_drift_threshold"]
             
             # Fallback: verificar consistencia de rendimiento
             if 'Sharpe_Ratio' in strategy_data and 'CAGR' in strategy_data:
                 sharpe = strategy_data['Sharpe_Ratio']
                 cagr = strategy_data['CAGR']
                 try:
-                    sharpe_float = float(sharpe) if isinstance(sharpe, (int, float)) else float(str(sharpe).replace(',', '.'))
-                    cagr_float = float(cagr) if isinstance(cagr, (int, float)) else float(str(cagr).replace(',', '.'))
+                    sharpe_float = float(sharpe) if sharpe is not None else 0.0 if sharpe is not None else 0.0 if isinstance(sharpe, (int, float)) else float(str(sharpe).replace(',', '.'))
+                    cagr_float = float(cagr) if cagr is not None else 0.0 if cagr is not None else 0.0 if isinstance(cagr, (int, float)) else float(str(cagr).replace(',', '.'))
                     return sharpe_float > 0 and cagr_float > 0
                 except (ValueError, TypeError):
                     return False
@@ -709,7 +711,7 @@ class DarwinEXPipeline:
     def _check_dd_correlation(self, strategy_data: pd.Series) -> bool:
         """Verifica correlación de drawdown < 0.6 con drawdowns INDX."""
         try:
-            max_dd_corr = self.config["filters"]["dd_correlation"]["max_dd_corr"]
+            max_dd_corr = getattr(self, 'config', None)["filters"]["dd_correlation"]["max_dd_corr"]
             
             # Verificar correlación DD específica
             if 'DD_Correlation_INDX' in strategy_data:
@@ -761,7 +763,7 @@ class DarwinEXPipeline:
         """
         try:
             score = 0.0
-            weights = self.config["scoring"]["weights"]
+            weights = getattr(self, 'config', None)["scoring"]["weights"]
             is_development = self._is_new_strategy(strategy_data)
 
             # Ajuste: para estrategias nuevas, reducir peso de años y aumentar el de robustez simulada
@@ -866,8 +868,8 @@ class DarwinEXPipeline:
         """
         try:
             # Solo evaluar estrategias Silver
-            silver_threshold = self.config["scoring"]["thresholds"]["silver"]
-            gold_threshold = self.config["scoring"]["thresholds"]["gold"]
+            silver_threshold = getattr(self, 'config', None)["scoring"]["thresholds"]["silver"]
+            gold_threshold = getattr(self, 'config', None)["scoring"]["thresholds"]["gold"]
             
             if current_score < silver_threshold or current_score >= gold_threshold:
                 return 0.0
@@ -936,7 +938,7 @@ class DarwinEXPipeline:
         Returns:
             Información de ticket y categoría
         """
-        thresholds = self.config["scoring"]["thresholds"]
+        thresholds = getattr(self, 'config', None)["scoring"]["thresholds"]
         
         if score >= thresholds["gold"]:
             return {
@@ -1046,7 +1048,7 @@ class DarwinEXPipeline:
         alerts = []
         
         # Alertas por triggers automáticos
-        alert_triggers = self.config["risk_management"]["alert_triggers"]
+        alert_triggers = getattr(self, 'config', None)["risk_management"]["alert_triggers"]
         
         if alert_triggers["lea_negative"] and 'LEA' in strategy_data and strategy_data['LEA'] < 0:
             alerts.append("ALERTA: LEA negativo detectado")
@@ -1095,7 +1097,7 @@ class DarwinEXPipeline:
             total_capital = sum([r.ticket_size for r in results])
             # Análisis de filtros
             filter_analysis = {}
-            for filter_name in self.config["filters"].keys():
+            for filter_name in getattr(self, 'config', None)["filters"].keys():
                 passed_count = len([r for r in results if filter_name in r.passed_filters])
                 failed_count = len([r for r in results if filter_name in r.failed_filters])
                 filter_analysis[filter_name] = {

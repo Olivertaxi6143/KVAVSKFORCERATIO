@@ -2,9 +2,13 @@ import logging
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from src.core.config.kpi_config import KPIConfig, TradingStyleConfig
-from src.core.config.progress_callback import ProgressCallback
+from src.getattr(core, 'config', None).kpi_config import KPIConfig, TradingStyleConfig
+from src.getattr(core, 'config', None).progress_callback import ProgressCallback
 from src.logger_config import setup_logger
+import numpy as np
+import pandas as pd
+from typing import Optional, Any, Union
+import warnings
 
 class ConfigManagerEnhanced:
     """
@@ -13,8 +17,8 @@ class ConfigManagerEnhanced:
     
     def __init__(self, config_file: str = "config/trading_config.json"):
         self.logger = setup_logger("kforce")
-        self.config_file = Path(config_file)
-        self.config_file.parent.mkdir(parents=True, exist_ok=True)
+        getattr(self, 'config', None)_file = Path(config_file)
+        getattr(self, 'config', None)_file.parent.mkdir(parents=True, exist_ok=True)
         
         # Configuración por defecto mejorada
         self.default_config = self._create_default_config()
@@ -80,11 +84,11 @@ class ConfigManagerEnhanced:
     
     def load_config(self) -> Dict[str, Any]:
         """Carga la configuración desde archivo o usa la por defecto."""
-        if self.config_file.exists():
+        if getattr(self, 'config', None)_file.exists():
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
+                with open(getattr(self, 'config', None)_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                self.logger.info(f"Configuración cargada de {self.config_file}")
+                self.logger.info(f"Configuración cargada de {getattr(self, 'config', None)_file}")
                 return config
             except Exception as e:
                 self.logger.error(f"Error cargando configuración: {e}")
@@ -94,9 +98,9 @@ class ConfigManagerEnhanced:
     def save_config(self, config: Dict[str, Any]) -> bool:
         """Guarda la configuración en archivo."""
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            with open(getattr(self, 'config', None)_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-            self.logger.info(f"Configuración guardada en {self.config_file}")
+            self.logger.info(f"Configuración guardada en {getattr(self, 'config', None)_file}")
             return True
         except Exception as e:
             self.logger.error(f"Error guardando configuración: {e}")

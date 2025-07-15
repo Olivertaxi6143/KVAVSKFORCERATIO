@@ -1,3 +1,6 @@
+import numpy as np
+from typing import Optional, Any, Union
+import warnings
 """
 Step 1: Cargar Datos - Módulo del Wizard
 
@@ -320,18 +323,18 @@ class Step1LoadFrame(ttk.Frame):
         strategies_loaded = self.load_status['strategies_folder']
         
         if kpi_loaded and strategies_loaded:
-            self.step1_status_label.config(
+            self.getattr(step1_status_label, 'config', None)(
                 text="✅ Datos cargados correctamente",
                 foreground="green"
             )
             logger.info("✅ Paso 1: Datos cargados correctamente")
         elif kpi_loaded or strategies_loaded:
-            self.step1_status_label.config(
+            self.getattr(step1_status_label, 'config', None)(
                 text="⚠️ Cargados parcialmente - Falta archivo KPI o carpeta de estrategias",
                 foreground="orange"
             )
         else:
-            self.step1_status_label.config(
+            self.getattr(step1_status_label, 'config', None)(
                 text="⏳ Pendiente de cargar archivos",
                 foreground="black"
             )
@@ -354,7 +357,7 @@ class Step1LoadFrame(ttk.Frame):
                                 "Validación Exitosa", 
                                 "Los datos han sido validados correctamente."
                             )
-                            self.step1_status_label.config(
+                            self.getattr(step1_status_label, 'config', None)(
                                 text="✅ Datos validados correctamente",
                                 foreground="green"
                             )
@@ -369,7 +372,7 @@ class Step1LoadFrame(ttk.Frame):
                                 "Error de Validación", 
                                 f"Los datos contienen errores:\n{'; '.join(errors)}"
                             )
-                            self.step1_status_label.config(
+                            self.getattr(step1_status_label, 'config', None)(
                                 text="❌ Error: Datos inválidos",
                                 foreground="red"
                             )
@@ -384,7 +387,7 @@ class Step1LoadFrame(ttk.Frame):
                         "Validación", 
                         "Los datos han sido validados correctamente."
                     )
-                    self.step1_status_label.config(
+                    self.getattr(step1_status_label, 'config', None)(
                         text="✅ Datos validados correctamente",
                         foreground="green"
                     )
@@ -393,14 +396,14 @@ class Step1LoadFrame(ttk.Frame):
                     "Error", 
                     "Por favor, carga los archivos necesarios antes de continuar."
                 )
-                self.step1_status_label.config(
+                self.getattr(step1_status_label, 'config', None)(
                     text="❌ Error: Falta cargar archivos",
                     foreground="red"
                 )
                 
         except Exception as e:
             show_error_message("Error", f"Error validando datos: {str(e)}")
-            self.step1_status_label.config(
+            self.getattr(step1_status_label, 'config', None)(
                 text="❌ Error validando datos",
                 foreground="red"
             )
@@ -499,7 +502,7 @@ class Step1LoadFrame(ttk.Frame):
             self.strategies_status_var.set("⏳ Pendiente")
             self.market_status_var.set("⏳ Pendiente")
             self.destination_status_var.set("⏳ Pendiente")
-            self.step1_status_label.config(
+            self.getattr(step1_status_label, 'config', None)(
                 text="⏳ Pendiente de cargar archivos",
                 foreground="black"
             )

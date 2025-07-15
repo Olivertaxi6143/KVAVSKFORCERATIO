@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 """
 Gestor de configuración para predictibilidad con capacidades de IA.
 Integrado con ConfigManagerEnhanced y con ajuste automático de umbrales.
@@ -18,7 +19,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Importar ConfigManagerEnhanced para integración
-from src.core.config.config_manager import ConfigManagerEnhanced
+from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced
 
 logger = logging.getLogger(__name__)
 
@@ -53,15 +54,15 @@ class PredictabilityConfigManager:
             config_path: Ruta al archivo de configuración JSON
             main_config_manager: Instancia del ConfigManagerEnhanced principal
         """
-        self.config_path = config_path or self._get_default_config_path()
+        getattr(self, 'config', None)_path = config_path or self._get_default_config_path()
         self.main_config_manager = main_config_manager or ConfigManagerEnhanced()
-        self.config = self._load_config()
+        getattr(self, 'config', None) = self._load_config()
         self._validate_config()
         
         # Capacidades de IA
-        self.ai_enabled = self.config.get("ai_settings", {}).get("enable_ai", True)
-        self.auto_tuning_enabled = self.config.get("ai_settings", {}).get("enable_auto_tuning", True)
-        self.clustering_enabled = self.config.get("ai_settings", {}).get("enable_clustering", True)
+        self.ai_enabled = getattr(self, 'config', None).get("ai_settings", {}).get("enable_ai", True)
+        self.auto_tuning_enabled = getattr(self, 'config', None).get("ai_settings", {}).get("enable_auto_tuning", True)
+        self.clustering_enabled = getattr(self, 'config', None).get("ai_settings", {}).get("enable_clustering", True)
         
         # Historial de rendimiento para ajuste dinámico
         self.performance_history = []
@@ -89,10 +90,10 @@ class PredictabilityConfigManager:
         """
         try:
             # Intentar cargar desde archivo específico
-            if os.path.exists(self.config_path):
-                with open(self.config_path, 'r', encoding='utf-8') as f:
+            if os.path.exists(getattr(self, 'config', None)_path):
+                with open(getattr(self, 'config', None)_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                logger.info(f"Configuración de predictibilidad cargada desde: {self.config_path}")
+                logger.info(f"Configuración de predictibilidad cargada desde: {getattr(self, 'config', None)_path}")
             else:
                 # Cargar desde ConfigManagerEnhanced
                 main_config = self.main_config_manager.get_config()
@@ -190,12 +191,12 @@ class PredictabilityConfigManager:
         try:
             if self.clustering_enabled:
                 self._clustering_model = KMeans(
-                    n_clusters=self.config["ai_settings"]["clustering_n_clusters"],
+                    n_clusters=getattr(self, 'config', None)["ai_settings"]["clustering_n_clusters"],
                     random_state=42
                 )
             
-            if self.config["ai_settings"]["enable_outlier_detection"]:
-                contamination = self.config["ai_settings"]["outlier_contamination"]
+            if getattr(self, 'config', None)["ai_settings"]["enable_outlier_detection"]:
+                contamination = getattr(self, 'config', None)["ai_settings"]["outlier_contamination"]
                 self._outlier_detector = IsolationForest(
                     contamination=contamination,
                     random_state=42
@@ -217,12 +218,12 @@ class PredictabilityConfigManager:
         ]
         
         for section in required_sections:
-            if section not in self.config:
+            if section not in getattr(self, 'config', None):
                 logger.warning(f"Sección faltante en configuración: {section}")
-                self.config[section] = self._get_default_config()[section]
+                getattr(self, 'config', None)[section] = self._get_default_config()[section]
         
         # Validar pesos de scoring sumen 1.0
-        weights = self.config.get("scoring_weights", {})
+        weights = getattr(self, 'config', None).get("scoring_weights", {})
         total_weight = sum(weights.values())
         if abs(total_weight - 1.0) > 0.01:
             logger.warning(f"Pesos de scoring no suman 1.0: {total_weight}")
@@ -240,7 +241,7 @@ class PredictabilityConfigManager:
         Returns:
             Diccionario con umbrales de la sección
         """
-        thresholds = self.config.get("predictability_thresholds", {})
+        thresholds = getattr(self, 'config', None).get("predictability_thresholds", {})
         section_thresholds = thresholds.get(section, {})
         
         # Aplicar ajustes dinámicos si están habilitados
@@ -251,7 +252,7 @@ class PredictabilityConfigManager:
     
     def _apply_dynamic_adjustments(self, section: str, thresholds: Dict[str, Any]) -> Dict[str, Any]:
         """Aplica ajustes dinámicos basados en datos históricos."""
-        if len(self.performance_history) < self.config["ai_settings"]["min_data_points_for_ai"]:
+        if len(self.performance_history) < getattr(self, 'config', None)["ai_settings"]["min_data_points_for_ai"]:
             return thresholds
         
         try:
@@ -273,8 +274,8 @@ class PredictabilityConfigManager:
                 # Ajustar ratios IS/OOS basándose en la media histórica
                 if "min_is_oos_ratio" in thresholds and "max_is_oos_ratio" in thresholds:
                     current_range = thresholds["max_is_oos_ratio"] - thresholds["min_is_oos_ratio"]
-                    new_center = max(0.5, min(1.5, float(mean_val)))  # Limitar entre 0.5 y 1.5
-                    new_range = max(0.2, min(0.8, float(current_range)))  # Limitar rango
+                    new_center = max(0.5, min(1.5, float(mean_val) if mean_val is not None else 0.0 if mean_val is not None else 0.0))  # Limitar entre 0.5 y 1.5
+                    new_range = max(0.2, min(0.8, float(current_range) if current_range is not None else 0.0 if current_range is not None else 0.0))  # Limitar rango
                     
                     adjusted_thresholds["min_is_oos_ratio"] = max(0.3, new_center - new_range/2)
                     adjusted_thresholds["max_is_oos_ratio"] = min(2.0, new_center + new_range/2)
@@ -303,7 +304,7 @@ class PredictabilityConfigManager:
                     adjusted_thresholds["min_sqn"] *= 0.8
             
             # Registrar ajuste
-            if self.config["logging"]["log_ai_adjustments"]:
+            if getattr(self, 'config', None)["logging"]["log_ai_adjustments"]:
                 logger.info(f"🔧 Ajuste dinámico aplicado a {section}: {len(relevant_metrics)} datos históricos")
             
             return adjusted_thresholds
@@ -348,7 +349,7 @@ class PredictabilityConfigManager:
             self.performance_history.append(strategy_performance)
             
             # Verificar si es momento de ajustar umbrales
-            if len(self.performance_history) % self.config["ai_settings"]["auto_tuning_frequency"] == 0:
+            if len(self.performance_history) % getattr(self, 'config', None)["ai_settings"]["auto_tuning_frequency"] == 0:
                 self._perform_auto_tuning()
                 
         except Exception as e:
@@ -356,7 +357,7 @@ class PredictabilityConfigManager:
     
     def _perform_auto_tuning(self):
         """Realiza ajuste automático de umbrales basado en datos históricos."""
-        if len(self.performance_history) < self.config["ai_settings"]["min_data_points_for_ai"]:
+        if len(self.performance_history) < getattr(self, 'config', None)["ai_settings"]["min_data_points_for_ai"]:
             return
         
         try:
@@ -510,7 +511,7 @@ class PredictabilityConfigManager:
     
     def _tighten_thresholds(self, section: str):
         """Hace más estrictos los umbrales de una sección."""
-        thresholds = self.config["predictability_thresholds"][section]
+        thresholds = getattr(self, 'config', None)["predictability_thresholds"][section]
         
         if section == "consistency":
             thresholds["min_is_oos_ratio"] = max(0.5, thresholds["min_is_oos_ratio"] * 1.1)
@@ -518,7 +519,7 @@ class PredictabilityConfigManager:
     
     def _increase_minimums(self, section: str):
         """Aumenta los mínimos de una sección."""
-        thresholds = self.config["predictability_thresholds"][section]
+        thresholds = getattr(self, 'config', None)["predictability_thresholds"][section]
         
         if section == "temporal_robustness":
             thresholds["min_total_months"] = int(thresholds["min_total_months"] * 1.2)
@@ -526,7 +527,7 @@ class PredictabilityConfigManager:
     
     def _tighten_overfitting_thresholds(self, section: str):
         """Hace más estrictos los umbrales de overfitting."""
-        thresholds = self.config["predictability_thresholds"][section]
+        thresholds = getattr(self, 'config', None)["predictability_thresholds"][section]
         
         if section == "overfitting_detection":
             thresholds["max_dd_threshold"] *= 0.9
@@ -534,7 +535,7 @@ class PredictabilityConfigManager:
     
     def _adjust_stability_thresholds(self, section: str):
         """Ajusta los umbrales de estabilidad."""
-        thresholds = self.config["predictability_thresholds"][section]
+        thresholds = getattr(self, 'config', None)["predictability_thresholds"][section]
         
         if section == "stability":
             thresholds["min_calmar_ratio"] *= 0.9
@@ -547,7 +548,7 @@ class PredictabilityConfigManager:
         Returns:
             Diccionario con pesos de scoring
         """
-        return self.config.get("scoring_weights", {})
+        return getattr(self, 'config', None).get("scoring_weights", {})
     
     def get_validation_settings(self) -> Dict[str, Any]:
         """
@@ -556,7 +557,7 @@ class PredictabilityConfigManager:
         Returns:
             Diccionario con configuración de validación
         """
-        return self.config.get("validation", {})
+        return getattr(self, 'config', None).get("validation", {})
     
     def get_logging_settings(self) -> Dict[str, Any]:
         """
@@ -565,7 +566,7 @@ class PredictabilityConfigManager:
         Returns:
             Diccionario con configuración de logging
         """
-        return self.config.get("logging", {})
+        return getattr(self, 'config', None).get("logging", {})
     
     def get_ai_settings(self) -> Dict[str, Any]:
         """
@@ -574,7 +575,7 @@ class PredictabilityConfigManager:
         Returns:
             Diccionario con configuración de IA
         """
-        return self.config.get("ai_settings", {})
+        return getattr(self, 'config', None).get("ai_settings", {})
     
     def update_config(self, updates: Dict[str, Any]):
         """
@@ -591,7 +592,7 @@ class PredictabilityConfigManager:
                     d[k] = v
             return d
         
-        self.config = deep_update(self.config, updates)
+        getattr(self, 'config', None) = deep_update(getattr(self, 'config', None), updates)
         self._validate_config()
         logger.info("Configuración actualizada")
     
@@ -602,12 +603,12 @@ class PredictabilityConfigManager:
         Args:
             path: Ruta donde guardar (opcional)
         """
-        save_path = path or self.config_path
+        save_path = path or getattr(self, 'config', None)_path
         
         try:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, indent=4, ensure_ascii=False)
+                json.dump(getattr(self, 'config', None), f, indent=4, ensure_ascii=False)
             
             logger.info(f"Configuración guardada en: {save_path}")
             
@@ -621,7 +622,7 @@ class PredictabilityConfigManager:
         Returns:
             Diccionario completo con la configuración
         """
-        return self.config.copy()
+        return getattr(self, 'config', None).copy()
     
     def get_ai_insights(self) -> Dict[str, Any]:
         """
@@ -658,7 +659,7 @@ class PredictabilityConfigManager:
                         if cluster_percentage > 30:  # Cluster significativo
                             insights["recommendations"].append({
                                 "type": "cluster_analysis",
-                                "cluster_id": int(cluster_id),
+                                "cluster_id": int(cluster_id) if cluster_id is not None else 0 if cluster_id is not None else 0,
                                 "size": cluster_size,
                                 "percentage": cluster_percentage,
                                 "description": f"Cluster {cluster_id} representa {cluster_percentage:.1f}% de las estrategias"
@@ -694,12 +695,12 @@ class PredictabilityConfigManager:
             
             if self._clustering_model is not None:
                 self._clustering_model = KMeans(
-                    n_clusters=self.config["ai_settings"]["clustering_n_clusters"],
+                    n_clusters=getattr(self, 'config', None)["ai_settings"]["clustering_n_clusters"],
                     random_state=42
                 )
             
             if self._outlier_detector is not None:
-                contamination = self.config["ai_settings"]["outlier_contamination"]
+                contamination = getattr(self, 'config', None)["ai_settings"]["outlier_contamination"]
                 self._outlier_detector = IsolationForest(
                     contamination=contamination,
                     random_state=42

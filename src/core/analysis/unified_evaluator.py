@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 """
 UnifiedEvaluatorEnhanced - Evaluador unificado que combina Factor K y QVA.
 
@@ -35,7 +36,7 @@ import warnings
 from src.logger_config import setup_logger
 from src.core.analysis.factor_k_analyzer import FactorKElite96Enhanced
 from src.core.analysis.qva_analyzer import QVAScorerEnhanced
-from src.core.config.config_manager import ConfigManagerEnhanced, ProgressCallback
+from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced, ProgressCallback
 from src.analysis.tail_risk_metrics import TailRiskAnalyzer
 
 warnings.filterwarnings("ignore")
@@ -57,7 +58,7 @@ class UnifiedEvaluatorEnhanced:
         self.logger = setup_logger("kforce")
         self.progress_callback = progress_callback
         self.factor_k = FactorKElite96Enhanced(progress_callback=progress_callback)
-        self.qva_scorer = QVAScorerEnhanced(self.factor_k.config_manager, progress_callback=progress_callback)
+        self.qva_scorer = QVAScorerEnhanced(self.getattr(factor_k, 'config', None)_manager, progress_callback=progress_callback)
         self.tail_risk_analyzer = TailRiskAnalyzer()
     
     def _ensure_series_type(self, data: Any, index: pd.Index, default_value: float = 0.5) -> pd.Series:

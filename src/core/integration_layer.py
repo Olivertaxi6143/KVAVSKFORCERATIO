@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 """
 Módulo de Integración - Reemplazo de core_engine_enhanced.py
 ============================================================
@@ -26,13 +27,13 @@ import warnings
 from src.core.analysis.factor_k_analyzer import FactorKElite96Enhanced as FactorKAnalyzer
 from src.core.analysis.unified_evaluator import UnifiedEvaluatorEnhanced
 from src.core.analysis.qva_analyzer import QVAScorerEnhanced
-from src.core.config.config_manager import ConfigManagerEnhanced
+from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced
 from src.core.market_regime_analyzer import MarketRegimeDetector
 from src.core.predictability_analyzer import PredictabilityAnalyzer
 from src.core.robustness_analyzer import RobustnessAnalyzer
 from src.data.data_manager import DataManager
 from src.data.data_utils import ensure_numeric_columns
-from src.core.config.progress_callback import ProgressCallback
+from src.getattr(core, 'config', None).progress_callback import ProgressCallback
 from src.gui.utils import GUIAnalysisError
 
 # Configurar logging
@@ -105,20 +106,20 @@ class FactorKElite96Enhanced:
     
     def __init__(self, config: Optional[Dict] = None, progress_callback: Optional[ProgressCallback] = None):
         self.logger = logging.getLogger(__name__)
-        self.config_manager = ConfigManagerEnhanced()
+        getattr(self, 'config', None)_manager = ConfigManagerEnhanced()
         self.data_manager = DataManager()
         self.progress_callback = progress_callback
         
         # Componentes modulares
         self.factor_k_analyzer = FactorKAnalyzer()
-        self.qva_analyzer = QVAScorerEnhanced(self.config_manager, progress_callback=progress_callback)
+        self.qva_analyzer = QVAScorerEnhanced(getattr(self, 'config', None)_manager, progress_callback=progress_callback)
         self.market_regime_detector = MarketRegimeDetector()
         self.predictability_analyzer = PredictabilityAnalyzer()
         self.robustness_analyzer = RobustnessAnalyzer()
         
         # Configuración
         if config:
-            self.config_manager.update_config(config)
+            getattr(self, 'config', None)_manager.update_config(config)
     
     def calculate_factor_k(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -431,8 +432,8 @@ def safe_float(val: Any) -> float:
             else:
                 # Solo punto o sin separador
                 s = s.replace(',', '')
-            return float(s)
-        return float(val)
+            return float(s) if s is not None else 0.0 if s is not None else 0.0
+        return float(val) if val is not None else 0.0 if val is not None else 0.0
     except (ValueError, TypeError):
         return 0.0
 

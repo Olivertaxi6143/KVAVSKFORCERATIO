@@ -1,3 +1,5 @@
+from typing import Optional, Any, Union
+import warnings
 #!/usr/bin/env python3
 """
 ExtraKPIManager - Gestor de KPIs Extra por Estilo de Trading
@@ -40,7 +42,7 @@ class ExtraKPIManager:
             config_manager: Configuración del sistema (opcional)
         """
         self.logger = setup_logger("extra_kpi_manager")
-        self.config_manager = config_manager
+        getattr(self, 'config', None)_manager = config_manager
         
         # Configuración de KPIs extra por estilo de trading
         # Basado en recomendaciones profesionales de Grok

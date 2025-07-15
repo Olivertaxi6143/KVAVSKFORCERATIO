@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 """
 ROBUSTNESS_ANALYZER.py - Análisis de Robustez
 
@@ -118,7 +119,7 @@ class RobustnessAnalyzer:
             # Calcular estabilidad general
             if stability_metrics:
                 overall_stability = np.mean(list(stability_metrics.values()))
-                stability_metrics['overall_stability'] = float(overall_stability)
+                stability_metrics['overall_stability'] = float(overall_stability) if overall_stability is not None else 0.0 if overall_stability is not None else 0.0
                 
                 # Clasificar nivel de estabilidad
                 if overall_stability >= 0.8:
@@ -165,7 +166,7 @@ class RobustnessAnalyzer:
             # CV bajo = alta estabilidad
             stability_score = 1.0 / (1.0 + cv)
             
-            return float(stability_score)
+            return float(stability_score) if stability_score is not None else 0.0 if stability_score is not None else 0.0
             
         except Exception as e:
             logger.warning(f"Error calculando estabilidad de Sharpe: {str(e)}")
@@ -193,7 +194,7 @@ class RobustnessAnalyzer:
             # Convertir a score de estabilidad
             stability_score = 1.0 / (1.0 + cv)
             
-            return float(stability_score)
+            return float(stability_score) if stability_score is not None else 0.0 if stability_score is not None else 0.0
             
         except Exception as e:
             logger.warning(f"Error calculando estabilidad de Drawdown: {str(e)}")
@@ -226,7 +227,7 @@ class RobustnessAnalyzer:
             
             consistency_score = (skewness_score + kurtosis_score) / 2
             
-            return float(consistency_score)
+            return float(consistency_score) if consistency_score is not None else 0.0 if consistency_score is not None else 0.0
             
         except Exception as e:
             logger.warning(f"Error calculando consistencia de retornos: {str(e)}")
@@ -254,7 +255,7 @@ class RobustnessAnalyzer:
             # Convertir a score de estabilidad
             stability_score = 1.0 / (1.0 + cv)
             
-            return float(stability_score)
+            return float(stability_score) if stability_score is not None else 0.0 if stability_score is not None else 0.0
             
         except Exception as e:
             logger.warning(f"Error calculando estabilidad de Profit Factor: {str(e)}")
@@ -302,8 +303,8 @@ class RobustnessAnalyzer:
                         'outlier_count': outlier_count,
                         'outlier_percentage': float(outlier_count / data_count * 100) if data_count > 0 else 0.0,
                         'total_count': data_count,
-                        'lower_bound': float(lower_bound),
-                        'upper_bound': float(upper_bound)
+                        'lower_bound': float(lower_bound) if lower_bound is not None else 0.0 if lower_bound is not None else 0.0,
+                        'upper_bound': float(upper_bound) if upper_bound is not None else 0.0 if upper_bound is not None else 0.0
                     }
             
             # Calcular estadísticas agregadas
@@ -315,7 +316,7 @@ class RobustnessAnalyzer:
                 outlier_info['summary'] = {
                     'total_outliers': total_outliers,
                     'total_data_points': total_data_points,
-                    'overall_outlier_percentage': float(overall_outlier_percentage),
+                    'overall_outlier_percentage': float(overall_outlier_percentage) if overall_outlier_percentage is not None else 0.0 if overall_outlier_percentage is not None else 0.0,
                     'metrics_with_outliers': len([info for info in outlier_info.values() 
                                                 if info['outlier_count'] > 0])
                 }
@@ -388,9 +389,9 @@ class RobustnessAnalyzer:
                         'std': std_val,
                         'skewness': skewness_val,
                         'kurtosis': kurtosis_val,
-                        'skewness_robustness': float(skewness_robustness),
-                        'kurtosis_robustness': float(kurtosis_robustness),
-                        'distribution_robustness': float(distribution_robustness)
+                        'skewness_robustness': float(skewness_robustness) if skewness_robustness is not None else 0.0 if skewness_robustness is not None else 0.0,
+                        'kurtosis_robustness': float(kurtosis_robustness) if kurtosis_robustness is not None else 0.0 if kurtosis_robustness is not None else 0.0,
+                        'distribution_robustness': float(distribution_robustness) if distribution_robustness is not None else 0.0 if distribution_robustness is not None else 0.0
                     }
             
             # Calcular robustez agregada
@@ -398,7 +399,7 @@ class RobustnessAnalyzer:
                 avg_robustness = np.mean([info['distribution_robustness'] 
                                         for info in distribution_analysis.values()])
                 distribution_analysis['summary'] = {
-                    'average_distribution_robustness': float(avg_robustness),
+                    'average_distribution_robustness': float(avg_robustness) if avg_robustness is not None else 0.0 if avg_robustness is not None else 0.0,
                     'metrics_analyzed': len(distribution_analysis)
                 }
             
@@ -458,12 +459,12 @@ class RobustnessAnalyzer:
             )
             
             results = {
-                'overall_robustness': float(overall_robustness),
+                'overall_robustness': float(overall_robustness) if overall_robustness is not None else 0.0 if overall_robustness is not None else 0.0,
                 'robustness_level': robustness_level,
-                'stability_score': float(overall_stability),
-                'outlier_robustness': float(outlier_robustness),
-                'distribution_robustness': float(distribution_robustness),
-                'outlier_percentage': float(outlier_percentage),
+                'stability_score': float(overall_stability) if overall_stability is not None else 0.0 if overall_stability is not None else 0.0,
+                'outlier_robustness': float(outlier_robustness) if outlier_robustness is not None else 0.0 if outlier_robustness is not None else 0.0,
+                'distribution_robustness': float(distribution_robustness) if distribution_robustness is not None else 0.0 if distribution_robustness is not None else 0.0,
+                'outlier_percentage': float(outlier_percentage) if outlier_percentage is not None else 0.0 if outlier_percentage is not None else 0.0,
                 'recommendations': recommendations,
                 'detailed_analysis': {
                     'stability_metrics': stability_metrics,
@@ -732,7 +733,7 @@ class StressTestGenerator:
             
             results = {
                 'stress_scenarios': stress_results,
-                'average_stress_robustness': float(avg_stress_robustness),
+                'average_stress_robustness': float(avg_stress_robustness) if avg_stress_robustness is not None else 0.0 if avg_stress_robustness is not None else 0.0,
                 'stress_resistance_level': stress_resistance,
                 'scenarios_tested': len(stress_scenarios)
             }
