@@ -26,13 +26,13 @@ class UnicodeSafeStreamHandler(logging.StreamHandler):
         try:
             msg = self.format(record)
             # Encode como UTF-8 y luego decode para evitar problemas de encoding
-            if hasattr(sys.stdout, 'reconfigure'):
-                # Python 3.7+ y solo si es TextIOWrapper
-                if isinstance(sys.stdout, io.TextIOWrapper):
-                    try:
-                        sys.stdout.reconfigure(encoding='utf-8')
-                    except Exception:
-                        pass
+            reconfigure_func = getattr(sys.stdout, 'reconfigure', None)
+            if reconfigure_func is not None:
+                # Python 3.7+
+                try:
+                    reconfigure_func(encoding='utf-8')
+                except Exception:
+                    pass
             stream = self.stream
             stream.write(msg)
             stream.write(self.terminator)
@@ -147,11 +147,19 @@ def configure_system_encoding():
         # Forzar UTF-8 en Windows
         if os.name == 'nt':
             os.environ['PYTHONIOENCODING'] = 'utf-8'
-            import io
-            if hasattr(sys.stdout, 'reconfigure') and isinstance(sys.stdout, io.TextIOWrapper):
-                sys.stdout.reconfigure(encoding='utf-8')
-            if hasattr(sys.stderr, 'reconfigure') and isinstance(sys.stderr, io.TextIOWrapper):
-                sys.stderr.reconfigure(encoding='utf-8')
+            # Verificar si reconfigure está disponible
+            stdout_reconfigure = getattr(sys.stdout, 'reconfigure', None)
+            if stdout_reconfigure is not None:
+                try:
+                    stdout_reconfigure(encoding='utf-8')
+                except Exception:
+                    pass
+            stderr_reconfigure = getattr(sys.stderr, 'reconfigure', None)
+            if stderr_reconfigure is not None:
+                try:
+                    stderr_reconfigure(encoding='utf-8')
+                except Exception:
+                    pass
     except Exception:
         pass
 

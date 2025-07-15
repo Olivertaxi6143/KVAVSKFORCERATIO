@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
-from getattr(sklearn, 'model', None)_selection import train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
 import warnings
@@ -23,8 +23,8 @@ except ImportError:
     HMM_AVAILABLE = False
     print("⚠️ hmmlearn no disponible. HMM será simulado.")
 
-from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced
-from src.getattr(core, 'config', None).progress_callback import ProgressCallback
+from src.core.config.config_manager import ConfigManagerEnhanced
+from src.core.config.progress_callback import ProgressCallback
 from src.data.data_manager import DataManager
 from src.logger_config import setup_logger
 
@@ -60,7 +60,7 @@ class FactorKElite96Enhanced:
     
     def __init__(self, config: Optional[Dict] = None, progress_callback: Optional[ProgressCallback] = None):
         self.logger = setup_logger("kforce")
-        getattr(self, 'config', None)_manager = ConfigManagerEnhanced()
+        self.config_manager = ConfigManagerEnhanced()
         self.data_manager = DataManager()
         self.progress_callback = progress_callback
         
@@ -86,7 +86,7 @@ class FactorKElite96Enhanced:
         self._calculation_cache = {}
         
         if config:
-            getattr(self, 'config', None)_manager.current_config.update(config)
+            self.config_manager.current_config.update(config)
         
         # SIEMPRE ACTIVAR MEJORAS CIENTÍFICAS POR DEFECTO
         self.enable_scientific_improvements()
@@ -275,10 +275,13 @@ class FactorKElite96Enhanced:
             
             if tf_col and months_col and trades_col:
                 timeframes = df[tf_col].astype(str).str.upper().str.strip()
-                total_months = pd.to_numeric(df[months_col], errors='coerce').fillna(1)
-                total_trades = pd.to_numeric(df[trades_col], errors='coerce').fillna(0)
+                # Convertir a Series y manejar NaN de forma segura
+                total_months = pd.to_numeric(df[months_col], errors='coerce')
+                total_months = pd.Series(total_months).replace([np.nan, None], 1.0)
+                total_trades = pd.to_numeric(df[trades_col], errors='coerce')
+                total_trades = pd.Series(total_trades).replace([np.nan, None], 0.0)
                 trades_per_month = total_trades / total_months
-                trades_per_year = total_trades / (total_months / 12)
+                trades_per_year = total_trades / (total_months / 12.0)
                 
                 for idx, tf in enumerate(timeframes):
                     min_mes, min_ano = temporalidad_minimos.get(tf, (2, 24))  # Default mínimo intradía
@@ -311,23 +314,27 @@ class FactorKElite96Enhanced:
             
             # Sharpe Ratio (indicador de calidad)
             if 'Sharpe_Ratio' in df_new.columns:
-                sharpe = pd.to_numeric(df_new['Sharpe_Ratio'], errors='coerce').fillna(0)
-                quality_metrics.append((sharpe + 3) / 6)  # Normalizar a [0,1]
+                sharpe = pd.to_numeric(df_new['Sharpe_Ratio'], errors='coerce')
+                sharpe = pd.Series(sharpe).replace([np.nan, None], 0.0)
+                quality_metrics.append((sharpe + 3.0) / 6.0)  # Normalizar a [0,1]
             
             # Profit Factor (eficiencia)
             if 'Profit_factor' in df_new.columns:
-                pf = pd.to_numeric(df_new['Profit_factor'], errors='coerce').fillna(1)
-                quality_metrics.append((pf - 1) / 2)  # Normalizar a [0,1]
+                pf = pd.to_numeric(df_new['Profit_factor'], errors='coerce')
+                pf = pd.Series(pf).replace([np.nan, None], 1.0)
+                quality_metrics.append((pf - 1.0) / 2.0)  # Normalizar a [0,1]
             
             # Max Drawdown (riesgo controlado)
             if 'Max_DD_%' in df_new.columns:
-                dd = pd.to_numeric(df_new['Max_DD_%'], errors='coerce').fillna(0)
-                quality_metrics.append(1 - (dd / 100))  # Menor DD = mejor
+                dd = pd.to_numeric(df_new['Max_DD_%'], errors='coerce')
+                dd = pd.Series(dd).replace([np.nan, None], 0.0)
+                quality_metrics.append(1.0 - (dd / 100.0))  # Menor DD = mejor
             
             # CAGR (crecimiento)
             if 'CAGR' in df_new.columns:
-                cagr = pd.to_numeric(df_new['CAGR'], errors='coerce').fillna(0)
-                quality_metrics.append((cagr + 50) / 100)  # Normalizar a [0,1]
+                cagr = pd.to_numeric(df_new['CAGR'], errors='coerce')
+                cagr = pd.Series(cagr).replace([np.nan, None], 0.0)
+                quality_metrics.append((cagr + 50.0) / 100.0)  # Normalizar a [0,1]
             
             # Calcular score temporal para estrategias nuevas
             if quality_metrics:
@@ -364,22 +371,26 @@ class FactorKElite96Enhanced:
             
             # Métricas de calidad
             if 'Sharpe_Ratio' in df.columns:
-                sharpe = pd.to_numeric(df['Sharpe_Ratio'], errors='coerce').fillna(0)
+                sharpe = pd.to_numeric(df['Sharpe_Ratio'], errors='coerce')
+                sharpe = pd.Series(sharpe).replace([np.nan, None], 0.0)
                 predictive_features.append(sharpe)
                 feature_names.append('Sharpe_Ratio')
             
             if 'Profit_factor' in df.columns:
-                pf = pd.to_numeric(df['Profit_factor'], errors='coerce').fillna(1)
+                pf = pd.to_numeric(df['Profit_factor'], errors='coerce')
+                pf = pd.Series(pf).replace([np.nan, None], 1.0)
                 predictive_features.append(pf)
                 feature_names.append('Profit_factor')
             
             if 'Max_DD_%' in df.columns:
-                dd = pd.to_numeric(df['Max_DD_%'], errors='coerce').fillna(0)
+                dd = pd.to_numeric(df['Max_DD_%'], errors='coerce')
+                dd = pd.Series(dd).replace([np.nan, None], 0.0)
                 predictive_features.append(-dd)  # Negativo porque menor es mejor
                 feature_names.append('Max_DD_%')
             
             if 'CAGR' in df.columns:
-                cagr = pd.to_numeric(df['CAGR'], errors='coerce').fillna(0)
+                cagr = pd.to_numeric(df['CAGR'], errors='coerce')
+                cagr = pd.Series(cagr).replace([np.nan, None], 0.0)
                 predictive_features.append(cagr)
                 feature_names.append('CAGR')
             
@@ -806,18 +817,21 @@ class FactorKElite96Enhanced:
             
             # Number of Trades
             if '#_of_trades' in df.columns:
-                trades = pd.to_numeric(df['#_of_trades'], errors='coerce').fillna(0)
-                consistency_metrics.append(np.minimum(trades / 100, 1))  # Normalizar a [0,1]
+                trades = pd.to_numeric(df['#_of_trades'], errors='coerce')
+                trades = pd.Series(trades).replace([np.nan, None], 0.0)
+                consistency_metrics.append(np.minimum(trades / 100.0, 1.0))  # Normalizar a [0,1]
             
             # Stagnation Trades
             if 'Stagnation' in df.columns:
-                stagnation = pd.to_numeric(df['Stagnation'], errors='coerce').fillna(0)
-                consistency_metrics.append(1 / (1 + stagnation))  # Menor es mejor
+                stagnation = pd.to_numeric(df['Stagnation'], errors='coerce')
+                stagnation = pd.Series(stagnation).replace([np.nan, None], 0.0)
+                consistency_metrics.append(1.0 / (1.0 + stagnation))  # Menor es mejor
             
             # Max Consecutive Losses
             if 'Max_Consec_Losses' in df.columns:
-                consec_losses = pd.to_numeric(df['Max_Consec_Losses'], errors='coerce').fillna(0)
-                consistency_metrics.append(1 / (1 + consec_losses))  # Menor es mejor
+                consec_losses = pd.to_numeric(df['Max_Consec_Losses'], errors='coerce')
+                consec_losses = pd.Series(consec_losses).replace([np.nan, None], 0.0)
+                consistency_metrics.append(1.0 / (1.0 + consec_losses))  # Menor es mejor
             
             # Calcular componente de consistencia
             if consistency_metrics:
@@ -881,21 +895,22 @@ class FactorKElite96Enhanced:
         try:
             # Penalización por bajo número de trades
             if 'Total_Trades' in df.columns:
-                trades = pd.to_numeric(df['Total_Trades'], errors='coerce').fillna(0)
-                trade_penalty = np.where(trades < 50, 0.1, 0)
-                df['FK96_Elite_Enhanced'] *= (1 - trade_penalty)
+                trades = pd.to_numeric(df['Total_Trades'], errors='coerce')
+                trades = pd.Series(trades).replace([np.nan, None], 0.0)
+                trade_penalty = np.where(trades < 50.0, 0.1, 0.0)
+                df['FK96_Elite_Enhanced'] *= (1.0 - trade_penalty)
             
             # Penalización por alto drawdown
             if 'Max_DD_%' in df.columns:
-                max_dd = df['Max_DD_%'].fillna(0)
-                dd_penalty = np.where(max_dd > 0.3, 0.15, 0)
-                df['FK96_Elite_Enhanced'] *= (1 - dd_penalty)
+                max_dd = df['Max_DD_%'].replace([np.nan, None], 0.0)
+                dd_penalty = np.where(max_dd > 0.3, 0.15, 0.0)
+                df['FK96_Elite_Enhanced'] *= (1.0 - dd_penalty)
             
             # Penalización por bajo Sharpe
             if 'Sharpe_Ratio' in df.columns:
-                sharpe = df['Sharpe_Ratio'].fillna(0)
-                sharpe_penalty = np.where(sharpe < 0.5, 0.1, 0)
-                df['FK96_Elite_Enhanced'] *= (1 - sharpe_penalty)
+                sharpe = df['Sharpe_Ratio'].replace([np.nan, None], 0.0)
+                sharpe_penalty = np.where(sharpe < 0.5, 0.1, 0.0)
+                df['FK96_Elite_Enhanced'] *= (1.0 - sharpe_penalty)
             
             return df
             
@@ -1008,7 +1023,7 @@ class FactorKElite96Enhanced:
                     0.3 * df['Regime_Score']
                 )
             else:
-                df['FK96_Elite_Enhanced_Scientific'] = df['FK96_Elite_Enhanced']
+                df['FK96_Elite_Enhanced_Scientific'] = df['FK96_Elite_Enhanced'].copy()
             
             return df
             

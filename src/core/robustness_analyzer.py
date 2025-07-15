@@ -826,7 +826,7 @@ class AdvancedDataProcessor:
                 
                 elif col_type == 'float64':
                     # Reducir precisión si es posible
-                    if optimized_df[col].notna().all():
+                    if bool(optimized_df[col].notna().all()):
                         optimized_df[col] = optimized_df[col].astype('float32')
                 
                 elif col_type == 'int64':
@@ -879,10 +879,9 @@ class AdvancedDataProcessor:
             
             for col in numeric_cols:
                 data = cleaned_df[col].dropna()
-                
+                outlier_mask = pd.Series([False] * len(cleaned_df), index=cleaned_df.index)
                 if safe_len(data) < 10:
                     continue
-                
                 if method == 'iqr':
                     # Método IQR
                     Q1 = data.quantile(0.25)
@@ -890,13 +889,12 @@ class AdvancedDataProcessor:
                     IQR = Q3 - Q1
                     lower_bound = Q1 - 1.5 * IQR
                     upper_bound = Q3 + 1.5 * IQR
-                    
                     # Asegurar que la comparación sea válida
-                    outlier_mask = pd.Series(False, index=cleaned_df.index)
-                    # Verificar si hay datos válidos usando numpy
                     valid_data = ~cleaned_df[col].isna()
-                    if valid_data.any():
+                    valid_data_arr = np.asarray(valid_data, dtype=int)
+                    if valid_data_arr is not None and len(valid_data_arr) > 0 and valid_data_arr.sum() > 0:
                         outlier_mask = (cleaned_df[col] < lower_bound) | (cleaned_df[col] > upper_bound)
+                        outlier_mask = outlier_mask.reindex(cleaned_df.index, fill_value=False)
                 elif method == 'isolation_forest':
                     # Isolation Forest
                     iso_forest = IsolationForest(contamination='auto', random_state=42)
@@ -905,6 +903,7 @@ class AdvancedDataProcessor:
                     data_scaled = StandardScaler().fit_transform(data_values)
                     outlier_labels = iso_forest.fit_predict(data_scaled)
                     outlier_mask = pd.Series(outlier_labels == -1, index=data.index)
+                    outlier_mask = outlier_mask.reindex(cleaned_df.index, fill_value=False)
                 elif method == 'elliptic_envelope':
                     # Elliptic Envelope
                     scaler = StandardScaler()
@@ -914,12 +913,15 @@ class AdvancedDataProcessor:
                     envelope = EllipticEnvelope(contamination=0.1, random_state=42)
                     outlier_labels = envelope.fit_predict(data_scaled)
                     outlier_mask = pd.Series(outlier_labels == -1, index=data.index)
+                    outlier_mask = outlier_mask.reindex(cleaned_df.index, fill_value=False)
                 else:
                     continue
                 # Reemplazar outliers con valores interpolados
-                if isinstance(outlier_mask, pd.Series) and outlier_mask.any():
-                    cleaned_df.loc[outlier_mask, col] = np.nan
-                    cleaned_df[col] = cleaned_df[col].interpolate(method='linear')
+                if isinstance(outlier_mask, pd.Series) and outlier_mask.dtype == bool:
+                    has_outliers = bool(np.any(outlier_mask))
+                    if has_outliers:
+                        cleaned_df.loc[outlier_mask, col] = np.nan
+                        cleaned_df[col] = cleaned_df[col].interpolate(method='linear')
             
             logger.info("Manejo de outliers completado")
             return cleaned_df

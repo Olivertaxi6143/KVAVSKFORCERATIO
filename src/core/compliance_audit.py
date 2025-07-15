@@ -350,15 +350,77 @@ class ComplianceAuditor:
         failed_strategies = []
         
         for strategy in selected_strategies:
-            strategy_data = df[df.index == strategy] if strategy in df.index else df[df.iloc[:, 0] == strategy]
-            if not strategy_data.empty:
+            if strategy in df.index:
+                strategy_data = df[df.index == strategy]
+            else:
+                # Si no está en el índice, buscar en la primera columna
+                first_col = df.iloc[:, 0]
+                if isinstance(first_col, pd.Series):
+                    strategy_data = df[first_col == strategy]
+                else:
+                    # Si es ndarray, convertir a Series para poder indexar
+                    first_col_series = pd.Series(first_col, index=df.index)
+                    strategy_data = df[first_col_series == strategy]
+            
+            # Verificar si strategy_data está vacío de forma segura
+            is_empty = False
+            if isinstance(strategy_data, pd.DataFrame):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            elif isinstance(strategy_data, np.ndarray):
+                is_empty = len(strategy_data) == 0
+            elif isinstance(strategy_data, pd.Series):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            else:
+                is_empty = not bool(strategy_data)
+            
+            if not is_empty:
+                # Asegurar que strategy_data sea un DataFrame para acceder a .columns
+                if isinstance(strategy_data, np.ndarray):
+                    strategy_data = pd.DataFrame(strategy_data, columns=df.columns)
+                elif not isinstance(strategy_data, pd.DataFrame):
+                    strategy_data = pd.DataFrame([strategy_data], columns=df.columns)
                 trades_col = next((col for col in strategy_data.columns if 'trades' in col.lower() or 'total_trades' in col.lower()), None)
                 if trades_col:
-                    trades_count = strategy_data[trades_col].iloc[0]
-                    if pd.isna(trades_count) or trades_count < min_trades:
+                    trades_data = strategy_data[trades_col]
+                    if isinstance(trades_data, pd.Series):
+                        trades_count = trades_data.iloc[0]
+                    elif isinstance(trades_data, np.ndarray):
+                        trades_count = trades_data[0] if len(trades_data) > 0 else np.nan
+                    else:
+                        trades_count = trades_data
+                    # Corrección estricta para Pyright: nunca bool() sobre NDFrame/NDArray
+                    is_invalid = False
+                    trades_count_scalar = trades_count
+                    if isinstance(trades_count, (np.ndarray, pd.Series, pd.DataFrame)):
+                        # Para arrays/Series/DataFrame, verificar si hay valores nulos
+                        if isinstance(trades_count, np.ndarray):
+                            is_invalid = bool(np.any(pd.isna(trades_count)))
+                            trades_count_scalar = float(trades_count[0]) if len(trades_count) > 0 else np.nan
+                        elif isinstance(trades_count, pd.Series):
+                            is_invalid = bool(trades_count.isna().any())
+                            trades_count_scalar = float(trades_count.iloc[0]) if len(trades_count) > 0 else np.nan
+                        else:  # pd.DataFrame
+                            is_invalid = bool(trades_count.isna().values.any())
+                            trades_count_scalar = float(trades_count.iloc[0, 0]) if not trades_count.empty else np.nan
+                    else:
+                        # Para escalares, usar pd.isna() directamente
+                        is_invalid = bool(pd.isna(trades_count))
+                        trades_count_scalar = float(trades_count) if trades_count is not None else np.nan
+                    
+                    # Conversión segura a escalar booleano
+                    if isinstance(is_invalid, np.ndarray):
+                        is_invalid_scalar = bool(np.any(is_invalid))
+                    elif isinstance(is_invalid, pd.Series):
+                        is_invalid_scalar = bool(is_invalid.any())
+                    elif isinstance(is_invalid, pd.DataFrame):
+                        is_invalid_scalar = bool(is_invalid.values.any())
+                    else:
+                        is_invalid_scalar = bool(is_invalid)
+                    
+                    if is_invalid_scalar or trades_count_scalar < min_trades:
                         failed_strategies.append(strategy)
         
-        status = AuditStatus.PASSED if not failed_strategies else AuditStatus.FAILED
+        status = AuditStatus.PASSED if len(failed_strategies) == 0 else AuditStatus.FAILED
         
         return {
             "rule_id": rule.rule_id,
@@ -377,15 +439,77 @@ class ComplianceAuditor:
         failed_strategies = []
         
         for strategy in selected_strategies:
-            strategy_data = df[df.index == strategy] if strategy in df.index else df[df.iloc[:, 0] == strategy]
-            if not strategy_data.empty:
+            if strategy in df.index:
+                strategy_data = df[df.index == strategy]
+            else:
+                # Si no está en el índice, buscar en la primera columna
+                first_col = df.iloc[:, 0]
+                if isinstance(first_col, pd.Series):
+                    strategy_data = df[first_col == strategy]
+                else:
+                    # Si es ndarray, convertir a Series para poder indexar
+                    first_col_series = pd.Series(first_col, index=df.index)
+                    strategy_data = df[first_col_series == strategy]
+            
+            # Verificar si strategy_data está vacío de forma segura
+            is_empty = False
+            if isinstance(strategy_data, pd.DataFrame):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            elif isinstance(strategy_data, np.ndarray):
+                is_empty = len(strategy_data) == 0
+            elif isinstance(strategy_data, pd.Series):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            else:
+                is_empty = not bool(strategy_data)
+            
+            if not is_empty:
+                # Asegurar que strategy_data sea un DataFrame para acceder a .columns
+                if isinstance(strategy_data, np.ndarray):
+                    strategy_data = pd.DataFrame(strategy_data, columns=df.columns)
+                elif not isinstance(strategy_data, pd.DataFrame):
+                    strategy_data = pd.DataFrame([strategy_data], columns=df.columns)
                 sharpe_col = next((col for col in strategy_data.columns if 'sharpe' in col.lower()), None)
                 if sharpe_col:
-                    sharpe_value = strategy_data[sharpe_col].iloc[0]
-                    if pd.isna(sharpe_value) or sharpe_value < min_sharpe:
+                    sharpe_data = strategy_data[sharpe_col]
+                    if isinstance(sharpe_data, pd.Series):
+                        sharpe_value = sharpe_data.iloc[0]
+                    elif isinstance(sharpe_data, np.ndarray):
+                        sharpe_value = sharpe_data[0] if len(sharpe_data) > 0 else np.nan
+                    else:
+                        sharpe_value = sharpe_data
+                    # Corrección estricta para Pyright: nunca bool() sobre NDFrame/NDArray
+                    is_invalid = False
+                    sharpe_value_scalar = sharpe_value
+                    if isinstance(sharpe_value, (np.ndarray, pd.Series, pd.DataFrame)):
+                        # Para arrays/Series/DataFrame, verificar si hay valores nulos
+                        if isinstance(sharpe_value, np.ndarray):
+                            is_invalid = bool(np.any(pd.isna(sharpe_value)))
+                            sharpe_value_scalar = float(sharpe_value[0]) if len(sharpe_value) > 0 else np.nan
+                        elif isinstance(sharpe_value, pd.Series):
+                            is_invalid = bool(sharpe_value.isna().any())
+                            sharpe_value_scalar = float(sharpe_value.iloc[0]) if len(sharpe_value) > 0 else np.nan
+                        else:  # pd.DataFrame
+                            is_invalid = bool(sharpe_value.isna().values.any())
+                            sharpe_value_scalar = float(sharpe_value.iloc[0, 0]) if not sharpe_value.empty else np.nan
+                    else:
+                        # Para escalares, usar pd.isna() directamente
+                        is_invalid = bool(pd.isna(sharpe_value))
+                        sharpe_value_scalar = float(sharpe_value) if sharpe_value is not None else np.nan
+                    
+                    # Conversión segura a escalar booleano
+                    if isinstance(is_invalid, np.ndarray):
+                        is_invalid_scalar = bool(np.any(is_invalid))
+                    elif isinstance(is_invalid, pd.Series):
+                        is_invalid_scalar = bool(is_invalid.any())
+                    elif isinstance(is_invalid, pd.DataFrame):
+                        is_invalid_scalar = bool(is_invalid.values.any())
+                    else:
+                        is_invalid_scalar = bool(is_invalid)
+                    
+                    if is_invalid_scalar or sharpe_value_scalar < min_sharpe:
                         failed_strategies.append(strategy)
         
-        status = AuditStatus.PASSED if not failed_strategies else AuditStatus.FAILED
+        status = AuditStatus.PASSED if len(failed_strategies) == 0 else AuditStatus.FAILED
         
         return {
             "rule_id": rule.rule_id,
@@ -404,15 +528,77 @@ class ComplianceAuditor:
         failed_strategies = []
         
         for strategy in selected_strategies:
-            strategy_data = df[df.index == strategy] if strategy in df.index else df[df.iloc[:, 0] == strategy]
-            if not strategy_data.empty:
+            if strategy in df.index:
+                strategy_data = df[df.index == strategy]
+            else:
+                # Si no está en el índice, buscar en la primera columna
+                first_col = df.iloc[:, 0]
+                if isinstance(first_col, pd.Series):
+                    strategy_data = df[first_col == strategy]
+                else:
+                    # Si es ndarray, convertir a Series para poder indexar
+                    first_col_series = pd.Series(first_col, index=df.index)
+                    strategy_data = df[first_col_series == strategy]
+            
+            # Verificar si strategy_data está vacío de forma segura
+            is_empty = False
+            if isinstance(strategy_data, pd.DataFrame):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            elif isinstance(strategy_data, np.ndarray):
+                is_empty = len(strategy_data) == 0
+            elif isinstance(strategy_data, pd.Series):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            else:
+                is_empty = not bool(strategy_data)
+            
+            if not is_empty:
+                # Asegurar que strategy_data sea un DataFrame para acceder a .columns
+                if isinstance(strategy_data, np.ndarray):
+                    strategy_data = pd.DataFrame(strategy_data, columns=df.columns)
+                elif not isinstance(strategy_data, pd.DataFrame):
+                    strategy_data = pd.DataFrame([strategy_data], columns=df.columns)
                 dd_col = next((col for col in strategy_data.columns if 'drawdown' in col.lower() or 'dd' in col.lower()), None)
                 if dd_col:
-                    dd_value = abs(strategy_data[dd_col].iloc[0])
-                    if pd.isna(dd_value) or dd_value > max_drawdown:
+                    dd_data = strategy_data[dd_col]
+                    if isinstance(dd_data, pd.Series):
+                        dd_value = abs(dd_data.iloc[0])
+                    elif isinstance(dd_data, np.ndarray):
+                        dd_value = abs(dd_data[0]) if len(dd_data) > 0 else np.nan
+                    else:
+                        dd_value = abs(dd_data)
+                    # Corrección estricta para Pyright: nunca bool() sobre NDFrame/NDArray
+                    is_invalid = False
+                    dd_value_scalar = dd_value
+                    if isinstance(dd_value, (np.ndarray, pd.Series, pd.DataFrame)):
+                        # Para arrays/Series/DataFrame, verificar si hay valores nulos
+                        if isinstance(dd_value, np.ndarray):
+                            is_invalid = bool(np.any(pd.isna(dd_value)))
+                            dd_value_scalar = float(dd_value[0]) if len(dd_value) > 0 else np.nan
+                        elif isinstance(dd_value, pd.Series):
+                            is_invalid = bool(dd_value.isna().any())
+                            dd_value_scalar = float(dd_value.iloc[0]) if len(dd_value) > 0 else np.nan
+                        else:  # pd.DataFrame
+                            is_invalid = bool(dd_value.isna().values.any())
+                            dd_value_scalar = float(dd_value.iloc[0, 0]) if not dd_value.empty else np.nan
+                    else:
+                        # Para escalares, usar pd.isna() directamente
+                        is_invalid = bool(pd.isna(dd_value))
+                        dd_value_scalar = float(dd_value) if dd_value is not None else np.nan
+                    
+                    # Conversión segura a escalar booleano
+                    if isinstance(is_invalid, np.ndarray):
+                        is_invalid_scalar = bool(np.any(is_invalid))
+                    elif isinstance(is_invalid, pd.Series):
+                        is_invalid_scalar = bool(is_invalid.any())
+                    elif isinstance(is_invalid, pd.DataFrame):
+                        is_invalid_scalar = bool(is_invalid.values.any())
+                    else:
+                        is_invalid_scalar = bool(is_invalid)
+                    
+                    if is_invalid_scalar or dd_value_scalar > max_drawdown:
                         failed_strategies.append(strategy)
         
-        status = AuditStatus.PASSED if not failed_strategies else AuditStatus.FAILED
+        status = AuditStatus.PASSED if len(failed_strategies) == 0 else AuditStatus.FAILED
         
         return {
             "rule_id": rule.rule_id,
@@ -431,15 +617,77 @@ class ComplianceAuditor:
         failed_strategies = []
         
         for strategy in selected_strategies:
-            strategy_data = df[df.index == strategy] if strategy in df.index else df[df.iloc[:, 0] == strategy]
-            if not strategy_data.empty:
+            if strategy in df.index:
+                strategy_data = df[df.index == strategy]
+            else:
+                # Si no está en el índice, buscar en la primera columna
+                first_col = df.iloc[:, 0]
+                if isinstance(first_col, pd.Series):
+                    strategy_data = df[first_col == strategy]
+                else:
+                    # Si es ndarray, convertir a Series para poder indexar
+                    first_col_series = pd.Series(first_col, index=df.index)
+                    strategy_data = df[first_col_series == strategy]
+            
+            # Verificar si strategy_data está vacío de forma segura
+            is_empty = False
+            if isinstance(strategy_data, pd.DataFrame):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            elif isinstance(strategy_data, np.ndarray):
+                is_empty = len(strategy_data) == 0
+            elif isinstance(strategy_data, pd.Series):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            else:
+                is_empty = not bool(strategy_data)
+            
+            if not is_empty:
+                # Asegurar que strategy_data sea un DataFrame para acceder a .columns
+                if isinstance(strategy_data, np.ndarray):
+                    strategy_data = pd.DataFrame(strategy_data, columns=df.columns)
+                elif not isinstance(strategy_data, pd.DataFrame):
+                    strategy_data = pd.DataFrame([strategy_data], columns=df.columns)
                 pf_col = next((col for col in strategy_data.columns if 'profit_factor' in col.lower() or 'profitfactor' in col.lower()), None)
                 if pf_col:
-                    pf_value = strategy_data[pf_col].iloc[0]
-                    if pd.isna(pf_value) or pf_value < min_profit_factor:
+                    pf_data = strategy_data[pf_col]
+                    if isinstance(pf_data, pd.Series):
+                        pf_value = pf_data.iloc[0]
+                    elif isinstance(pf_data, np.ndarray):
+                        pf_value = pf_data[0] if len(pf_data) > 0 else np.nan
+                    else:
+                        pf_value = pf_data
+                    # Corrección estricta para Pyright: nunca bool() sobre NDFrame/NDArray
+                    is_invalid = False
+                    pf_value_scalar = pf_value
+                    if isinstance(pf_value, (np.ndarray, pd.Series, pd.DataFrame)):
+                        # Para arrays/Series/DataFrame, verificar si hay valores nulos
+                        if isinstance(pf_value, np.ndarray):
+                            is_invalid = bool(np.any(pd.isna(pf_value)))
+                            pf_value_scalar = float(pf_value[0]) if len(pf_value) > 0 else np.nan
+                        elif isinstance(pf_value, pd.Series):
+                            is_invalid = bool(pf_value.isna().any())
+                            pf_value_scalar = float(pf_value.iloc[0]) if len(pf_value) > 0 else np.nan
+                        else:  # pd.DataFrame
+                            is_invalid = bool(pf_value.isna().values.any())
+                            pf_value_scalar = float(pf_value.iloc[0, 0]) if not pf_value.empty else np.nan
+                    else:
+                        # Para escalares, usar pd.isna() directamente
+                        is_invalid = bool(pd.isna(pf_value))
+                        pf_value_scalar = float(pf_value) if pf_value is not None else np.nan
+                    
+                    # Conversión segura a escalar booleano
+                    if isinstance(is_invalid, np.ndarray):
+                        is_invalid_scalar = bool(np.any(is_invalid))
+                    elif isinstance(is_invalid, pd.Series):
+                        is_invalid_scalar = bool(is_invalid.any())
+                    elif isinstance(is_invalid, pd.DataFrame):
+                        is_invalid_scalar = bool(is_invalid.values.any())
+                    else:
+                        is_invalid_scalar = bool(is_invalid)
+                    
+                    if is_invalid_scalar or pf_value_scalar < min_profit_factor:
                         failed_strategies.append(strategy)
         
-        status = AuditStatus.PASSED if not failed_strategies else AuditStatus.FAILED
+        status = AuditStatus.PASSED if len(failed_strategies) == 0 else AuditStatus.FAILED
         
         return {
             "rule_id": rule.rule_id,
@@ -461,13 +709,71 @@ class ComplianceAuditor:
         available_columns = [col for col in critical_columns if col in df.columns]
         
         for strategy in selected_strategies:
-            strategy_data = df[df.index == strategy] if strategy in df.index else df[df.iloc[:, 0] == strategy]
-            if not strategy_data.empty:
+            if strategy in df.index:
+                strategy_data = df[df.index == strategy]
+            else:
+                # Si no está en el índice, buscar en la primera columna
+                first_col = df.iloc[:, 0]
+                if isinstance(first_col, pd.Series):
+                    strategy_data = df[first_col == strategy]
+                else:
+                    # Si es ndarray, convertir a Series para poder indexar
+                    first_col_series = pd.Series(first_col, index=df.index)
+                    strategy_data = df[first_col_series == strategy]
+            
+            # Verificar si strategy_data está vacío de forma segura
+            is_empty = False
+            if isinstance(strategy_data, pd.DataFrame):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            elif isinstance(strategy_data, np.ndarray):
+                is_empty = len(strategy_data) == 0
+            elif isinstance(strategy_data, pd.Series):
+                is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+            else:
+                is_empty = not bool(strategy_data)
+            
+            if not is_empty:
+                # Asegurar que strategy_data sea un DataFrame para acceder a .columns
+                if isinstance(strategy_data, np.ndarray):
+                    strategy_data = pd.DataFrame(strategy_data, columns=df.columns)
+                elif not isinstance(strategy_data, pd.DataFrame):
+                    strategy_data = pd.DataFrame([strategy_data], columns=df.columns)
                 for col in available_columns:
-                    if pd.isna(strategy_data[col].iloc[0]):
+                    col_data = strategy_data[col]
+                    if isinstance(col_data, pd.Series):
+                        col_value = col_data.iloc[0]
+                    elif isinstance(col_data, np.ndarray):
+                        col_value = col_data[0] if len(col_data) > 0 else np.nan
+                    else:
+                        col_value = col_data
+                    # Corrección estricta para Pyright: nunca bool() sobre NDFrame/NDArray
+                    is_invalid = False
+                    if isinstance(col_value, (np.ndarray, pd.Series, pd.DataFrame)):
+                        # Para arrays/Series/DataFrame, verificar si hay valores nulos
+                        if isinstance(col_value, np.ndarray):
+                            is_invalid = bool(np.any(pd.isna(col_value)))
+                        elif isinstance(col_value, pd.Series):
+                            is_invalid = bool(col_value.isna().any())
+                        else:  # pd.DataFrame
+                            is_invalid = bool(col_value.isna().values.any())
+                    else:
+                        # Para escalares, usar pd.isna() directamente
+                        is_invalid = bool(pd.isna(col_value))
+                    
+                    # Conversión segura a escalar booleano
+                    if isinstance(is_invalid, np.ndarray):
+                        is_invalid_scalar = bool(np.any(is_invalid))
+                    elif isinstance(is_invalid, pd.Series):
+                        is_invalid_scalar = bool(is_invalid.any())
+                    elif isinstance(is_invalid, pd.DataFrame):
+                        is_invalid_scalar = bool(is_invalid.values.any())
+                    else:
+                        is_invalid_scalar = bool(is_invalid)
+                    
+                    if is_invalid_scalar:
                         integrity_issues.append(f"{strategy}: {col} es nulo")
         
-        status = AuditStatus.PASSED if not integrity_issues else AuditStatus.FAILED
+        status = AuditStatus.PASSED if len(integrity_issues) == 0 else AuditStatus.FAILED
         
         return {
             "rule_id": rule.rule_id,
@@ -492,21 +798,82 @@ class ComplianceAuditor:
             validation_issues.append("No se encontraron columnas IS/OOS para validación")
         else:
             for strategy in selected_strategies:
-                strategy_data = df[df.index == strategy] if strategy in df.index else df[df.iloc[:, 0] == strategy]
-                if not strategy_data.empty:
+                if strategy in df.index:
+                    strategy_data = df[df.index == strategy]
+                else:
+                    # Si no está en el índice, buscar en la primera columna
+                    first_col = df.iloc[:, 0]
+                    if isinstance(first_col, pd.Series):
+                        strategy_data = df[first_col == strategy]
+                    else:
+                        # Si es ndarray, convertir a Series para poder indexar
+                        first_col_series = pd.Series(first_col, index=df.index)
+                        strategy_data = df[first_col_series == strategy]
+            
+                # Verificar si strategy_data está vacío de forma segura
+                is_empty = False
+                if isinstance(strategy_data, pd.DataFrame):
+                    is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+                elif isinstance(strategy_data, np.ndarray):
+                    is_empty = len(strategy_data) == 0
+                elif isinstance(strategy_data, pd.Series):
+                    is_empty = strategy_data.empty  # type: ignore[reportAttributeAccessIssue]
+                else:
+                    is_empty = not bool(strategy_data)
+                
+                if not is_empty:
+                    # Asegurar que strategy_data sea un DataFrame para acceder a .columns
+                    if isinstance(strategy_data, np.ndarray):
+                        strategy_data = pd.DataFrame(strategy_data, columns=df.columns)
+                    elif not isinstance(strategy_data, pd.DataFrame):
+                        strategy_data = pd.DataFrame([strategy_data], columns=df.columns)
                     # Verificar correlación IS/OOS si hay datos
                     for is_col in is_cols[:3]:  # Solo primeros 3 KPIs
                         base = is_col.replace(' (IS)', '').replace('(IS)', '').strip()
                         oos_col = next((c for c in oos_cols if base == c.replace(' (OOS)', '').replace('(OOS)', '').strip()), None)
                         if oos_col:
-                            is_val = strategy_data[is_col].iloc[0]
-                            oos_val = strategy_data[oos_col].iloc[0]
-                            if pd.notna(is_val) and pd.notna(oos_val):
+                            is_data = strategy_data[is_col]
+                            oos_data = strategy_data[oos_col]
+                            if isinstance(is_data, pd.Series):
+                                is_val = is_data.iloc[0]
+                            elif isinstance(is_data, np.ndarray):
+                                is_val = is_data[0] if len(is_data) > 0 else np.nan
+                            else:
+                                is_val = is_data
+                            if isinstance(oos_data, pd.Series):
+                                oos_val = oos_data.iloc[0]
+                            elif isinstance(oos_data, np.ndarray):
+                                oos_val = oos_data[0] if len(oos_data) > 0 else np.nan
+                            else:
+                                oos_val = oos_data
+                            
+                            # Conversión segura para validación IS/OOS
+                            is_val_scalar = is_val
+                            oos_val_scalar = oos_val
+                            if isinstance(is_val, np.ndarray):
+                                is_val_scalar = float(is_val[0]) if len(is_val) > 0 else np.nan
+                            elif isinstance(is_val, pd.Series):
+                                is_val_scalar = float(is_val.iloc[0]) if len(is_val) > 0 else np.nan
+                            elif isinstance(is_val, pd.DataFrame):
+                                is_val_scalar = float(is_val.iloc[0, 0]) if not is_val.empty else np.nan
+                            
+                            if isinstance(oos_val, np.ndarray):
+                                oos_val_scalar = float(oos_val[0]) if len(oos_val) > 0 else np.nan
+                            elif isinstance(oos_val, pd.Series):
+                                oos_val_scalar = float(oos_val.iloc[0]) if len(oos_val) > 0 else np.nan
+                            elif isinstance(oos_val, pd.DataFrame):
+                                oos_val_scalar = float(oos_val.iloc[0, 0]) if not oos_val.empty else np.nan
+                            
+                            # Verificación segura de valores no nulos
+                            is_val_not_na = not pd.isna(is_val_scalar) if isinstance(is_val_scalar, (int, float)) else False
+                            oos_val_not_na = not pd.isna(oos_val_scalar) if isinstance(oos_val_scalar, (int, float)) else False
+                            
+                            if is_val_not_na and oos_val_not_na:
                                 # Calcular correlación simple (en un caso real sería más complejo)
-                                if abs(is_val - oos_val) / (abs(is_val) + 1e-8) > 0.5:
+                                if abs(is_val_scalar - oos_val_scalar) / (abs(is_val_scalar) + 1e-8) > 0.5:
                                     validation_issues.append(f"{strategy}: Alta divergencia IS/OOS en {base}")
         
-        status = AuditStatus.PASSED if not validation_issues else AuditStatus.WARNING
+        status = AuditStatus.PASSED if len(validation_issues) == 0 else AuditStatus.WARNING
         
         return {
             "rule_id": rule.rule_id,

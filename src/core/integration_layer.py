@@ -27,13 +27,13 @@ import warnings
 from src.core.analysis.factor_k_analyzer import FactorKElite96Enhanced as FactorKAnalyzer
 from src.core.analysis.unified_evaluator import UnifiedEvaluatorEnhanced
 from src.core.analysis.qva_analyzer import QVAScorerEnhanced
-from src.getattr(core, 'config', None).config_manager import ConfigManagerEnhanced
+from src.core.config.config_manager import ConfigManagerEnhanced
 from src.core.market_regime_analyzer import MarketRegimeDetector
 from src.core.predictability_analyzer import PredictabilityAnalyzer
 from src.core.robustness_analyzer import RobustnessAnalyzer
 from src.data.data_manager import DataManager
 from src.data.data_utils import ensure_numeric_columns
-from src.getattr(core, 'config', None).progress_callback import ProgressCallback
+from src.core.config.progress_callback import ProgressCallback
 from src.gui.utils import GUIAnalysisError
 
 # Configurar logging
@@ -106,20 +106,20 @@ class FactorKElite96Enhanced:
     
     def __init__(self, config: Optional[Dict] = None, progress_callback: Optional[ProgressCallback] = None):
         self.logger = logging.getLogger(__name__)
-        getattr(self, 'config', None)_manager = ConfigManagerEnhanced()
+        self.config_manager = ConfigManagerEnhanced()
         self.data_manager = DataManager()
         self.progress_callback = progress_callback
         
         # Componentes modulares
         self.factor_k_analyzer = FactorKAnalyzer()
-        self.qva_analyzer = QVAScorerEnhanced(getattr(self, 'config', None)_manager, progress_callback=progress_callback)
+        self.qva_analyzer = QVAScorerEnhanced(self.config_manager, progress_callback=progress_callback)
         self.market_regime_detector = MarketRegimeDetector()
         self.predictability_analyzer = PredictabilityAnalyzer()
         self.robustness_analyzer = RobustnessAnalyzer()
         
         # Configuración
         if config:
-            getattr(self, 'config', None)_manager.update_config(config)
+            self.config_manager.update_config(config)
     
     def calculate_factor_k(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -194,11 +194,22 @@ class FactorKElite96Enhanced:
                 self.progress_callback.update(85, "Analizando regímenes de mercado...")
             
             # Usar el módulo modular
-            results = self.market_regime_detector.detect_regimes(df)
+            if hasattr(self.market_regime_detector, 'detect_regimes'):
+                results = self.market_regime_detector.detect_regimes(df)
+            else:
+                # Fallback si el método no existe
+                results = {"regime_labels": [], "details": {}}
             
             if isinstance(results, tuple):
-                # Si retorna tuple, convertir a dict
-                results = {"regime_labels": results[0], "details": results[1]}
+                # Si retorna tuple, convertir a dict de forma segura y sin índices
+                results_list = list(results)
+                if len(results_list) == 2:
+                    regime_labels, details = results_list[0], results_list[1]
+                elif len(results_list) == 1:
+                    regime_labels, details = results_list[0], {}
+                else:
+                    regime_labels, details = [], {}
+                results = {"regime_labels": regime_labels, "details": details}
             
             if self.progress_callback:
                 self.progress_callback.update(90, "Análisis de regímenes completado")
@@ -467,28 +478,49 @@ def generate_insights(df: pd.DataFrame) -> List[Dict[str, Any]]:
         # Insight 1: Mejores estrategias por Factor K
         if 'Factor_K' in df.columns:
             top_factor_k = df.nlargest(3, 'Factor_K')
+            data_obj = top_factor_k[['Strategy Name', 'Factor_K']]
+            if isinstance(data_obj, pd.DataFrame):
+                data_records = data_obj.to_dict(orient='records')
+            elif isinstance(data_obj, np.ndarray):
+                data_records = pd.DataFrame(data_obj).to_dict(orient='records')
+            else:
+                data_records = []
             insights.append({
                 'type': 'top_performers',
                 'title': 'Top 3 Estrategias por Factor K',
-                'data': top_factor_k[['Strategy Name', 'Factor_K']].to_dict(orient='records')
+                'data': data_records
             })
         
         # Insight 2: Análisis de riesgo
         if 'Max_DD_%' in df.columns:
             low_risk = df[df['Max_DD_%'] < df['Max_DD_%'].quantile(0.25)]
+            data_obj = low_risk[['Strategy Name', 'Max_DD_%']]
+            if isinstance(data_obj, pd.DataFrame):
+                data_records = data_obj.to_dict(orient='records')
+            elif isinstance(data_obj, np.ndarray):
+                data_records = pd.DataFrame(data_obj).to_dict(orient='records')
+            else:
+                data_records = []
             insights.append({
                 'type': 'risk_analysis',
                 'title': 'Estrategias de Bajo Riesgo',
-                'data': low_risk[['Strategy Name', 'Max_DD_%']].to_dict(orient='records')
+                'data': data_records
             })
         
         # Insight 3: Análisis de rentabilidad
         if 'CAGR' in df.columns:
             high_growth = df.nlargest(3, 'CAGR')
+            data_obj = high_growth[['Strategy Name', 'CAGR']]
+            if isinstance(data_obj, pd.DataFrame):
+                data_records = data_obj.to_dict(orient='records')
+            elif isinstance(data_obj, np.ndarray):
+                data_records = pd.DataFrame(data_obj).to_dict(orient='records')
+            else:
+                data_records = []
             insights.append({
                 'type': 'growth_analysis',
                 'title': 'Top 3 Estrategias por Crecimiento',
-                'data': high_growth[['Strategy Name', 'CAGR']].to_dict(orient='records')
+                'data': data_records
             })
             
     except Exception as e:
@@ -791,14 +823,25 @@ def get_analysis_summary(df: pd.DataFrame) -> Dict[str, Any]:
     numeric_columns = df.select_dtypes(include=[np.number]).columns
     
     for col in numeric_columns:
-        if col in df.columns and not df[col].isna().all():
-            summary[f'{col}_stats'] = {
-                'mean': float(df[col].mean()),
-                'std': float(df[col].std()),
-                'min': float(df[col].min()),
-                'max': float(df[col].max()),
-                'median': float(df[col].median())
-            }
+        if col in df.columns:
+            # Verificar si la columna tiene datos válidos
+            col_data = df[col]
+            try:
+                if hasattr(col_data, 'isna'):
+                    isna_result = col_data.isna()
+                    if hasattr(isna_result, 'all'):
+                        has_nulls = bool(isna_result.all())
+                        if not has_nulls:
+                            summary[f'{col}_stats'] = {
+                                'mean': float(df[col].mean()),
+                                'std': float(df[col].std()),
+                                'min': float(df[col].min()),
+                                'max': float(df[col].max()),
+                                'median': float(df[col].median())
+                            }
+            except Exception:
+                # Si hay error, continuar con la siguiente columna
+                continue
     
     # Categorías si existen
     if 'Quality_Category' in df.columns:
