@@ -18,7 +18,7 @@ from typing import Dict, List, Any, Optional, Tuple
 # Agregar el directorio src al path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from gui_enhanced_rank import EnhancedRankGUI
+from src.gui.main_window import MainWindow as EnhancedRankGUI
 from src.data.data_manager import DataManager
 from src.core.integration_layer import FactorKElite96Enhanced, UnifiedEvaluatorEnhanced, ConfigManagerEnhanced
 from src.analysis.asesor_financiero_inteligente import AsesorFinancieroInteligente

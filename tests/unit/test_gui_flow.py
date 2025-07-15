@@ -46,7 +46,7 @@ def test_core_engine():
 def test_gui_import():
     """Test de importación de GUI."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         assert EnhancedRankGUI is not None, "EnhancedRankGUI no se importó correctamente"
         logger.info("✅ GUI: OK")
     except Exception as e:
@@ -69,7 +69,7 @@ def test_file_structure():
         logger.info("🧪 Verificando estructura de archivos...")
         
         required_files = [
-            'src/gui/gui_enhanced_rank.py',
+            'src/gui/main_window.py',
             'src/data/data_manager.py',
             'src/core/integration_layer.py',
             'main.py'

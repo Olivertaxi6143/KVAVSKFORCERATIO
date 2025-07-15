@@ -16,7 +16,7 @@ def test_gui_import():
     print("=" * 40)
     
     try:
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         print("✅ GUI importable correctamente")
         assert True
     except Exception as e:
@@ -60,7 +60,7 @@ def test_gui_initialization():
     print("=" * 40)
     
     try:
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Crear GUI (sin mostrar ventana)
         print("🔄 Creando instancia de GUI...")

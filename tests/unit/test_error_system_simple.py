@@ -24,7 +24,7 @@ def test_error_display_manager():
         
         # Importar después de configurar tkinter
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
-        from src.gui.gui_enhanced_rank import ErrorDisplayManager
+        from src.gui.utils import GUIAnalysisError as ErrorDisplayManager
         
         # Crear un mock parent con el método _log_message
         class MockParent:

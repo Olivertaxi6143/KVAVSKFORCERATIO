@@ -156,7 +156,7 @@ class TestFlujoCompletoAsesor:
         
         # Test importación GUI
         try:
-            from gui_enhanced_rank import EnhancedRankGUI
+            from src.gui.main_window import MainWindow as EnhancedRankGUI
             self.log_test("Importación GUI", True, "Módulo GUI importado correctamente")
         except Exception as e:
             self.log_test("Importación GUI", False, f"Error: {str(e)}")
@@ -187,7 +187,7 @@ class TestFlujoCompletoAsesor:
         self.logger.info("=" * 60)
         
         try:
-            from gui_enhanced_rank import EnhancedRankGUI
+            from src.gui.main_window import MainWindow as EnhancedRankGUI
             
             # Crear instancia de GUI (sin mostrar)
             gui = EnhancedRankGUI()
@@ -245,7 +245,7 @@ class TestFlujoCompletoAsesor:
         self.logger.info("=" * 60)
         
         try:
-            from gui_enhanced_rank import EnhancedRankGUI
+            from src.gui.main_window import MainWindow as EnhancedRankGUI
             
             # Crear instancia de GUI
             gui = EnhancedRankGUI()
@@ -390,7 +390,7 @@ class TestFlujoCompletoAsesor:
             
             # Test tiempo de importación
             start_time = time.time()
-            from gui_enhanced_rank import EnhancedRankGUI
+            from src.gui.main_window import MainWindow as EnhancedRankGUI
             import_time = time.time() - start_time
             
             if import_time < 5.0:  # Menos de 5 segundos

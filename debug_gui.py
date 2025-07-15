@@ -35,7 +35,7 @@ def main():
         print("✅ asesor_financiero_inteligente importado")
         
         print("📦 Importando GUI...")
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         print("✅ GUI importada")
         
         print("🚀 Iniciando aplicación GUI...")

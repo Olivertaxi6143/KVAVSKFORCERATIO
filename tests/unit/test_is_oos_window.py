@@ -14,7 +14,7 @@ import shutil
 import json
 import logging
 
-from src.gui.gui_enhanced_rank import EnhancedRankGUI
+from src.gui.main_window import MainWindow as EnhancedRankGUI
 from src.data.data_manager import DataManager
 from src.core.integration_layer import run_complete_analysis_with_gui_integration
 

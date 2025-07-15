@@ -57,7 +57,7 @@ logging.basicConfig(
 def test_file_structure():
     """Test 1: Verificar estructura de archivos"""
     required_files = [
-        'src/gui/gui_enhanced_rank.py',
+        'src/gui/main_window.py',
         'src/core/integration_layer.py',
         'src/logger_config.py'
     ]
@@ -98,10 +98,10 @@ def test_module_imports():
 def test_gui_structure():
     """Test 4: Verificar estructura GUI"""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
     except ImportError:
         try:
-            from gui_enhanced_rank import EnhancedRankGUI
+            from src.gui.main_window import MainWindow as EnhancedRankGUI
         except ImportError:
             assert False, "No se pudo importar EnhancedRankGUI"
     assert hasattr(EnhancedRankGUI, '__init__'), "Clase GUI no tiene constructor"

@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.abspath('src'))
 try:
     from src.data.data_manager import DataManager
     from src.core.integration_layer import UnifiedEvaluatorEnhanced, ExtraKPIManager, ConfigManagerEnhanced
-    from src.gui.gui_enhanced_rank import EnhancedRankGUI
+    from src.gui.main_window import MainWindow as EnhancedRankGUI
 except ImportError as e:
     print(f"Error importando módulos: {e}")
     sys.exit(1)

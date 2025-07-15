@@ -218,7 +218,7 @@ class AuditoriaKPIs:
                 df_filtrado = df_core.copy()
             
             # Normalizar para asesor financiero
-            from src.gui_enhanced_rank import normalizar_columnas_y_kpis
+            from src.data.data_manager import DataManager
             df_normalizado, kpis_asesor = normalizar_columnas_y_kpis(df_filtrado.copy())
             
             # Verificar KPIs disponibles

@@ -36,7 +36,7 @@ def test_error_display_system():
         
         # Importar después de configurar tkinter
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
-        from src.gui.gui_enhanced_rank import ErrorDisplayManager
+        from src.gui.utils import GUIAnalysisError as ErrorDisplayManager
         
         # Crear un mock parent con el método _log_message
         class MockParent:
@@ -85,7 +85,7 @@ def test_popup_details():
         
         # Importar GUI
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Crear datos de prueba
         test_data = pd.DataFrame({
@@ -140,7 +140,7 @@ def test_asesor_tabs_integration():
         
         # Importar GUI
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Crear datos de prueba más completos
         test_data = pd.DataFrame({
@@ -214,7 +214,7 @@ def test_complete_gui_asesor_integration():
         
         # Importar GUI y asesor
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         from src.analysis.asesor_financiero_inteligente import AsesorFinancieroInteligente
         
         # Crear datos de prueba

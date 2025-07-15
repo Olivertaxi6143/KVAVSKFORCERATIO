@@ -71,7 +71,7 @@ def test_funcionalidad_critica():
     
     try:
         # Importar GUI
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Crear instancia
         app = EnhancedRankGUI()
@@ -118,7 +118,7 @@ def test_integracion():
     print("🔍 Validando integración...")
     
     try:
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         app = EnhancedRankGUI()
         
@@ -159,7 +159,7 @@ def test_rendimiento():
     print("🔍 Validando rendimiento...")
     
     try:
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Medir tiempo de creación
         start_time = time.time()
@@ -205,7 +205,7 @@ def test_usabilidad():
     print("🔍 Validando usabilidad...")
     
     try:
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         app = EnhancedRankGUI()
         
@@ -258,7 +258,7 @@ def test_sistema_feedback():
     print("🔍 Validando sistema de feedback...")
     
     try:
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         app = EnhancedRankGUI()
         

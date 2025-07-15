@@ -116,7 +116,7 @@ def test_debug_asesor_especifico():
         # Simular exactamente lo que hace el asesor actualmente
         estrategias_filtradas = df_filtrado.copy()
         
-        # Lógica actual del asesor (líneas 2180-2185 en gui_enhanced_rank.py)
+        # Lógica actual del asesor (líneas en src/gui/main_window.py)
         kpis_disponibles = [col for col in estrategias_filtradas.columns 
                           if col not in ['Strategy_Name', 'Quality_Category', 'Unified_Score', 'Explicación']]
         

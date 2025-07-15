@@ -67,7 +67,7 @@ def test_gui_flow_1_file_structure():
     """Test 1: Verificar estructura de archivos."""
     try:
         required_files = [
-            'src/gui/gui_enhanced_rank.py',
+            'src/gui/main_window.py',
             'src/core/integration_layer.py',
             'src/logger_config.py'
         ]
@@ -95,7 +95,7 @@ def test_gui_flow_2_module_imports():
                 def run_complete_analysis_with_gui_integration(*args, **kwargs):
                     return pd.DataFrame(), {"status": "stub", "message": "Core engine no disponible"}
         try:
-            from src.gui.gui_enhanced_rank import EnhancedRankGUI
+            from src.gui.main_window import MainWindow as EnhancedRankGUI
         except ImportError:
             try:
                 from gui.gui_enhanced_rank import EnhancedRankGUI
@@ -107,7 +107,7 @@ def test_gui_flow_2_module_imports():
 def test_gui_flow_3_gui_creation():
     """Test 3: Verificar creación de GUI."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Crear GUI en modo headless
         gui = EnhancedRankGUI()
@@ -138,7 +138,7 @@ def test_gui_flow_3_gui_creation():
 def test_gui_flow_4_configuration_setup():
     """Test 4: Verificar configuración de la GUI."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -163,7 +163,7 @@ def test_gui_flow_4_configuration_setup():
 def test_gui_flow_5_data_validation():
     """Test 5: Verificar validación de datos."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -195,7 +195,7 @@ def test_gui_flow_5_data_validation():
 def test_gui_flow_6_analysis_simulation():
     """Test 6: Simular análisis completo."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -234,7 +234,7 @@ def test_gui_flow_6_analysis_simulation():
 def test_gui_flow_7_strategy_selection():
     """Test 7: Verificar selección de estrategias."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -275,7 +275,7 @@ def test_gui_flow_7_strategy_selection():
 def test_gui_flow_8_advisor_integration():
     """Test 8: Verificar integración con asesor financiero."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -328,7 +328,7 @@ def test_gui_flow_8_advisor_integration():
 def test_gui_flow_9_export_functionality():
     """Test 9: Verificar funcionalidad de exportación."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         
@@ -400,7 +400,7 @@ def test_gui_flow_9_export_functionality():
 def test_gui_flow_10_complete_workflow():
     """Test 10: Simular flujo de trabajo completo."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         gui = EnhancedRankGUI()
         

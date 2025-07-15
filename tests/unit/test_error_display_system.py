@@ -26,7 +26,7 @@ from typing import Dict, Any, List, Optional
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 # Importar la GUI y el sistema de errores
-from src.gui.gui_enhanced_rank import EnhancedRankGUI, ErrorDisplayManager
+from src.gui.main_window import MainWindow as EnhancedRankGUI, ErrorDisplayManager
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

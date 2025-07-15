@@ -92,7 +92,7 @@ def test_3_gui_integration():
     print("=" * 60)
     
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Crear GUI
         gui = EnhancedRankGUI()

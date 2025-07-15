@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 def test_darwinex_methods():
     """Test simple para verificar métodos de DarwinEX."""
     try:
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         print("Creando GUI...")
         gui = EnhancedRankGUI()

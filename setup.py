@@ -205,7 +205,7 @@ def test_imports():
     modules = [
         'src.core.integration_layer',
         'src.data.data_utils',
-        'src.gui.gui_enhanced_rank',
+        'src.gui.main_window',
         'src.analysis.research_docs'
     ]
     

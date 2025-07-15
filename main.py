@@ -229,7 +229,7 @@ def test_gui():
         logger.info("=== Probando GUI Enhanced Rank ===")
         
         # Importar GUI
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         
         # Verificar que se puede importar sin errores
         logger.info("GUI EnhancedRankGUI importada correctamente")

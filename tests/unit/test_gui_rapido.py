@@ -19,7 +19,7 @@ def test_gui_rapido():
     
     try:
         # Importar la GUI
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         print("✅ Módulo GUI importado correctamente")
         
         # Crear instancia de la GUI

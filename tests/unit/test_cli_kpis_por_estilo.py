@@ -24,7 +24,7 @@ def test_kpis_por_estilo():
     try:
         # Importar módulos necesarios
         print("📦 Importando módulos...")
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         from src.analysis.asesor_financiero_inteligente import AsesorFinancieroInteligente
         
         # Crear instancia de GUI para acceder a la lógica de KPIs

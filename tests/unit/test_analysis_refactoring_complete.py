@@ -326,7 +326,7 @@ def test_integration_with_gui():
     """Test que valida la integración con la GUI existente."""
     try:
         # Simular importación de módulos de GUI
-        from src.gui.gui_enhanced_rank import QVAStrategyRankerGUI
+        from src.gui.main_window import MainWindow as QVAStrategyRankerGUI
         
         # Verificar que la GUI puede importar módulos de analysis
         from src.analysis.scientific_analysis import ScientificAnalysisFilter

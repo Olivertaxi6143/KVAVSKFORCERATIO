@@ -41,7 +41,7 @@ try:
         ProgressCallback
     )
     from src.analysis.asesor_financiero_inteligente import ejecutar_analisis_completo
-    from src.gui.gui_enhanced_rank import read_and_prepare
+    from src.gui.utils import load_data_with_datamanager as read_and_prepare
 except ImportError as e:
     print(f"❌ Error importando módulos: {e}")
     sys.exit(1)

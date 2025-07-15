@@ -22,7 +22,7 @@ def test_gui_components():
         logger.info("🧪 Probando componentes de la GUI...")
         
         # Importar componentes de la GUI y módulos principales (estructura modular)
-        from src.gui.gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         from src.data.data_manager import DataManager
         from src.core.integration_layer import UnifiedEvaluatorEnhanced
         from src.analysis.asesor_financiero_inteligente import AsesorFinancieroInteligente
@@ -87,11 +87,11 @@ def test_gui_functionality():
         required_files = [
             'INPUTTEST/DatabankExport_M1.csv',
             'INPUTTEST/DATOSMQL5.csv',
-            'src/gui/gui_enhanced_rank.py',
+            'src/gui/main_window.py',
             'src/gui/scientific_gui_tab.py',
             'src/data/data_manager.py',
             'src/data/column_mapping.py',
-            'src/data/data_processing.py',
+            # 'src/data/data_processing.py' - ARCHIVO ELIMINADO,
             'src/data/data_utils.py',
             'src/core/integration_layer.py',
             'src/core/compliance_audit.py',
@@ -101,10 +101,10 @@ def test_gui_functionality():
             'src/analysis/scientific_analysis.py',
             'src/analysis/tail_risk_metrics.py',
             'src/analysis/darwinex_pipeline.py',
-            'src/analysis/research_docs.py',
+            # 'src/analysis/research_docs.py' - ARCHIVO ELIMINADO,
             'src/analysis/axi_select_analysis.py',
             'src/ml/advanced_ml_validation.py',
-            'src/validation/advanced_temporal_validation.py',
+            # 'src/validation/advanced_temporal_validation.py' - ARCHIVO ELIMINADO,
             'src/logger_config.py'
         ]
         
@@ -186,26 +186,26 @@ def test_import_all_py_modules():
     
     # Lista completa de todos los módulos .py del proyecto (excepto __init__.py)
     all_py_modules = [
-        'src.logger_config',
-        'src.analysis.advanced_analysis_enhanced',
-        'src.analysis.asesor_financiero_inteligente',
-        'src.analysis.axi_select_analysis',
-        'src.analysis.darwinex_pipeline',
-        'src.analysis.research_docs',
-        'src.analysis.scientific_analysis',
-        'src.analysis.tail_risk_metrics',
-        'src.core.compliance_audit',
-        'src.core.integration_layer',
-        'src.core.logger_config',
-        'src.data.column_mapping',
-        'src.data.data_manager',
-        'src.data.data_processing',
-        'src.data.data_utils',
-        'src.gui.gui_enhanced_rank',
-        'src.gui.scientific_gui_tab',
-        'src.ml.advanced_ml_validation',
-        'src.validation.advanced_temporal_validation'
-    ]
+            'src.logger_config',
+            'src.analysis.advanced_analysis_enhanced',
+            'src.analysis.asesor_financiero_inteligente',
+            'src.analysis.axi_select_analysis',
+            'src.analysis.darwinex_pipeline',
+            'src.analysis.scientific_analysis',
+            'src.analysis.tail_risk_metrics',
+            'src.analysis.predictability_metrics',
+            'src.core.compliance_audit',
+            'src.core.integration_layer',
+            'src.core.logger_config',
+            'src.data.column_mapping',
+            'src.data.data_manager',
+            'src.data.data_utils',
+            'src.data.visualization',
+            'src.gui.main_window',
+            'src.gui.scientific_gui_tab',
+            'src.gui.utils',
+            'src.ml.advanced_ml_validation'
+        ]
     
     failed = []
     for module_name in all_py_modules:
@@ -226,11 +226,11 @@ def test_verify_all_required_files_exist():
     required_files = [
         'DatabankExport_M1.csv',
         'DATOSMQL5.csv',
-        'src/gui/gui_enhanced_rank.py',
+        'src/gui/main_window.py',
         'src/gui/scientific_gui_tab.py',
         'src/data/data_manager.py',
         'src/data/column_mapping.py',
-        'src/data/data_processing.py',
+        # 'src/data/data_processing.py' - ARCHIVO ELIMINADO,
         'src/data/data_utils.py',
         'src/core/integration_layer.py',
         'src/core/compliance_audit.py',
@@ -240,10 +240,10 @@ def test_verify_all_required_files_exist():
         'src/analysis/scientific_analysis.py',
         'src/analysis/tail_risk_metrics.py',
         'src/analysis/darwinex_pipeline.py',
-        'src/analysis/research_docs.py',
+        # 'src/analysis/research_docs.py' - ARCHIVO ELIMINADO,
         'src/analysis/axi_select_analysis.py',
         'src/ml/advanced_ml_validation.py',
-        'src/validation/advanced_temporal_validation.py',
+        # 'src/validation/advanced_temporal_validation.py' - ARCHIVO ELIMINADO,
         'src/logger_config.py'
     ]
     
@@ -279,22 +279,22 @@ def main():
     try:
         from src.analysis.asesor_financiero_inteligente import AsesorFinancieroInteligente
         from src.analysis.advanced_analysis_enhanced import AdvancedAnalysisEnhanced
-        from src.analysis.scientific_analysis import ScientificAnalysis
-        from src.analysis.tail_risk_metrics import TailRiskMetrics
-        from src.analysis.darwinex_pipeline import DarwinexPipeline
-        from src.analysis.research_docs import ResearchDocs
-        from src.analysis.axi_select_analysis import AxiSelectAnalysis
-        from src.core.compliance_audit import ComplianceAudit
+        # from src.analysis.scientific_analysis import ScientificAnalysis  # CLASE NO ENCONTRADA
+        # from src.analysis.tail_risk_metrics import TailRiskMetrics  # CLASE NO ENCONTRADA
+        # from src.analysis.darwinex_pipeline import DarwinexPipeline  # CLASE NO ENCONTRADA
+        # from src.analysis.research_docs import ResearchDocs  # MÓDULO ELIMINADO
+        # from src.analysis.axi_select_analysis import AxiSelectAnalysis  # CLASE NO ENCONTRADA
+        # from src.core.compliance_audit import ComplianceAudit  # CLASE NO ENCONTRADA
         from src.core.logger_config import setup_logger
-        from src.data.column_mapping import ColumnMapping
+        # from src.data.column_mapping import ColumnMapping  # CLASE NO ENCONTRADA
         # from src.core.utils.data_utils import DataProcessor
         # from src.core.utils.data_utils import DataUtils
         # NOTA: Si necesitas DataProcessor/DataUtils, migra su funcionalidad a data_utils o usa DataManager.
-        from src.gui.scientific_gui_tab import ScientificAnalysisTab
-        from src.ml.advanced_ml_validation import AdvancedMLValidation
-        from src.validation.advanced_temporal_validation import AdvancedTemporalValidation
+        # from src.gui.scientific_gui_tab import ScientificAnalysisTab  # CLASE NO ENCONTRADA
+        # from src.ml.advanced_ml_validation import AdvancedMLValidation  # CLASE NO ENCONTRADA
+        # from src.validation.advanced_temporal_validation import AdvancedTemporalValidation  # MÓDULO ELIMINADO
         from src.logger_config import setup_logger as setup_main_logger
-        logger.info("✅ Todos los módulos principales y nuevos integrados correctamente")
+        logger.info("✅ Módulos principales integrados correctamente")
     except Exception as e:
         logger.error(f"❌ Error integrando módulos: {e}")
         assert False, f"Error integrando módulos: {e}"

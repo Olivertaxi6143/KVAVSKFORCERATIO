@@ -21,7 +21,7 @@ import os
 # Añadir el directorio raíz al path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.gui.gui_enhanced_rank import EnhancedRankGUI
+from src.gui.main_window import MainWindow as EnhancedRankGUI
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
