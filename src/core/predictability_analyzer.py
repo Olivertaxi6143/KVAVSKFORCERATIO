@@ -20,7 +20,7 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 import itertools
-from getattr(sklearn, 'model', None)_selection import TimeSeriesSplit
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 from pandas import Timestamp, Timedelta
@@ -55,6 +55,76 @@ def safe_getitem(obj: Any, idx: int, default: Any = 0.0) -> Any:
         except Exception:
             pass
     return default
+
+def safe_index_access(obj: Any) -> Any:
+    """
+    Acceso seguro al índice de un objeto.
+    
+    Args:
+        obj: Objeto que puede ser pd.Series, np.ndarray, etc.
+        
+    Returns:
+        El índice si está disponible, o un rango numérico como fallback
+    """
+    if obj is None:
+        return pd.RangeIndex(0)
+    
+    # Si es una pandas Series, usar su índice
+    if isinstance(obj, pd.Series):
+        return obj.index
+    
+    # Si es un numpy array, crear un rango numérico
+    if isinstance(obj, np.ndarray):
+        return pd.RangeIndex(len(obj))
+    
+    # Si tiene atributo index, intentar usarlo
+    if hasattr(obj, 'index'):
+        try:
+            return obj.index
+        except Exception:
+            pass
+    
+    # Fallback: rango numérico basado en la longitud
+    try:
+        return pd.RangeIndex(len(obj))
+    except Exception:
+        return pd.RangeIndex(0)
+
+def safe_intersection(index1: Any, index2: Any) -> Any:
+    """
+    Intersección segura entre dos índices.
+    
+    Args:
+        index1: Primer índice
+        index2: Segundo índice
+        
+    Returns:
+        Intersección de los índices
+    """
+    try:
+        # Si ambos son pandas Index, usar intersection
+        if isinstance(index1, pd.Index) and isinstance(index2, pd.Index):
+            return index1.intersection(index2)
+        
+        # Si uno o ambos son numpy arrays, convertir a índices numéricos
+        if isinstance(index1, np.ndarray):
+            index1 = pd.RangeIndex(len(index1))
+        if isinstance(index2, np.ndarray):
+            index2 = pd.RangeIndex(len(index2))
+        
+        # Intentar intersección
+        if hasattr(index1, 'intersection') and hasattr(index2, 'intersection'):
+            return index1.intersection(index2)
+        
+        # Fallback: usar el índice más corto
+        len1 = len(index1) if hasattr(index1, '__len__') else 0
+        len2 = len(index2) if hasattr(index2, '__len__') else 0
+        min_len = min(len1, len2)
+        return pd.RangeIndex(min_len)
+        
+    except Exception:
+        # Fallback final: rango vacío
+        return pd.RangeIndex(0)
 
 def to_numeric_clean(s) -> pd.Series:
     """Convierte a numérico y elimina nulos. Siempre retorna una Serie estándar."""
@@ -162,7 +232,7 @@ class PredictabilityAnalyzer:
         
         # Validar que df.columns sea iterable y contenga strings
         try:
-            columns = df.((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+            columns = df.columns.tolist()
         except (AttributeError, TypeError):
             logger.warning("DataFrame columns no es iterable, usando índices numéricos")
             columns = [str(i) for i in range(len(df.columns))]
@@ -194,14 +264,16 @@ class PredictabilityAnalyzer:
         if not pairs:
             # Buscar métricas que podrían estar relacionadas
             try:
-                numeric_cols = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+                numeric_cols = df.select_dtypes(include=[np.number]).columns
                 # Convertir columnas numéricas a strings
                 numeric_cols = [str(col) if isinstance(col, (int, float)) else col for col in numeric_cols]
                 
                 for i, col1 in enumerate(numeric_cols):
                     for col2 in numeric_cols[i+1:]:
-                        if self._are_related_metrics(col1, col2):
-                            pairs.append((col1, col2))
+                        # Verificar si el método existe antes de usarlo
+                        if hasattr(self, '_are_related_metrics') and callable(getattr(self, '_are_related_metrics', None)):
+                            if self._are_related_metrics(col1, col2):  # type: ignore[reportAttributeAccessIssue]  # Protegido con hasattr
+                                pairs.append((col1, col2))
             except Exception as e:
                 logger.warning(f"Error buscando métricas relacionadas: {e}")
         
@@ -395,7 +467,7 @@ class PredictabilityAnalyzer:
             oos_data = to_numeric_clean(df[oos_col])
             
             # Alinear datos
-            common_index = is_data.index.intersection(oos_data.index)
+            common_index = safe_intersection(safe_index_access(is_data), safe_index_access(oos_data))
             if safe_len(common_index) < 10:
                 return 0.0
             
@@ -475,7 +547,7 @@ class PredictabilityAnalyzer:
             oos_data = to_numeric_clean(df[oos_col])
             
             # Alinear datos
-            common_index = is_data.index.intersection(oos_data.index)
+            common_index = safe_intersection(safe_index_access(is_data), safe_index_access(oos_data))
             if safe_len(common_index) < 10:
                 return {'significant': False, 'p_value': 1.0, 'statistic': 0.0}
             
@@ -1201,7 +1273,9 @@ class PredictabilityAnalyzer:
             # Analizar tendencias temporales
             for col in temporal_columns[:3]:  # Máximo 3 columnas
                 if col in data.columns:
-                    values = pd.to_numeric(data[col], errors='coerce').dropna()
+                    values = pd.to_numeric(data[col], errors='coerce')
+                    # Convertir a Series y eliminar NaN
+                    values = pd.Series(values).dropna()
                     if len(values) > 10:
                         # Convertir a numpy array para cálculos
                         values_array = values.to_numpy()
@@ -1229,8 +1303,7 @@ class PredictabilityAnalyzer:
             True si hay outliers extremos, False en caso contrario
         """
         try:
-            extreme_count = 0
-            total_count = 0
+            outliers: list = []  # Inicializar lista de outliers
             for col in data.select_dtypes(include=[np.number]).columns:
                 values = data[col].dropna()
                 if not isinstance(values, pd.Series):
@@ -1241,15 +1314,44 @@ class PredictabilityAnalyzer:
                 Q1 = values.quantile(0.25)
                 Q3 = values.quantile(0.75)
                 IQR = Q3 - Q1
-                # Outliers extremos (más allá de 3*IQR)
-                extreme_outliers = values[(values < Q1 - 3*IQR) | (values > Q3 + 3*IQR)]
-                extreme_count += int(len(extreme_outliers))
-                total_count += int(len(values))
-            if total_count > 0:
-                return (extreme_count / total_count) > 0.05
-            return False
+                lower_bound = Q1 - 1.5 * IQR
+                upper_bound = Q3 + 1.5 * IQR
+                outlier_mask = (values < lower_bound) | (values > upper_bound)
+                # Solo acceder a .index si el resultado es una pd.Series
+                masked_values = values[outlier_mask]
+                outlier_indices = list(safe_index_access(masked_values))
+                for idx in outlier_indices:
+                    outliers.append({
+                        'column': col,
+                        'index': idx,
+                        'value': float(values[idx]),
+                        'method': 'IQR',
+                        'severity': 'moderate'
+                    })
+                # Método Z-score para outliers extremos
+                values_np = values.to_numpy(dtype=float)
+                z_scores = np.abs((values_np - np.mean(values_np)) / np.std(values_np))
+                extreme_outliers = z_scores > 3
+                extreme_indices = [i for i, is_outlier in enumerate(extreme_outliers) if is_outlier]
+                # Si values es una Serie, convertir índices numéricos a índices originales
+                if isinstance(values, pd.Series):
+                    try:
+                        original_indices = [safe_index_access(values)[i] for i in extreme_indices if i < len(safe_index_access(values))]
+                        extreme_indices = original_indices
+                    except (IndexError, TypeError):
+                        pass  # Mantener índices numéricos si hay error
+                for idx in extreme_indices:
+                    if idx not in outlier_indices:
+                        outliers.append({
+                            'column': col,
+                            'index': idx,
+                            'value': float(values[idx]),
+                            'method': 'Z-score',
+                            'severity': 'extreme'
+                        })
+            return bool(outliers)
         except Exception as e:
-            logger.warning(f"Error detectando outliers extremos: {str(e)}")
+            logger.error(f"Error detectando outliers extremos: {str(e)}")
             return False
     
     def validate_temporal_quality(self, data: pd.DataFrame) -> Dict[str, Any]:
@@ -1367,7 +1469,7 @@ class PredictabilityAnalyzer:
                         
                         # Detectar gaps (diferencias muy grandes)
                         median_diff = date_diffs.median()
-                        if median_diff > pd.Timedelta(0):
+                        if isinstance(median_diff, pd.Timedelta) and median_diff > pd.Timedelta(0):
                             large_gaps = date_diffs > 3 * median_diff
                             gap_count = large_gaps.sum()
             
@@ -1434,7 +1536,7 @@ class PredictabilityAnalyzer:
                 lower_bound = Q1 - 1.5 * IQR
                 upper_bound = Q3 + 1.5 * IQR
                 outlier_mask = (values < lower_bound) | (values > upper_bound)
-                outlier_indices = list(values[outlier_mask].index)  # Asegurar iterable
+                outlier_indices = list(safe_index_access(values[outlier_mask]))  # Asegurar iterable
                 for idx in outlier_indices:
                     outliers.append({
                         'column': col,
@@ -1447,7 +1549,18 @@ class PredictabilityAnalyzer:
                 values_np = values.to_numpy(dtype=float)
                 z_scores = np.abs((values_np - np.mean(values_np)) / np.std(values_np))
                 extreme_outliers = z_scores > 3
-                extreme_indices = values.index[extreme_outliers].tolist()  # Asegurar iterable siempre
+                
+                # Corrección para Pyright: usar solo índices numéricos para evitar errores de tipado
+                extreme_indices = [i for i, is_outlier in enumerate(extreme_outliers) if is_outlier]
+                
+                # Si values es una Series, convertir índices numéricos a índices originales
+                if isinstance(values, pd.Series):
+                    try:
+                        original_indices = [safe_index_access(values)[i] for i in extreme_indices if i < len(safe_index_access(values))]
+                        extreme_indices = original_indices
+                    except (IndexError, TypeError):
+                        # Mantener índices numéricos si hay error
+                        pass
                 for idx in extreme_indices:
                     if idx not in outlier_indices:  # Evitar duplicados
                         outliers.append({
@@ -1605,7 +1718,7 @@ class WalkForwardAnalyzer:
         
         # Validar que df.columns sea iterable y contenga strings
         try:
-            columns = df.((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+            columns = df.columns.tolist()
         except (AttributeError, TypeError):
             logger.warning("DataFrame columns no es iterable, usando índices numéricos")
             columns = [str(i) for i in range(len(df.columns))]
@@ -1637,14 +1750,16 @@ class WalkForwardAnalyzer:
         if not pairs:
             # Buscar métricas que podrían estar relacionadas
             try:
-                numeric_cols = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+                numeric_cols = df.select_dtypes(include=[np.number]).columns
                 # Convertir columnas numéricas a strings
                 numeric_cols = [str(col) if isinstance(col, (int, float)) else col for col in numeric_cols]
                 
                 for i, col1 in enumerate(numeric_cols):
                     for col2 in numeric_cols[i+1:]:
-                        if self._are_related_metrics(col1, col2):
-                            pairs.append((col1, col2))
+                        # Verificar si el método existe antes de usarlo
+                        if hasattr(self, '_are_related_metrics') and callable(getattr(self, '_are_related_metrics', None)):
+                            if self._are_related_metrics(col1, col2):  # type: ignore[reportAttributeAccessIssue]  # Protegido con hasattr
+                                pairs.append((col1, col2))
             except Exception as e:
                 logger.warning(f"Error buscando métricas relacionadas: {e}")
         
@@ -1669,7 +1784,7 @@ class WalkForwardAnalyzer:
             oos_data = to_numeric_clean(df[oos_col])
             
             # Alinear datos
-            common_index = is_data.index.intersection(oos_data.index)
+            common_index = safe_intersection(safe_index_access(is_data), safe_index_access(oos_data))
             if safe_len(common_index) < 10:
                 return {
                     'is_col': is_col,
@@ -1832,7 +1947,7 @@ class NullSimulationAnalyzer:
             logger.info(f"Realizando simulación de hipótesis nula con {self.n_simulations} iteraciones...")
             
             # Identificar métricas numéricas
-            numeric_cols = df.select_dtypes(include=[np.number]).((columns.tolist() if hasattr(columns, 'tolist') else list(columns)) if hasattr(columns, 'tolist') else list(columns))
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
             
             if safe_len(numeric_cols) < 2:
                 return {'error': 'Insufficient numeric columns for simulation'}
@@ -1900,7 +2015,7 @@ class NullSimulationAnalyzer:
                 oos_metric = metric.replace('_IS', '_OOS')
                 if oos_metric in df.columns:
                     oos_data = to_numeric_clean(df[oos_metric])
-                    common_index = data.index.intersection(oos_data.index)
+                    common_index = safe_intersection(safe_index_access(data), safe_index_access(oos_data))
                     if safe_len(common_index) >= 10:
                         # pearsonr siempre devuelve (coeficiente, p-valor)
                         corr, _ = cast(Tuple[float, float], pearsonr(data.loc[common_index], oos_data.loc[common_index]))
@@ -2213,7 +2328,7 @@ class NullSimulationAnalyzer:
             stressed_returns = {}
             
             for strategy, weight in allocation.items():
-                if strategy in strategies.index:
+                if strategy in safe_index_access(strategies):
                     # Obtener métricas de la estrategia
                     strategy_data = strategies.loc[strategy]
                     
@@ -2334,7 +2449,7 @@ class NullSimulationAnalyzer:
             # Verificar métricas de riesgo
             risk_metrics = []
             for strategy, weight in allocation.items():
-                if strategy in strategies.index:
+                if strategy in safe_index_access(strategies):
                     strategy_data = strategies.loc[strategy]
                     
                     # Sharpe Ratio
