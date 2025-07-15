@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, Union, List
 import re
 
+from pandas import Timestamp, Timedelta
+from pandas._libs.tslibs.nattype import NaTType
+from pandas._libs.tslibs.nattype import NaT
+from pandas._libs.missing import NAType
+
 logger = logging.getLogger(__name__)
 
 def NORMALIZE_COL(col: str) -> str:
@@ -183,25 +188,36 @@ def calculate_basic_stats(df: pd.DataFrame, column: str) -> Dict[str, float]:
         
         # Convertir a numérico
         numeric_series = pd.to_numeric(df[column], errors='coerce')
-        if numeric_series.isna().all():
-            logger.warning(f"Columna '{column}' es completamente NaN.")
-            return {}
-            
-        # Calcular estadísticas de forma segura
-        mean_val = numeric_series.mean()
-        std_val = numeric_series.std()
-        min_val = numeric_series.min()
-        max_val = numeric_series.max()
-        median_val = numeric_series.median()
-        count_val = numeric_series.count()
-        
+        if isinstance(numeric_series, pd.Series):
+            if numeric_series.isna().all():
+                logger.warning(f"Columna '{column}' es completamente NaN.")
+                return {}
+            mean_val = float(np.mean(numeric_series.dropna()))
+            std_val = float(np.std(numeric_series.dropna()))
+            min_val = float(np.min(numeric_series.dropna()))
+            max_val = float(np.max(numeric_series.dropna()))
+            median_val = float(np.median(numeric_series.dropna()))
+            count_val = int(numeric_series.count())
+        else:
+            # Si por alguna razón no es Series, tratar como array/escalares
+            arr = np.array(numeric_series, ndmin=1)
+            arr = arr[~pd.isna(arr)]
+            if arr.size == 0:
+                logger.warning(f"Columna '{column}' es completamente NaN (array).")
+                return {}
+            mean_val = float(np.mean(arr))
+            std_val = float(np.std(arr))
+            min_val = float(np.min(arr))
+            max_val = float(np.max(arr))
+            median_val = float(np.median(arr))
+            count_val = int(arr.size)
         stats_dict = {
-            'mean': float(mean_val) if pd.notna(mean_val) else 0.0,
-            'std': float(std_val) if pd.notna(std_val) else 0.0,
-            'min': float(min_val) if pd.notna(min_val) else 0.0,
-            'max': float(max_val) if pd.notna(max_val) else 0.0,
-            'median': float(median_val) if pd.notna(median_val) else 0.0,
-            'count': float(count_val) if pd.notna(count_val) else 0.0
+            'mean': mean_val,
+            'std': std_val,
+            'min': min_val,
+            'max': max_val,
+            'median': median_val,
+            'count': float(count_val)
         }
         return stats_dict
     except Exception as e:
@@ -586,37 +602,32 @@ def safe_bool(val: Any) -> bool:
         return False
 
 
-def convert_series_types(series: pd.Series, target_type: str) -> pd.Series:
+def convert_series_types(series: pd.Series, target_type: str) -> Union[pd.Series, float, int, str, Any]:
     """
-    Convierte tipos de una serie de pandas.
-    
+    Convierte el tipo de una serie de pandas de forma segura.
     Args:
-        series: Serie a convertir
-        target_type: Tipo objetivo
-        
+        series: Serie de pandas
+        target_type: Tipo de destino ('float', 'int', 'str', etc.)
     Returns:
-        Serie con tipos convertidos
+        Serie convertida o escalar convertido
     """
-    if not isinstance(series, pd.Series):
-        if isinstance(series, pd.DataFrame):
-            # Selecciona la primera columna si es DataFrame
-            series = series.iloc[:, 0]
-        else:
-            raise TypeError("convert_series_types espera una pd.Series")
     try:
+        if type(series) is pd.Series:
+            return series.astype(target_type)
+        if type(series) is np.ndarray:
+            return series.astype(target_type)
         if target_type == 'float':
-            return series.astype(float)
-        elif target_type == 'int':
-            return series.astype(int)
-        elif target_type == 'str':
-            return series.astype(str)
-        elif target_type == 'bool':
-            return series.astype(bool)
-        else:
-            logger.warning(f"Tipo de conversión '{target_type}' no soportado para Series")
+            return float(series)
+        if target_type == 'int':
+            return int(series)
+        if target_type == 'str':
+            return str(series)
+        try:
+            return eval(f'{target_type}')(series)
+        except Exception:
             return series
     except Exception as e:
-        logger.error(f"Error convirtiendo Series a {target_type}: {e}")
+        logger.error(f"Error convirtiendo tipos en serie: {e}")
         return series
 
 
