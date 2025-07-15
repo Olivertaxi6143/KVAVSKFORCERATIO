@@ -140,9 +140,7 @@ class DarwinEXPipeline:
             try:
                 # Si es un array vacío o Series/DataFrame vacío, retorna 0.0
                 if isinstance(value, (np.ndarray, pd.Series, pd.DataFrame)):
-                    if hasattr(value, 'empty') and value.empty:
-                        return 0.0
-                    if hasattr(value, 'size') and value.size == 0:
+                    if value.size == 0:
                         return 0.0
                     # Si es un array/serie de un solo valor, extrae el escalar
                     if hasattr(value, 'item') and value.size == 1:
@@ -186,10 +184,7 @@ class DarwinEXPipeline:
             value = strategy_data[field]
             # Control estricto para pandas/numpy
             if isinstance(value, (np.ndarray, pd.Series, pd.DataFrame)):
-                if hasattr(value, 'empty') and value.empty:
-                    errors.append(f"Campo requerido vacío: {field}")
-                    continue
-                if hasattr(value, 'size') and value.size == 0:
+                if value.size == 0:
                     errors.append(f"Campo requerido vacío: {field}")
                     continue
             # Solo chequea isna/None si value es escalar

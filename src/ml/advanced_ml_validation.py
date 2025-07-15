@@ -107,19 +107,25 @@ class AdvancedMLValidator:
     def __init__(self, 
                  n_regimes: int = 3,
                  drift_threshold: float = 0.1,
-                 walk_forward_folds: int = 5):
+                 walk_forward_folds: int = 5,
+                 config: Optional[WalkForwardConfig] = None,
+                 model: Optional[Any] = None):
         """
-        Inicializa el validador avanzado de ML.
+        Inicializa el validador ML avanzado.
         
         Args:
-            n_regimes: Número de regímenes a detectar
-            drift_threshold: Umbral para detectar data drift
-            walk_forward_folds: Número de folds para walk-forward
+            n_regimes: Número de regímenes de mercado a detectar
+            drift_threshold: Umbral para detección de data drift
+            walk_forward_folds: Número de folds para walk-forward validation
+            config: Configuración para walk-forward validation
+            model: Modelo ML a usar (opcional)
         """
         self.n_regimes = n_regimes
         self.drift_threshold = drift_threshold
         self.walk_forward_folds = walk_forward_folds
-        self.logger = logger
+        self.config = config or WalkForwardConfig()
+        self.model = model
+        self.logger = logging.getLogger(__name__)
         
         # Inicializar modelos
         self._initialize_models()
@@ -755,10 +761,17 @@ class AdvancedMLValidator:
                     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
                     
                     # Entrenar modelo
-                    self.model.fit(X_train, y_train)
-                    
-                    # Predecir
-                    y_pred = self.model.predict(X_test)
+                    if self.model is not None:
+                        self.model.fit(X_train, y_train)
+                        
+                        # Predecir
+                        y_pred = self.model.predict(X_test)
+                    else:
+                        # Usar modelo por defecto si no hay uno configurado
+                        from sklearn.ensemble import RandomForestRegressor
+                        default_model = RandomForestRegressor(n_estimators=100, random_state=42)
+                        default_model.fit(X_train, y_train)
+                        y_pred = default_model.predict(X_test)
                     
                     # Calcular métricas
                     metrics = self._calculate_temporal_metrics(y_test, y_pred)

@@ -336,7 +336,8 @@ class AsesorFinancieroInteligente:
         if isinstance(df, pd.DataFrame):
             df_has_nulls = df.isnull().any().any()
         else:
-            df_has_nulls = df.isnull().any()
+            # Si es un ndarray, usar numpy
+            df_has_nulls = np.isnan(df).any() if hasattr(df, 'any') else False
         series_has_nulls = series.isnull().any()
         return df_has_nulls or series_has_nulls
     

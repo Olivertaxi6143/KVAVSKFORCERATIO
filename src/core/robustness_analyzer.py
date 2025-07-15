@@ -150,13 +150,16 @@ class RobustnessAnalyzer:
             Score de estabilidad (0-1)
         """
         try:
-            sharpe_data = pd.to_numeric(df['Sharpe Ratio'], errors='coerce').dropna()
+            sharpe_data = pd.to_numeric(df['Sharpe Ratio'], errors='coerce')
+            # Usar numpy para operaciones más robustas
+            sharpe_array = np.asarray(sharpe_data)
+            sharpe_clean = sharpe_array[~np.isnan(sharpe_array)]
             
-            if safe_len(sharpe_data) < 10:
+            if safe_len(sharpe_clean) < 10:
                 return 0.0
             
             # Calcular coeficiente de variación (inverso de estabilidad)
-            cv = variation(sharpe_data)
+            cv = variation(sharpe_clean)
             
             # Convertir a score de estabilidad (0-1)
             # CV bajo = alta estabilidad
@@ -179,7 +182,7 @@ class RobustnessAnalyzer:
             Score de estabilidad (0-1)
         """
         try:
-            drawdown_data = pd.to_numeric(df['Drawdown'], errors='coerce').dropna()
+            drawdown_data = pd.to_numeric(df['Drawdown'], errors='coerce')
             
             if safe_len(drawdown_data) < 10:
                 return 0.0
@@ -207,7 +210,7 @@ class RobustnessAnalyzer:
             Score de consistencia (0-1)
         """
         try:
-            cagr_data = pd.to_numeric(df['CAGR'], errors='coerce').dropna()
+            cagr_data = pd.to_numeric(df['CAGR'], errors='coerce')
             
             if safe_len(cagr_data) < 10:
                 return 0.0
@@ -240,7 +243,7 @@ class RobustnessAnalyzer:
             Score de estabilidad (0-1)
         """
         try:
-            pf_data = pd.to_numeric(df['Profit factor'], errors='coerce').dropna()
+            pf_data = pd.to_numeric(df['Profit factor'], errors='coerce')
             
             if safe_len(pf_data) < 10:
                 return 0.0
@@ -274,16 +277,21 @@ class RobustnessAnalyzer:
             numeric_cols = df.select_dtypes(include=[np.number]).columns
             
             for col in numeric_cols:
-                data = pd.to_numeric(df[col], errors='coerce').dropna()
+                # Convertir a numpy array de manera segura
+                raw_data = pd.to_numeric(df[col], errors='coerce')
+                data_array = np.asarray(raw_data)
+                # Filtrar NaN usando numpy
+                data = data_array[~np.isnan(data_array)]
                 
                 if safe_len(data) >= 10:
-                    # Detectar outliers usando IQR
-                    Q1 = data.quantile(0.25)
-                    Q3 = data.quantile(0.75)
+                    # Detectar outliers usando IQR con numpy
+                    Q1 = np.nanpercentile(data, 25)
+                    Q3 = np.nanpercentile(data, 75)
                     IQR = Q3 - Q1
                     lower_bound = Q1 - 1.5 * IQR
                     upper_bound = Q3 + 1.5 * IQR
                     
+                    # Usar operaciones numpy para comparaciones
                     outliers = data[(data < lower_bound) | (data > upper_bound)]
                     
                     # Asegurar que los datos son iterables
@@ -336,7 +344,11 @@ class RobustnessAnalyzer:
             numeric_cols = df.select_dtypes(include=[np.number]).columns
             
             for col in numeric_cols:
-                data = pd.to_numeric(df[col], errors='coerce').dropna()
+                # Convertir a numpy array de manera segura
+                raw_data = pd.to_numeric(df[col], errors='coerce')
+                data_array = np.asarray(raw_data)
+                # Filtrar NaN usando numpy
+                data = data_array[~np.isnan(data_array)]
                 
                 if safe_len(data) >= 10:
                     # Estadísticas de distribución
@@ -813,7 +825,7 @@ class AdvancedDataProcessor:
                 
                 elif col_type == 'float64':
                     # Reducir precisión si es posible
-                    if optimized_df[col].notna().all().item():
+                    if optimized_df[col].notna().all():
                         optimized_df[col] = optimized_df[col].astype('float32')
                 
                 elif col_type == 'int64':
@@ -880,18 +892,24 @@ class AdvancedDataProcessor:
                     
                     # Asegurar que la comparación sea válida
                     outlier_mask = pd.Series(False, index=cleaned_df.index)
-                    if not cleaned_df[col].isna().all().item():
+                    # Verificar si hay datos válidos usando numpy
+                    valid_data = ~cleaned_df[col].isna()
+                    if valid_data.any():
                         outlier_mask = (cleaned_df[col] < lower_bound) | (cleaned_df[col] > upper_bound)
                 elif method == 'isolation_forest':
                     # Isolation Forest
                     iso_forest = IsolationForest(contamination='auto', random_state=42)
-                    data_scaled = StandardScaler().fit_transform(data.values.reshape(-1, 1))
+                    # Convertir a numpy array de manera segura
+                    data_values = np.asarray(data.values).reshape(-1, 1)
+                    data_scaled = StandardScaler().fit_transform(data_values)
                     outlier_labels = iso_forest.fit_predict(data_scaled)
                     outlier_mask = pd.Series(outlier_labels == -1, index=data.index)
                 elif method == 'elliptic_envelope':
                     # Elliptic Envelope
                     scaler = StandardScaler()
-                    data_scaled = scaler.fit_transform(data.values.reshape(-1, 1))
+                    # Convertir a numpy array de manera segura
+                    data_values = np.asarray(data.values).reshape(-1, 1)
+                    data_scaled = scaler.fit_transform(data_values)
                     envelope = EllipticEnvelope(contamination=0.1, random_state=42)
                     outlier_labels = envelope.fit_predict(data_scaled)
                     outlier_mask = pd.Series(outlier_labels == -1, index=data.index)

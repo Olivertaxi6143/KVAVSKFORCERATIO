@@ -304,7 +304,14 @@ class ScientificAnalysisFilter:
         """Análisis de tail risk usando implementación real."""
         try:
             logger.info("🔍 Ejecutando análisis de tail risk...")
-            results: Dict[str, Any] = self.tail_risk_analyzer.analyze_tail_risk_metrics(strategies_df)
+            # Verificar si el método existe, si no, usar método alternativo
+            if hasattr(self.tail_risk_analyzer, 'analyze_tail_risk_metrics'):
+                results: Dict[str, Any] = self.tail_risk_analyzer.analyze_tail_risk_metrics(strategies_df)
+            else:
+                # Método alternativo o stub temporal
+                results = {"error": "Método analyze_tail_risk_metrics no implementado"}
+                logger.warning("⚠️ Método analyze_tail_risk_metrics no disponible en TailRiskAnalyzer")
+            
             # Agregar metadatos del filtrado
             results["filtered_strategies_count"] = len(strategies_df)
             results["analysis_type"] = "tail_risk"

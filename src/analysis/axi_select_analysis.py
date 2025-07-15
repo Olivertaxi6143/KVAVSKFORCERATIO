@@ -255,10 +255,10 @@ class AXISelectPredictiveSystem:
             
             # Manejar valores faltantes
             for col in X.columns:
-                notna_mask = X[col].notna()
-                if not notna_mask.all().item():
+                # Usar pandas de manera segura
+                if X[col].isna().any():
                     median_val = X[col].median()
-                    X[col].fillna(median_val, inplace=True)
+                    X[col] = X[col].fillna(median_val)
             
             # Crear características adicionales
             if 'cagr_is' in X.columns and 'cagr_oos' in X.columns:
@@ -275,7 +275,7 @@ class AXISelectPredictiveSystem:
                 y = data[target_column].copy()
                 # Manejar valores faltantes en la variable objetivo
                 notna_mask = y.notna()
-                if not notna_mask.all().item():
+                if not notna_mask.all():
                     y.fillna(y.median(), inplace=True)
             else:
                 # Si no existe la columna objetivo, usar una columna por defecto
@@ -284,7 +284,7 @@ class AXISelectPredictiveSystem:
                     if target in data.columns:
                         y = data[target].copy()
                         notna_mask = y.notna()
-                        if not notna_mask.all().item():
+                        if not notna_mask.all():
                             y.fillna(y.median(), inplace=True)
                         break
                 else:
