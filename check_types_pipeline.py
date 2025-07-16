@@ -1,5 +1,5 @@
-from src.data_manager import DataManager
-import src.core_engine_enhanced as ce
+from src.data.data_manager import DataManager
+import src.core.integration_layer as ce
 
 print('--- CARGA Y NORMALIZACION DE KPIS ---')
 dm = DataManager()

@@ -1,3 +1,7 @@
+import numpy as np
+import pandas as pd
+from typing import Optional, Any, Union
+import warnings
 """
 Configuración de logging para el sistema de análisis cuantitativo.
 """
@@ -9,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import traceback
+import io
 
 # Constantes de formato y nivel de logging
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -21,11 +26,12 @@ class UnicodeSafeStreamHandler(logging.StreamHandler):
         try:
             msg = self.format(record)
             # Encode como UTF-8 y luego decode para evitar problemas de encoding
-            if hasattr(sys.stdout, 'reconfigure'):
+            reconfigure_func = getattr(sys.stdout, 'reconfigure', None)
+            if reconfigure_func is not None:
                 # Python 3.7+
                 try:
-                    sys.stdout.reconfigure(encoding='utf-8')
-                except:
+                    reconfigure_func(encoding='utf-8')
+                except Exception:
                     pass
             stream = self.stream
             stream.write(msg)
@@ -121,15 +127,15 @@ def safe_print(message: str, use_unicode: bool = True) -> None:
     """
     try:
         if use_unicode:
-            print(message)
+            print(message) if message is not None else 0 if message is not None else 0
         else:
             # Versión ASCII segura
             safe_message = message.encode('ascii', errors='replace').decode('ascii')
-            print(safe_message)
+            print(safe_message) if safe_message is not None else 0 if safe_message is not None else 0
     except UnicodeEncodeError:
         # Fallback completo a ASCII
         safe_message = message.encode('ascii', errors='replace').decode('ascii')
-        print(safe_message)
+        print(safe_message) if safe_message is not None else 0 if safe_message is not None else 0
     except Exception:
         # Último recurso
         print(f"[INFO] {message}")
@@ -141,10 +147,19 @@ def configure_system_encoding():
         # Forzar UTF-8 en Windows
         if os.name == 'nt':
             os.environ['PYTHONIOENCODING'] = 'utf-8'
-            if hasattr(sys.stdout, 'reconfigure'):
-                sys.stdout.reconfigure(encoding='utf-8')
-            if hasattr(sys.stderr, 'reconfigure'):
-                sys.stderr.reconfigure(encoding='utf-8')
+            # Verificar si reconfigure está disponible
+            stdout_reconfigure = getattr(sys.stdout, 'reconfigure', None)
+            if stdout_reconfigure is not None:
+                try:
+                    stdout_reconfigure(encoding='utf-8')
+                except Exception:
+                    pass
+            stderr_reconfigure = getattr(sys.stderr, 'reconfigure', None)
+            if stderr_reconfigure is not None:
+                try:
+                    stderr_reconfigure(encoding='utf-8')
+                except Exception:
+                    pass
     except Exception:
         pass
 

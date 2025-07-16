@@ -1,174 +1,187 @@
 {
-    "trading_style": "Breakout",
-    "selected_kpis": {
-        "Strategy_Name": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Nombre de la Estrategia"
-        },
-        "Profit_factor": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Factor de Beneficio"
-        },
-        "Sharpe_Ratio": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Ratio de Sharpe"
-        },
-        "CalmarRatio": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Ratio de Calmar"
-        },
-        "Max_DD_%": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Máximo Drawdown (%)"
-        },
-        "Winning_Percent": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Porcentaje de Operaciones Ganadoras"
-        },
-        "Net_profit": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Beneficio Neto"
-        },
-        "Sharpe_Ratio_IS": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Ratio de Sharpe (IS)"
-        },
-        "Profit_Factor_IS": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Factor de Beneficio (IS)"
-        },
-        "Sharpe_Ratio_OOS": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Ratio de Sharpe (OOS)"
-        },
-        "Profit_Factor_OOS": {
-            "enabled": true,
-            "weight": 1.0,
-            "description": "Factor de Beneficio (OOS)"
-        }
+  "trading_style": "Day_Trading",
+  "selected_kpis": {
+    "Sharpe_Ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Sharpe"
     },
-    "trading_styles": {
-        "General": {
-            "description": "Estilo general de trading",
-            "kpi_weights": {},
-            "component_weights": {
-                "stability": 0.25,
-                "growth": 0.25,
-                "efficiency": 0.25,
-                "consistency": 0.25
-            },
-            "priority_kpis": [
-                "Sharpe_Ratio",
-                "Profit_factor",
-                "Max_DD_%"
-            ]
-        },
-        "Intraday": {
-            "description": "Trading intradía con alta frecuencia",
-            "kpi_weights": {},
-            "component_weights": {
-                "stability": 0.3,
-                "growth": 0.2,
-                "efficiency": 0.3,
-                "consistency": 0.2
-            },
-            "priority_kpis": [
-                "Sharpe_Ratio",
-                "Winrate",
-                "Avgtradedur",
-                "Exposure"
-            ]
-        },
-        "Swing": {
-            "description": "Trading swing con holding medio plazo",
-            "kpi_weights": {},
-            "component_weights": {
-                "stability": 0.25,
-                "growth": 0.25,
-                "efficiency": 0.2,
-                "consistency": 0.3
-            },
-            "priority_kpis": [
-                "Sortino_Ratio",
-                "RecoveryFactor",
-                "Max_Drawdown_Duration",
-                "Ulcer_Index_%"
-            ]
-        },
-        "Trend Following": {
-            "description": "Seguimiento de tendencias",
-            "kpi_weights": {},
-            "component_weights": {
-                "stability": 0.2,
-                "growth": 0.35,
-                "efficiency": 0.25,
-                "consistency": 0.2
-            },
-            "priority_kpis": [
-                "Marratio",
-                "Sortino_Ratio",
-                "Maxdddur",
-                "RecoveryFactor"
-            ]
-        },
-        "Mean Reversion": {
-            "description": "Reversión a la media",
-            "kpi_weights": {},
-            "component_weights": {
-                "stability": 0.3,
-                "growth": 0.2,
-                "efficiency": 0.25,
-                "consistency": 0.25
-            },
-            "priority_kpis": [
-                "Winrate",
-                "Expectancy",
-                "Avg_Mae",
-                "Avg_Mfe"
-            ]
-        },
-        "Breakout": {
-            "description": "Trading de rupturas",
-            "kpi_weights": {},
-            "component_weights": {
-                "stability": 0.25,
-                "growth": 0.3,
-                "efficiency": 0.2,
-                "consistency": 0.25
-            },
-            "priority_kpis": [
-                "Winrate",
-                "Payout_ratio",
-                "Max_Consec_Losses",
-                "RecoveryFactor"
-            ]
-        }
+    "Profit factor": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Factor de Beneficio"
     },
-    "performance": {
-        "chunk_size": 10000,
-        "max_workers": 4,
-        "cache_size": 128,
-        "gui_update_interval": 0.1
+    "Max_DD_%": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Máximo Drawdown"
     },
-    "validation": {
-        "strict_validation": true,
-        "imputation_method": "regime_based",
-        "outlier_detection": "isolation_forest",
-        "outlier_threshold": 0.1
+    "CAGR": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "CAGR"
     },
-    "cache": {
-        "enable_cache": true,
-        "cache_duration_hours": 24,
-        "cache_dir": "cache"
+    "RecoveryFactor": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Factor de Recuperación"
+    },
+    "VaR (95%)": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Value at Risk 95%"
+    },
+    "CVaR (95%)": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Conditional VaR 95%"
+    },
+    "Ulcer Index %": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Índice de Úlcera"
+    },
+    "CalmarRatio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Calmar"
+    },
+    "SQN": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "SQN Score"
+    },
+    "RINAIndex": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "RINA Index"
+    },
+    "Stagnation": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Estancamiento"
+    },
+    "Net profit": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Beneficio Neto"
+    },
+    "Winning Percent": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Porcentaje de Victorias"
+    },
+    "Avg. Bars in Trade": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Barras promedio en trade"
+    },
+    "Max Consec. Losses": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Máximas pérdidas consecutivas"
+    },
+    "Drawdown": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Drawdown"
+    },
+    "Max Drawdown Duration": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Duración máxima de drawdown"
+    },
+    "Exposure": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Exposición"
+    },
+    "Sortino Ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Sortino"
+    },
+    "Payout ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de payout"
+    },
+    "Expectancy": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Expectativa"
     }
+  },
+  "component_weights": {
+    "profitability": 0.4,
+    "risk": 0.35,
+    "consistency": 0.25
+  },
+  "trading_styles": {
+    "Intradía": {
+      "description": "KPIs optimizados para trading de alta frecuencia",
+      "extra_kpis": [
+        "Winning Percent",
+        "Avg. Bars in Trade",
+        "Exposure",
+        "SQN",
+        "Sortino Ratio",
+        "Max Consec. Losses",
+        "Drawdown",
+        "RecoveryFactor"
+      ]
+    },
+    "Swing": {
+      "description": "KPIs para operaciones de medio plazo",
+      "extra_kpis": [
+        "Profit factor",
+        "Max Drawdown Duration",
+        "RecoveryFactor",
+        "Exposure",
+        "VaR (95%)",
+        "CVaR (95%)",
+        "Ulcer Index %",
+        "CalmarRatio"
+      ]
+    },
+    "Tendencial": {
+      "description": "KPIs para estrategias de seguimiento de tendencias",
+      "extra_kpis": [
+        "Profit factor",
+        "Max Drawdown Duration",
+        "RecoveryFactor",
+        "CAGR",
+        "Sharpe Ratio",
+        "Profit factor",
+        "Sortino Ratio",
+        "Stagnation"
+      ]
+    },
+    "Reversión a la media": {
+      "description": "KPIs para estrategias de reversión",
+      "extra_kpis": [
+        "Expectancy",
+        "Avg. Bars in Trade",
+        "Winning Percent",
+        "Sortino Ratio",
+        "Max Drawdown Duration",
+        "Drawdown",
+        "Payout ratio",
+        "Ulcer Index %"
+      ]
+    },
+    "Breakout": {
+      "description": "KPIs para estrategias de breakout",
+      "extra_kpis": [
+        "Sortino Ratio",
+        "RecoveryFactor",
+        "Exposure",
+        "Stagnation",
+        "Stagnation",
+        "Drawdown",
+        "RINAIndex",
+        "VaR (95%)"
+      ]
+    }
+  }
 }

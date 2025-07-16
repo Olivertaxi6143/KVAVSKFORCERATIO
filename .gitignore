@@ -128,44 +128,159 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Project specific
+# ========================================
+# PROJECT SPECIFIC - KVAVSKFORCERATIO
+# ========================================
+
+# Logs and debugging
 *.log
 logs/
+debug_*.py
+test_*.py
+verificar_*.py
+plan_*.py
+fix_*.py
+cleanup_*.py
+correccion_*.py
+
+# Output and exports
 output/
 exports/
-cache/
 reports/
 backups/
+cache/
+temp/
+tmp/
+
+# Data files (trading specific)
+*.csv
+*.xlsx
+*.xls
+*.sqx
+*.json
+*.dat
+*.txt
+*.mql4
+*.mql5
+*.ex4
+*.ex5
+
+# Allow important configuration files
+!requirements.txt
+!README.md
+!LICENSE.txt
+!CHANGELOG.md
+!setup.py
+!main.py
+!run_*.py
+!config/*.json
+!config/*.yaml
+!config/*.yml
+
+# Project specific directories
 INPUTTEST/
 UPGRADE/
 CODIGOSDESARROLLOPROYECTO/
 IMPLEMENTACIONES/
 BACKUP/
 backups/
+FEEDBACK_*.txt
+AUDITORIA_*.txt
+RESUMEN_*.txt
+ROADMAP_*.md
 
-# Data files
-*.csv
-*.xlsx
-*.xls
-*.sqx
-*.json
-# Allow important text files
-!requirements.txt
-!README.txt
-!LICENSE.txt
-!CHANGELOG.txt
-
-# Temporary files
+# Temporary and development files
 *.tmp
 *.temp
 *~
+*.bak
+*.backup
+*.old
+*.orig
 
-# IDE files
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+desktop.ini
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Jupyter notebooks (if any)
+.ipynb_checkpoints/
+*.ipynb
+
+# Model files and weights
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.model
+*.weights
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files with sensitive data
+config_produccion.py
+trading_config.json
+secrets.json
+.env.local
+.env.production
+
+# Test artifacts
+test_results/
+coverage/
+.pytest_cache/
+.coverage
+
+# Documentation builds
+docs/_build/
+docs/site/
+
+# Package builds
+build/
+dist/
+*.egg-info/
+
+# Git hooks and scripts
+.git/hooks/
+*.sh
+*.bat
+
+# Machine learning specific
+models/
+checkpoints/
+runs/
+wandb/
+mlruns/
+
+# Trading platform specific
+MetaTrader/
+StrategyQuant/
+TradingView/
+*.set
+*.tpl
+*.mq4
+*.mq5 

@@ -14,7 +14,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath('src'))
 
 try:
-    from core_engine_enhanced import run_complete_analysis_with_gui_integration
+    from src.core.integration_layer import run_complete_analysis_with_gui_integration
     from data_manager import DataManager
     from asesor_financiero_inteligente import AsesorFinancieroInteligente
 except ImportError as e:
@@ -218,7 +218,7 @@ class AuditoriaKPIs:
                 df_filtrado = df_core.copy()
             
             # Normalizar para asesor financiero
-            from src.gui_enhanced_rank import normalizar_columnas_y_kpis
+            from src.data.data_manager import DataManager
             df_normalizado, kpis_asesor = normalizar_columnas_y_kpis(df_filtrado.copy())
             
             # Verificar KPIs disponibles

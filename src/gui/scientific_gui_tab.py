@@ -1,3 +1,5 @@
+from typing import Optional, Any, Union
+import warnings
 #!/usr/bin/env python3
 """
 Pestaña de Análisis Científico
@@ -26,7 +28,7 @@ from pathlib import Path
 import json
 
 # Importar módulos científicos
-from src.scientific_analysis import (
+from src.analysis.scientific_analysis import (
     ScientificAnalysisFilter,
     ScientificVisualizationManager,
     create_scientific_analysis_filter,
@@ -312,9 +314,9 @@ class ScientificAnalysisTab(ttk.Frame):
         
         # Iniciar análisis en hilo separado
         self.analysis_running = True
-        self.run_btn.config(state=tk.DISABLED)
-        self.stop_btn.config(state=tk.NORMAL)
-        self.status_label.config(text="Ejecutando análisis científico...")
+        self.run_btn.configure(state=tk.DISABLED)
+        self.stop_btn.configure(state=tk.NORMAL)
+        self.status_label.configure(text="Ejecutando análisis científico...")
         
         # Crear hilo para análisis
         analysis_thread = threading.Thread(
@@ -342,7 +344,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 # Actualizar progreso
                 progress = (i / total_analyses) * 100
                 self.progress_var.set(progress)
-                self.status_label.config(text=f"Ejecutando {analysis_type}...")
+                self.status_label.configure(text=f"Ejecutando {analysis_type}...")
                 
                 # Ejecutar análisis específico
                 analysis_result = self.scientific_analyzer.apply_scientific_analysis(analysis_type)
@@ -367,9 +369,9 @@ class ScientificAnalysisTab(ttk.Frame):
     def _analysis_completed(self, results: Dict[str, Any]):
         """Maneja la finalización del análisis científico."""
         self.analysis_running = False
-        self.run_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.status_label.config(text="Análisis científico completado")
+        self.run_btn.configure(state=tk.NORMAL)
+        self.stop_btn.configure(state=tk.DISABLED)
+        self.status_label.configure(text="Análisis científico completado")
         
         # Mostrar resultados
         self._display_results(results)
@@ -381,9 +383,9 @@ class ScientificAnalysisTab(ttk.Frame):
     def _analysis_error(self, error_message: str):
         """Maneja errores en el análisis científico."""
         self.analysis_running = False
-        self.run_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.status_label.config(text="Error en análisis científico")
+        self.run_btn.configure(state=tk.NORMAL)
+        self.stop_btn.configure(state=tk.DISABLED)
+        self.status_label.configure(text="Error en análisis científico")
         
         messagebox.showerror("Error en Análisis", 
                            f"Error durante el análisis científico:\n{error_message}")
@@ -391,9 +393,9 @@ class ScientificAnalysisTab(ttk.Frame):
     def _stop_analysis(self):
         """Detiene el análisis científico en progreso."""
         self.analysis_running = False
-        self.run_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.status_label.config(text="Análisis detenido por el usuario")
+        self.run_btn.configure(state=tk.NORMAL)
+        self.stop_btn.configure(state=tk.DISABLED)
+        self.status_label.configure(text="Análisis detenido por el usuario")
         
         logger.info("⏹️ Análisis científico detenido por el usuario")
     
@@ -424,7 +426,21 @@ class ScientificAnalysisTab(ttk.Frame):
                 
                 # Mostrar métricas específicas según el tipo de análisis
                 if analysis_type == "predictability" and "predictability_score" in result:
-                    results_text += f"🎯 Score de Predictibilidad: {result['predictability_score']:.3f}\n"
+                    predictability_score = result['predictability_score']
+                    results_text += f"🎯 Score de Predictibilidad: {predictability_score:.3f}\n"
+                    
+                    # Interpretación de la predictibilidad
+                    interpretation = self._interpret_predictability_score(predictability_score)
+                    results_text += f"📊 Interpretación: {interpretation['level']}\n"
+                    results_text += f"💡 Recomendación: {interpretation['recommendation']}\n"
+                    
+                    # Detalles adicionales si están disponibles
+                    if 'predictability_details' in result:
+                        details = result['predictability_details']
+                        results_text += f"📈 Consistencia IS/OOS: {details.get('is_oos_consistency', 0):.1f}%\n"
+                        results_text += f"🛡️ Robustez Temporal: {details.get('temporal_robustness', 0):.1f}%\n"
+                        results_text += f"🔍 Detección Sobreajuste: {details.get('overfitting_detection', 0):.1f}%\n"
+                        results_text += f"⚖️ Estabilidad: {details.get('stability_score', 0):.1f}%\n"
                 
                 if analysis_type == "robustness" and "stability_score" in result:
                     results_text += f"🛡️ Score de Estabilidad: {result['stability_score']:.3f}\n"
@@ -467,7 +483,7 @@ class ScientificAnalysisTab(ttk.Frame):
         """
         
         details_text.insert(1.0, details_content)
-        details_text.config(state=tk.DISABLED)
+        details_text.configure(state=tk.DISABLED)
     
     def _show_correlation_matrix(self):
         """Muestra la matriz de correlación."""
@@ -479,7 +495,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 return
             
             # Actualizar label con información
-            self.viz_label.config(text=f"📊 Matriz de Correlación generada\n"
+            self.viz_label.configure(text=f"📊 Matriz de Correlación generada\n"
                                       f"Estrategias analizadas: {results.get('filtered_strategies_count', 0)}")
             
             logger.info("✅ Matriz de correlación mostrada")
@@ -498,7 +514,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 return
             
             # Actualizar label con información
-            self.viz_label.config(text=f"📈 Distribución de Scores generada\n"
+            self.viz_label.configure(text=f"📈 Distribución de Scores generada\n"
                                       f"Estrategias analizadas: {results.get('filtered_strategies_count', 0)}")
             
             logger.info("✅ Distribución de scores mostrada")
@@ -517,7 +533,7 @@ class ScientificAnalysisTab(ttk.Frame):
                 return
             
             # Actualizar label con información
-            self.viz_label.config(text=f"📊 Métricas de Rendimiento generadas\n"
+            self.viz_label.configure(text=f"📊 Métricas de Rendimiento generadas\n"
                                       f"Estrategias analizadas: {results.get('filtered_strategies_count', 0)}")
             
             logger.info("✅ Métricas de rendimiento mostradas")
@@ -601,9 +617,43 @@ class ScientificAnalysisTab(ttk.Frame):
         """Limpia los resultados actuales."""
         self.current_results = {}
         self.results_text.delete(1.0, tk.END)
-        self.viz_label.config(text="Seleccione un tipo de visualización para comenzar")
+        self.viz_label.configure(text="Seleccione un tipo de visualización para comenzar")
         
         messagebox.showinfo("Limpiado", "Resultados científicos limpiados")
+
+    def _interpret_predictability_score(self, score: float) -> dict:
+        """
+        Interpreta el score de predictibilidad y proporciona recomendaciones amigables y lógicas.
+        Args:
+            score: Score de predictibilidad (0-100)
+        Returns:
+            Dict con nivel y recomendación
+        """
+        if score >= 90:
+            return {
+                "level": "🟢 EXCELENTE",
+                "recommendation": "Muy alta predictibilidad. Estrategia sobresaliente para trading real."
+            }
+        elif score >= 80:
+            return {
+                "level": "🟡 BUENA",
+                "recommendation": "Buena predictibilidad. Confiable, pero monitoree su rendimiento."
+            }
+        elif score >= 70:
+            return {
+                "level": "🟠 ACEPTABLE",
+                "recommendation": "Aceptable. Úsela con precaución y valide regularmente."
+            }
+        elif score >= 60:
+            return {
+                "level": "🔴 BAJA",
+                "recommendation": "Baja predictibilidad. Requiere validación adicional antes de operar."
+            }
+        else:
+            return {
+                "level": "⚫ MUY BAJA",
+                "recommendation": "No recomendable para trading real sin mejoras significativas."
+            }
 
 
 def create_scientific_tab(parent, data_manager, filtered_strategies_df: pd.DataFrame) -> ScientificAnalysisTab:
