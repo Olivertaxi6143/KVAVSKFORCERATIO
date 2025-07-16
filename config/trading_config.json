@@ -1,0 +1,187 @@
+{
+  "trading_style": "Day_Trading",
+  "selected_kpis": {
+    "Sharpe_Ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Sharpe"
+    },
+    "Profit factor": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Factor de Beneficio"
+    },
+    "Max_DD_%": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Máximo Drawdown"
+    },
+    "CAGR": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "CAGR"
+    },
+    "RecoveryFactor": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Factor de Recuperación"
+    },
+    "VaR (95%)": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Value at Risk 95%"
+    },
+    "CVaR (95%)": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Conditional VaR 95%"
+    },
+    "Ulcer Index %": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Índice de Úlcera"
+    },
+    "CalmarRatio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Calmar"
+    },
+    "SQN": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "SQN Score"
+    },
+    "RINAIndex": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "RINA Index"
+    },
+    "Stagnation": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Estancamiento"
+    },
+    "Net profit": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Beneficio Neto"
+    },
+    "Winning Percent": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Porcentaje de Victorias"
+    },
+    "Avg. Bars in Trade": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Barras promedio en trade"
+    },
+    "Max Consec. Losses": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Máximas pérdidas consecutivas"
+    },
+    "Drawdown": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Drawdown"
+    },
+    "Max Drawdown Duration": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Duración máxima de drawdown"
+    },
+    "Exposure": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Exposición"
+    },
+    "Sortino Ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Sortino"
+    },
+    "Payout ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de payout"
+    },
+    "Expectancy": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Expectativa"
+    }
+  },
+  "component_weights": {
+    "profitability": 0.4,
+    "risk": 0.35,
+    "consistency": 0.25
+  },
+  "trading_styles": {
+    "Intradía": {
+      "description": "KPIs optimizados para trading de alta frecuencia",
+      "extra_kpis": [
+        "Winning Percent",
+        "Avg. Bars in Trade",
+        "Exposure",
+        "SQN",
+        "Sortino Ratio",
+        "Max Consec. Losses",
+        "Drawdown",
+        "RecoveryFactor"
+      ]
+    },
+    "Swing": {
+      "description": "KPIs para operaciones de medio plazo",
+      "extra_kpis": [
+        "Profit factor",
+        "Max Drawdown Duration",
+        "RecoveryFactor",
+        "Exposure",
+        "VaR (95%)",
+        "CVaR (95%)",
+        "Ulcer Index %",
+        "CalmarRatio"
+      ]
+    },
+    "Tendencial": {
+      "description": "KPIs para estrategias de seguimiento de tendencias",
+      "extra_kpis": [
+        "Profit factor",
+        "Max Drawdown Duration",
+        "RecoveryFactor",
+        "CAGR",
+        "Sharpe Ratio",
+        "Profit factor",
+        "Sortino Ratio",
+        "Stagnation"
+      ]
+    },
+    "Reversión a la media": {
+      "description": "KPIs para estrategias de reversión",
+      "extra_kpis": [
+        "Expectancy",
+        "Avg. Bars in Trade",
+        "Winning Percent",
+        "Sortino Ratio",
+        "Max Drawdown Duration",
+        "Drawdown",
+        "Payout ratio",
+        "Ulcer Index %"
+      ]
+    },
+    "Breakout": {
+      "description": "KPIs para estrategias de breakout",
+      "extra_kpis": [
+        "Sortino Ratio",
+        "RecoveryFactor",
+        "Exposure",
+        "Stagnation",
+        "Stagnation",
+        "Drawdown",
+        "RINAIndex",
+        "VaR (95%)"
+      ]
+    }
+  }
+}
