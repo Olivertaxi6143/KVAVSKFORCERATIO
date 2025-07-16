@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
-    from gui_enhanced_rank import EnhancedRankGUI
+    from src.gui.main_window import MainWindow as EnhancedRankGUI
     
     print("🚀 Iniciando GUI KFORCEVSQVARATIOS...")
     print("📊 Sistema de Análisis Cuantitativo")

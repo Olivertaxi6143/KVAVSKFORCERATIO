@@ -25,8 +25,8 @@ def main():
         print("✅ numpy importado")
         
         print("📦 Importando módulos del proyecto...")
-        from core_engine_enhanced import FactorKElite96Enhanced
-        print("✅ core_engine_enhanced importado")
+        from src.core.integration_layer import FactorKElite96Enhanced
+        print("✅ integration_layer importado")
         
         from data_manager import DataManager
         print("✅ data_manager importado")
@@ -35,7 +35,7 @@ def main():
         print("✅ asesor_financiero_inteligente importado")
         
         print("📦 Importando GUI...")
-        from gui_enhanced_rank import EnhancedRankGUI
+        from src.gui.main_window import MainWindow as EnhancedRankGUI
         print("✅ GUI importada")
         
         print("🚀 Iniciando aplicación GUI...")
