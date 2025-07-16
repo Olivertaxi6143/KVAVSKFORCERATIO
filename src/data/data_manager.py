@@ -40,6 +40,18 @@ from datetime import datetime
 from .data_utils import extract_float_from_tuple, calculate_basic_stats, detect_outliers_iqr
 from .column_mapping import normalize_column_names
 
+# Importar optimizaciones de performance
+try:
+    from core.utils.cache_manager import cache_manager
+    from core.utils.memory_manager import memory_manager
+    from core.utils.lazy_loader import lazy_loader
+    PERFORMANCE_OPTIMIZATIONS_AVAILABLE = True
+except ImportError:
+    PERFORMANCE_OPTIMIZATIONS_AVAILABLE = False
+    cache_manager = None
+    memory_manager = None
+    lazy_loader = None
+
 # Configurar logging
 try:
     from core.logger_config import setup_logger
@@ -77,6 +89,9 @@ class DataManager:
         self._market_data: pd.DataFrame | None = None
         self._kpis_data: pd.DataFrame | None = None
         self._consolidated_data: Dict[str, Any] | None = None
+        
+        # Inicializar optimizaciones de performance
+        self._init_performance_optimizations()
         
         # Estado de carga
         self._load_status = {
@@ -183,6 +198,28 @@ class DataManager:
         
         # NO cargar datos automáticamente para evitar duplicaciones
         # self._auto_load_data()
+    
+    def _init_performance_optimizations(self):
+        """Inicializa las optimizaciones de performance."""
+        try:
+            if PERFORMANCE_OPTIMIZATIONS_AVAILABLE:
+                # Inicializar cache manager
+                self.cache_manager = cache_manager
+                self.memory_manager = memory_manager
+                self.lazy_loader = lazy_loader
+                
+                self.logger.info("✅ Optimizaciones de performance habilitadas")
+            else:
+                self.cache_manager = None
+                self.memory_manager = None
+                self.lazy_loader = None
+                self.logger.warning("⚠️ Optimizaciones de performance no disponibles")
+                
+        except Exception as e:
+            self.logger.warning(f"Error inicializando optimizaciones: {e}")
+            self.cache_manager = None
+            self.memory_manager = None
+            self.lazy_loader = None
         
     def _auto_load_data(self):
         """Carga datos automáticamente si están disponibles."""
@@ -312,6 +349,13 @@ class DataManager:
         try:
             self.logger.info(f"Cargando datos desde: {file_path}")
             
+            # Verificar cache si está disponible
+            if self.cache_manager:
+                cached_result = self.cache_manager.get(file_path, "data_load_pipeline")
+                if cached_result is not None:
+                    self.logger.info(f"✅ Datos cargados desde cache: {file_path}")
+                    return cached_result
+            
             # Cargar archivo
             df = self._load_file_by_format(file_path)
             
@@ -320,6 +364,11 @@ class DataManager:
                 return pd.DataFrame()
             
             self.logger.info(f"Archivo cargado exitosamente: {len(df)} filas, {len(df.columns)} columnas")
+            
+            # Optimizar memoria si está disponible
+            if self.memory_manager and len(df) > 1000:
+                df = self.memory_manager.optimize_dataframe(df)
+                self.logger.info("✅ DataFrame optimizado para memoria")
             
             # Normalizar nombres de columnas (preservando datos reales)
             df = self._normalize_column_names(df)
@@ -345,6 +394,11 @@ class DataManager:
             }
             df.rename(columns={k: v for k, v in required_case_map.items() if k in df.columns}, inplace=True)
             self.logger.info(f"Columnas finales tras renombrado crítico: {list(df.columns)}")
+
+            # Guardar en cache si está disponible
+            if self.cache_manager:
+                self.cache_manager.set(file_path, "data_load_pipeline", df)
+                self.logger.info("✅ Datos guardados en cache")
 
             self.logger.info(f"Datos cargados exitosamente: {len(df)} filas, {len(df.columns)} columnas")
             return df
