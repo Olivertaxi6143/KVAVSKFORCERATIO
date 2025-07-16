@@ -1,1450 +1,1031 @@
-import numpy as np
-from typing import Optional, Any, Union
-import warnings
 """
-Main Window - Ventana Principal Modularizada
-
-Este módulo contiene la ventana principal que integra todos los pasos
-del wizard de análisis de estrategias de trading.
+Main Window Module
+Ventana principal de la aplicación QVA Strategy Studio
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
-import logging
+from tkinter import ttk, messagebox, filedialog
 import pandas as pd
-from typing import Optional, Dict, Any, Callable
+import numpy as np
+from typing import Dict, List, Any, Optional
+import logging
 from pathlib import Path
+import threading
+import queue
 
-# Importar módulos de pasos
-from .steps.step1_load import Step1LoadFrame
-from .steps.step2_configure import Step2ConfigureFrame
+# Importar módulos de la aplicación
+from src.data.data_manager import DataManager
+# from src.analysis.scientific_analysis import ScientificAnalysis  # Comentado temporalmente
+from src.gui.advanced_filters_popup import create_advanced_filters_popup
+from src.gui.interactive_charts import create_interactive_chart_manager
+from src.gui.strategy_comparison import create_strategy_comparison_manager
+from src.gui.advanced_export import create_advanced_export_manager
+# Añadir import del exportador .sqx
+from src.data.sqx_exporter import SQXExporter
 
-# Importar módulos de análisis avanzado
-from src.analysis.tail_risk_metrics import TailRiskAnalyzer
-from src.analysis.axi_select_analysis import AXISelectPredictiveSystem, ModelType
-from src.analysis.scientific_analysis import ScientificAnalysisFilter, ScientificVisualizationManager, AnalysisType
+logger = logging.getLogger(__name__)
 
-# Importar utilidades GUI
-from .utils import (
-    create_styled_button, create_styled_label, show_info_message,
-    show_error_message, GUIAnalysisError, create_menu_bar, center_window
-)
-
-# Configurar logging
-try:
-    from core.logger_config import setup_logger
-    logger = setup_logger(__name__)
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-
-
-class MainWindow(tk.Tk):
+class MainWindow:
     """
-    Ventana principal modularizada del sistema de análisis cuantitativo.
+    Ventana principal de la aplicación QVA Strategy Studio.
     
-    Esta clase reemplaza la clase monolítica EnhancedRankGUI y organiza
-    la interfaz en módulos separados para mejor mantenibilidad.
+    Características:
+    - Interfaz moderna y profesional
+    - Carga y análisis de estrategias
+    - Visualización de resultados
+    - Exportación de datos
+    - Funcionalidades avanzadas integradas
     """
     
-    def __init__(self, *args, **kwargs):
-        """
-        Inicializa la ventana principal.
+    def __init__(self):
+        """Inicializa la ventana principal."""
+        self.root = tk.Tk()
+        self.root.title("QVA Strategy Studio - Análisis Cuantitativo Avanzado")
+        self.root.geometry("1400x900")
+        self.root.state('zoomed')  # Maximizar en Windows
         
-        Args:
-            *args: Argumentos para tk.Tk
-            **kwargs: Argumentos adicionales
-        """
-        super().__init__(*args, **kwargs)
-        
-        # Configurar ventana principal
-        self.title("QVA Strategy Studio - Análisis Cuantitativo")
-        self.geometry("1200x800")
-        center_window(self, 1200, 800)
+        # Configurar estilo
+        self._setup_style()
         
         # Inicializar componentes
-        self._init_components()
-        self._init_data_managers()
-        self._init_variables()
-        self._build_interface()
-        self._setup_logging()
+        self.data_manager = DataManager()
+        # self.scientific_analysis = ScientificAnalysis()  # Comentado temporalmente
         
-        logger.info("✅ MainWindow inicializada correctamente")
-    
-    def _init_components(self):
-        """Inicializa los componentes principales."""
-        # Notebook principal
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # Pasos del wizard
-        self.wizard_steps = {}
-        self.current_step = 1
-        
-        # Frames de pasos
-        self.step_frames = {}
-        
-        # Datos compartidos entre pasos
-        self.shared_data: Dict[str, Any] = {
-            'loaded_data': None,
-            'configuration': None,
-            'analysis_results': None,
-            'filtered_results': None,
-            'advisor_results': None
-        }
-    
-    def _init_data_managers(self):
-        """Inicializa los gestores de datos."""
-        try:
-            # DataManager
-            from data.data_manager import DataManager
-            self.data_manager = DataManager()
-            
-            # ConfigManager
-            from src.core.config.config_manager import ConfigManagerEnhanced as ConfigManager
-            self.config_manager = ConfigManager()
-            
-            logger.info("✅ Gestores de datos inicializados")
-            
-        except Exception as e:
-            logger.error(f"❌ Error inicializando gestores de datos: {e}")
-            self.data_manager = None
-            self.config_manager = None
-    
-    def _init_variables(self):
-        """Inicializa variables de la interfaz."""
-        # Variables de archivos
-        self.kpi_file_var = tk.StringVar()
-        self.strategies_folder_var = tk.StringVar()
-        self.market_file_var = tk.StringVar()
-        self.destination_folder_var = tk.StringVar()
-        
-        # Variables de configuración
-        self.trading_style_var = tk.StringVar(value="Swing")
-        self.alpha_var = tk.DoubleVar(value=0.8)
-        self.percentile_var = tk.IntVar(value=80)
-        self.top_n_var = tk.IntVar(value=20)
+        # Gestores avanzados
+        self.advanced_filters = None
+        self.chart_manager = None
+        self.comparison_manager = None
+        self.export_manager = None
         
         # Variables de estado
-        self.analysis_running = False
-        self.data_loaded = False
-        self.config_ready = False
+        self.current_data = None
+        self.filtered_data = None
+        self.selected_strategies = []
+        
+        # Cola para comunicación entre hilos
+        self.message_queue = queue.Queue()
+        
+        # Construir interfaz
+        self._build_interface()
+        self._setup_menu()
+        self._setup_status_bar()
+        
+        # Configurar callbacks
+        self._setup_callbacks()
+        
+        # Inicializar gestores avanzados
+        self._initialize_advanced_managers()
+        
+        logger.info("✅ MainWindow inicializada")
+    
+    def _setup_style(self):
+        """Configura el estilo de la aplicación."""
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # Configurar colores
+        style.configure('Title.TLabel', font=('Arial', 16, 'bold'))
+        style.configure('Header.TLabel', font=('Arial', 12, 'bold'))
+        style.configure('Success.TLabel', foreground='green')
+        style.configure('Error.TLabel', foreground='red')
+        style.configure('Warning.TLabel', foreground='orange')
     
     def _build_interface(self):
         """Construye la interfaz principal."""
-        # Crear menú
-        self._create_menu()
+        # Frame principal
+        main_frame = ttk.Frame(self.root)
+        main_frame.pack(fill="both", expand=True)
         
-        # Crear pasos del wizard
-        self._create_wizard_steps()
+        # Barra de herramientas
+        self._build_toolbar(main_frame)
         
-        # Crear pestañas adicionales
-        self._create_additional_tabs()
+        # Frame de contenido principal
+        content_frame = ttk.Frame(main_frame)
+        content_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Configurar navegación
-        self._setup_navigation()
+        # Panel izquierdo (navegación)
+        self._build_left_panel(content_frame)
+        
+        # Panel central (contenido principal)
+        self._build_center_panel(content_frame)
+        
+        # Panel derecho (detalles y controles)
+        self._build_right_panel(content_frame)
     
-    def _create_menu(self):
-        """Crea la barra de menú."""
-        self.menubar = create_menu_bar(self)
+    def _build_toolbar(self, parent: ttk.Frame):
+        """Construye la barra de herramientas."""
+        toolbar = ttk.Frame(parent)
+        toolbar.pack(fill="x", padx=5, pady=2)
+        
+        # Botones principales
+        ttk.Button(toolbar, text="📁 Cargar Datos", 
+                  command=self._load_data).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="🔍 Filtros Avanzados", 
+                  command=self._show_advanced_filters).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="📊 Gráficos Interactivos", 
+                  command=self._show_interactive_charts).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="⚖️ Comparar Estrategias", 
+                  command=self._show_strategy_comparison).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="📤 Exportación Avanzada", 
+                  command=self._show_advanced_export).pack(side="left", padx=2)
+        
+        # Separador
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=5)
+        
+        # Botones de análisis
+        ttk.Button(toolbar, text="🧪 Análisis Científico", 
+                  command=self._run_scientific_analysis).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="📈 Tail Risk Analysis", 
+                  command=self._run_tail_risk_analysis).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="🎯 AXISelect Analysis", 
+                  command=self._run_axis_analysis).pack(side="left", padx=2)
+        
+        # Separador
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=5)
+        
+        # Botones de utilidades
+        ttk.Button(toolbar, text="🔄 Actualizar", 
+                  command=self._refresh_data).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="💾 Guardar Configuración", 
+                  command=self._save_configuration).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="📁 Exportar .SQX", 
+                  command=self._export_sqx_files).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="❓ Ayuda", 
+                  command=self._show_help).pack(side="right", padx=2)
     
-    def _create_wizard_steps(self):
-        """Crea los pasos del wizard."""
-        # Paso 1: Cargar Datos
-        self._create_step1()
+    def _build_left_panel(self, parent: ttk.Frame):
+        """Construye el panel izquierdo."""
+        left_frame = ttk.Frame(parent, width=250)
+        left_frame.pack(side="left", fill="y", padx=(0, 5))
+        left_frame.pack_propagate(False)
         
-        # Paso 2: Configurar Análisis
-        self._create_step2()
+        # Título del panel
+        ttk.Label(left_frame, text="📋 Navegación", 
+                 style="Header.TLabel").pack(pady=(0, 10))
         
-        # Paso 3: Ejecutar Análisis (placeholder)
-        self._create_step3()
+        # Lista de pasos
+        steps_frame = ttk.LabelFrame(left_frame, text="Pasos del Análisis")
+        steps_frame.pack(fill="x", pady=5)
         
-        # Paso 4: Resultados y Filtrado (placeholder)
-        self._create_step4()
+        self.steps_listbox = tk.Listbox(steps_frame, height=15)
+        self.steps_listbox.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # Paso 5: Asesor Inteligente (placeholder)
-        self._create_step5()
+        # Agregar pasos
+        steps = [
+            "1. Cargar datos de estrategias",
+            "2. Configurar filtros básicos",
+            "3. Ejecutar análisis científico",
+            "4. Analizar Tail Risk",
+            "5. Aplicar AXISelect",
+            "6. Comparar estrategias",
+            "7. Generar gráficos",
+            "8. Exportar resultados"
+        ]
         
-        # Paso 6: Exportar y Reportar (placeholder)
-        self._create_step6()
+        for step in steps:
+            self.steps_listbox.insert(tk.END, step)
+        
+        # Panel de filtros rápidos
+        filters_frame = ttk.LabelFrame(left_frame, text="Filtros Rápidos")
+        filters_frame.pack(fill="x", pady=5)
+        
+        # Filtro por Factor K
+        ttk.Label(filters_frame, text="Factor K mínimo:").pack(anchor="w", padx=5, pady=2)
+        self.factor_k_var = tk.DoubleVar(value=7.0)
+        factor_k_scale = ttk.Scale(filters_frame, from_=0, to=10, 
+                                  variable=self.factor_k_var, orient="horizontal")
+        factor_k_scale.pack(fill="x", padx=5, pady=2)
+        
+        # Filtro por Sharpe
+        ttk.Label(filters_frame, text="Sharpe mínimo:").pack(anchor="w", padx=5, pady=2)
+        self.sharpe_var = tk.DoubleVar(value=1.0)
+        sharpe_scale = ttk.Scale(filters_frame, from_=0, to=5, 
+                                variable=self.sharpe_var, orient="horizontal")
+        sharpe_scale.pack(fill="x", padx=5, pady=2)
+        
+        # Botón aplicar filtros
+        ttk.Button(filters_frame, text="Aplicar Filtros", 
+                  command=self._apply_quick_filters).pack(pady=5)
     
-    def _create_step1(self):
-        """Crea el Paso 1: Cargar Datos."""
-        try:
-            step1_frame = Step1LoadFrame(
-                self.notebook,
-                data_manager=self.data_manager,
-                on_data_loaded=self._on_data_loaded,
-                on_next_step=lambda: self._go_to_step(2)
-            )
-            
-            self.notebook.add(step1_frame, text="1️⃣ Cargar Datos")
-            self.wizard_steps[1] = step1_frame
-            self.step_frames['step1'] = step1_frame
-            
-            logger.info("✅ Paso 1 creado correctamente")
-            
-        except Exception as e:
-            logger.error(f"❌ Error creando Paso 1: {e}")
-            self._create_step1_placeholder()
-    
-    def _create_step2(self):
-        """Crea el Paso 2: Configurar Análisis."""
-        try:
-            step2_frame = Step2ConfigureFrame(
-                self.notebook,
-                config_manager=self.config_manager,
-                on_config_changed=self._on_config_changed,
-                on_next_step=lambda: self._go_to_step(3),
-                on_previous_step=lambda: self._go_to_step(1)
-            )
-            
-            self.notebook.add(step2_frame, text="2️⃣ Configurar Análisis")
-            self.wizard_steps[2] = step2_frame
-            self.step_frames['step2'] = step2_frame
-            
-            logger.info("✅ Paso 2 creado correctamente")
-            
-        except Exception as e:
-            logger.error(f"❌ Error creando Paso 2: {e}")
-            self._create_step2_placeholder()
-    
-    def _create_step3(self):
-        """Crea el Paso 3: Ejecutar Análisis (placeholder)."""
-        step3_frame = ttk.Frame(self.notebook)
+    def _build_center_panel(self, parent: ttk.Frame):
+        """Construye el panel central."""
+        center_frame = ttk.Frame(parent)
+        center_frame.pack(side="left", fill="both", expand=True)
         
-        # Título
-        title_label = ttk.Label(
-            step3_frame, 
-            text="🚀 PASO 3: EJECUTAR ANÁLISIS", 
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(pady=20)
+        # Notebook para pestañas
+        self.notebook = ttk.Notebook(center_frame)
+        self.notebook.pack(fill="both", expand=True)
         
-        # Descripción
-        desc_label = ttk.Label(
-            step3_frame, 
-            text="Este paso será implementado próximamente...", 
-            font=("Arial", 10)
-        )
-        desc_label.pack(pady=10)
+        # Pestaña de datos principales
+        self._create_main_data_tab()
         
-        self.notebook.add(step3_frame, text="3️⃣ Ejecutar Análisis")
-        self.wizard_steps[3] = step3_frame
-        self.step_frames['step3'] = step3_frame
-    
-    def _create_step4(self):
-        """Crea el Paso 4: Resultados y Filtrado (placeholder)."""
-        step4_frame = ttk.Frame(self.notebook)
+        # Pestaña de análisis científico
+        self._create_scientific_analysis_tab()
         
-        # Título
-        title_label = ttk.Label(
-            step4_frame, 
-            text="📊 PASO 4: RESULTADOS Y FILTRADO", 
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(pady=20)
-        
-        # Descripción
-        desc_label = ttk.Label(
-            step4_frame, 
-            text="Este paso será implementado próximamente...", 
-            font=("Arial", 10)
-        )
-        desc_label.pack(pady=10)
-        
-        self.notebook.add(step4_frame, text="4️⃣ Resultados")
-        self.wizard_steps[4] = step4_frame
-        self.step_frames['step4'] = step4_frame
-    
-    def _create_step5(self):
-        """Crea el Paso 5: Asesor Inteligente (placeholder)."""
-        step5_frame = ttk.Frame(self.notebook)
-        
-        # Título
-        title_label = ttk.Label(
-            step5_frame, 
-            text="🎯 PASO 5: ASESOR INTELIGENTE", 
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(pady=20)
-        
-        # Descripción
-        desc_label = ttk.Label(
-            step5_frame, 
-            text="Este paso será implementado próximamente...", 
-            font=("Arial", 10)
-        )
-        desc_label.pack(pady=10)
-        
-        self.notebook.add(step5_frame, text="5️⃣ Asesor")
-        self.wizard_steps[5] = step5_frame
-        self.step_frames['step5'] = step5_frame
-    
-    def _create_step6(self):
-        """Crea el Paso 6: Exportar y Reportar (placeholder)."""
-        step6_frame = ttk.Frame(self.notebook)
-        
-        # Título
-        title_label = ttk.Label(
-            step6_frame, 
-            text="📤 PASO 6: EXPORTAR Y REPORTAR", 
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(pady=20)
-        
-        # Descripción
-        desc_label = ttk.Label(
-            step6_frame, 
-            text="Este paso será implementado próximamente...", 
-            font=("Arial", 10)
-        )
-        desc_label.pack(pady=10)
-        
-        self.notebook.add(step6_frame, text="6️⃣ Exportar")
-        self.wizard_steps[6] = step6_frame
-        self.step_frames['step6'] = step6_frame
-    
-    def _create_step1_placeholder(self):
-        """Crea un placeholder para el Paso 1 si falla la carga."""
-        step1_frame = ttk.Frame(self.notebook)
-        
-        # Título
-        title_label = ttk.Label(
-            step1_frame, 
-            text="📁 PASO 1: CARGAR DATOS", 
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(pady=20)
-        
-        # Error
-        error_label = ttk.Label(
-            step1_frame, 
-            text="Error cargando el módulo del Paso 1", 
-            font=("Arial", 10),
-            foreground="red"
-        )
-        error_label.pack(pady=10)
-        
-        self.notebook.add(step1_frame, text="1️⃣ Cargar Datos")
-        self.wizard_steps[1] = step1_frame
-    
-    def _create_step2_placeholder(self):
-        """Crea un placeholder para el Paso 2 si falla la carga."""
-        step2_frame = ttk.Frame(self.notebook)
-        
-        # Título
-        title_label = ttk.Label(
-            step2_frame, 
-            text="⚙️ PASO 2: CONFIGURAR ANÁLISIS", 
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(pady=20)
-        
-        # Error
-        error_label = ttk.Label(
-            step2_frame, 
-            text="Error cargando el módulo del Paso 2", 
-            font=("Arial", 10),
-            foreground="red"
-        )
-        error_label.pack(pady=10)
-        
-        self.notebook.add(step2_frame, text="2️⃣ Configurar Análisis")
-        self.wizard_steps[2] = step2_frame
-    
-    def _create_additional_tabs(self):
-        """Crea pestañas adicionales."""
-        # Pestaña de Log
-        self._create_log_tab()
-        
-        # Pestaña de Ayuda
-        self._create_help_tab()
-        
-        # Pestaña de Régimen Adaptativo
-        self._create_regime_tab()
-
-        # Pestaña de Análisis de Tail Risk
+        # Pestaña de Tail Risk
         self._create_tail_risk_tab()
         
-        # Pestaña de Análisis AXISelect
-        self._create_axi_select_tab()
+        # Pestaña de AXISelect
+        self._create_axis_tab()
         
-        # Pestaña de Análisis Científico
-        self._create_scientific_analysis_tab()
+        # Pestaña de comparación
+        self._create_comparison_tab()
+        
+        # Pestaña de gráficos
+        self._create_charts_tab()
     
-    def _create_log_tab(self):
-        """Crea la pestaña de log."""
-        log_frame = ttk.Frame(self.notebook)
+    def _build_right_panel(self, parent: ttk.Frame):
+        """Construye el panel derecho."""
+        right_frame = ttk.Frame(parent, width=300)
+        right_frame.pack(side="right", fill="y", padx=(5, 0))
+        right_frame.pack_propagate(False)
         
-        # Título
-        title_label = ttk.Label(
-            log_frame, 
-            text="📝 Log de Análisis", 
-            font=("Arial", 14, "bold")
-        )
-        title_label.pack(pady=10)
+        # Título del panel
+        ttk.Label(right_frame, text="📊 Detalles y Controles", 
+                 style="Header.TLabel").pack(pady=(0, 10))
         
-        # Área de texto para log
-        self.log_text = tk.Text(
-            log_frame, 
-            height=20, 
-            width=80,
-            bg="black",
-            fg="white",
-            font=("Consolas", 9)
-        )
-        self.log_text.pack(padx=10, pady=10, fill="both", expand=True)
+        # Panel de estadísticas
+        stats_frame = ttk.LabelFrame(right_frame, text="Estadísticas")
+        stats_frame.pack(fill="x", pady=5)
         
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
-        scrollbar.pack(side="right", fill="y")
-        self.log_text.configure(yscrollcommand=scrollbar.set)
+        self.stats_text = tk.Text(stats_frame, height=8, width=35)
+        self.stats_text.pack(fill="both", expand=True, padx=5, pady=5)
         
-        self.notebook.add(log_frame, text="📝 Log")
+        # Panel de selección de estrategias
+        selection_frame = ttk.LabelFrame(right_frame, text="Estrategias Seleccionadas")
+        selection_frame.pack(fill="x", pady=5)
+        
+        self.selected_listbox = tk.Listbox(selection_frame, height=6)
+        self.selected_listbox.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Botones de selección
+        selection_buttons_frame = ttk.Frame(selection_frame)
+        selection_buttons_frame.pack(fill="x", padx=5, pady=5)
+        
+        ttk.Button(selection_buttons_frame, text="Seleccionar Todo", 
+                  command=self._select_all_strategies).pack(side="left", padx=2)
+        ttk.Button(selection_buttons_frame, text="Limpiar", 
+                  command=self._clear_selection).pack(side="left", padx=2)
+        
+        # Panel de acciones rápidas
+        actions_frame = ttk.LabelFrame(right_frame, text="Acciones Rápidas")
+        actions_frame.pack(fill="x", pady=5)
+        
+        ttk.Button(actions_frame, text="📊 Ver Detalles", 
+                  command=self._show_strategy_details).pack(fill="x", padx=5, pady=2)
+        ttk.Button(actions_frame, text="📈 Analizar Seleccionadas", 
+                  command=self._analyze_selected).pack(fill="x", padx=5, pady=2)
+        ttk.Button(actions_frame, text="💾 Exportar Seleccionadas", 
+                  command=self._export_selected).pack(fill="x", padx=5, pady=2)
     
-    def _create_help_tab(self):
-        """Crea la pestaña de ayuda."""
-        help_frame = ttk.Frame(self.notebook)
+    def _create_main_data_tab(self):
+        """Crea pestaña de datos principales."""
+        data_frame = ttk.Frame(self.notebook)
+        self.notebook.add(data_frame, text="📋 Datos Principales")
         
-        # Título
-        title_label = ttk.Label(
-            help_frame, 
-            text="❓ Ayuda", 
-            font=("Arial", 14, "bold")
-        )
-        title_label.pack(pady=10)
+        # Frame para controles
+        controls_frame = ttk.Frame(data_frame)
+        controls_frame.pack(fill="x", padx=10, pady=5)
         
-        # Contenido de ayuda
-        help_text = """
-        Guía de Uso del Sistema:
+        ttk.Button(controls_frame, text="🔄 Actualizar Datos", 
+                  command=self._refresh_main_data).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="📊 Estadísticas", 
+                  command=self._show_data_statistics).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="🔍 Buscar", 
+                  command=self._search_strategies).pack(side="left", padx=5)
         
-        1. Cargar Datos: Selecciona archivos CSV o Excel con datos de estrategias
-        2. Configurar Análisis: Ajusta parámetros y KPIs para el análisis
-        3. Ejecutar Análisis: Procesa los datos y genera resultados
-        4. Resultados: Visualiza y filtra los resultados del análisis
-        5. Asesor: Obtén recomendaciones inteligentes sobre las estrategias
-        6. Exportar: Guarda los resultados en diferentes formatos
+        # Frame para tabla
+        table_frame = ttk.Frame(data_frame)
+        table_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        Para más información, consulta la documentación del proyecto.
-        """
-        
-        help_text_widget = tk.Text(
-            help_frame, 
-            height=20, 
-            width=80,
-            wrap=tk.WORD,
-            font=("Arial", 10)
-        )
-        help_text_widget.pack(padx=10, pady=10, fill="both", expand=True)
-        help_text_widget.insert(tk.END, help_text)
-        help_text_widget.configure(state=tk.DISABLED)
-        
-        self.notebook.add(help_frame, text="❓ Ayuda")
-    
-    def _create_regime_tab(self):
-        """Crea la pestaña de régimen adaptativo."""
-        regime_frame = ttk.Frame(self.notebook)
-        
-        # Título
-        title_label = ttk.Label(
-            regime_frame, 
-            text="🎯 Régimen de Mercado Adaptativo", 
-            font=("Arial", 14, "bold")
-        )
-        title_label.pack(pady=10)
-        
-        # Frame principal con scroll
-        main_scroll = ttk.Scrollbar(regime_frame, orient="vertical")
-        main_scroll.pack(side="right", fill="y")
-        
-        canvas = tk.Canvas(regime_frame, yscrollcommand=main_scroll.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        main_scroll.config(command=canvas.yview)
-        
-        # Frame interno para contenido
-        content_frame = ttk.Frame(canvas)
-        canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        
-        # Sección 1: Información del Régimen Actual
-        regime_info_frame = ttk.LabelFrame(content_frame, text="📊 Régimen Actual", padding=10)
-        regime_info_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.regime_current_label = ttk.Label(regime_info_frame, text="Régimen: No detectado")
-        self.regime_current_label.pack(anchor="w")
-        
-        self.regime_confidence_label = ttk.Label(regime_info_frame, text="Confianza: N/A")
-        self.regime_confidence_label.pack(anchor="w")
-        
-        # Sección 2: Pesos Optimizados
-        weights_frame = ttk.LabelFrame(content_frame, text="⚙️ Pesos Optimizados", padding=10)
-        weights_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.weights_profitability_label = ttk.Label(weights_frame, text="Rentabilidad: 40%")
-        self.weights_profitability_label.pack(anchor="w")
-        
-        self.weights_risk_label = ttk.Label(weights_frame, text="Riesgo: 30%")
-        self.weights_risk_label.pack(anchor="w")
-        
-        self.weights_consistency_label = ttk.Label(weights_frame, text="Consistencia: 30%")
-        self.weights_consistency_label.pack(anchor="w")
-        
-        self.weights_ml_label = ttk.Label(weights_frame, text="ML: 15%")
-        self.weights_ml_label.pack(anchor="w")
-        
-        # Sección 3: Estrategias Óptimas
-        optimal_frame = ttk.LabelFrame(content_frame, text="🏆 Estrategias Óptimas", padding=10)
-        optimal_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.optimal_count_label = ttk.Label(optimal_frame, text="Cantidad: 0")
-        self.optimal_count_label.pack(anchor="w")
-        
-        # Lista de estrategias óptimas
-        self.optimal_listbox = tk.Listbox(optimal_frame, height=8, width=60)
-        self.optimal_listbox.pack(fill="x", pady=5)
-        
-        # Sección 4: Botones de Control
-        control_frame = ttk.Frame(content_frame)
-        control_frame.pack(fill="x", padx=10, pady=10)
-        
-        self.detect_regime_button = ttk.Button(
-            control_frame, 
-            text="🔍 Detectar Régimen",
-            command=self._detect_current_regime
-        )
-        self.detect_regime_button.pack(side="left", padx=5)
-        
-        self.optimize_weights_button = ttk.Button(
-            control_frame, 
-            text="⚙️ Optimizar Pesos",
-            command=self._optimize_weights
-        )
-        self.optimize_weights_button.pack(side="left", padx=5)
-        
-        self.apply_adaptive_scoring_button = ttk.Button(
-            control_frame, 
-            text="🎯 Aplicar Scoring Adaptativo",
-            command=self._apply_adaptive_scoring
-        )
-        self.apply_adaptive_scoring_button.pack(side="left", padx=5)
-        
-        # Configurar scroll
-        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        
-        self.notebook.add(regime_frame, text="🎯 Régimen")
-    
-    def _create_tail_risk_tab(self):
-        """Crea la pestaña de análisis de Tail Risk."""
-        tail_risk_frame = ttk.Frame(self.notebook)
-        
-        # Título
-        title_label = ttk.Label(
-            tail_risk_frame, 
-            text="🧱 Análisis de Tail Risk", 
-            font=("Arial", 14, "bold")
-        )
-        title_label.pack(pady=10)
-        
-        # Frame principal con scroll
-        main_scroll = ttk.Scrollbar(tail_risk_frame, orient="vertical")
-        main_scroll.pack(side="right", fill="y")
-        
-        canvas = tk.Canvas(tail_risk_frame, yscrollcommand=main_scroll.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        main_scroll.config(command=canvas.yview)
-        
-        # Frame interno para contenido
-        content_frame = ttk.Frame(canvas)
-        canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        
-        # Sección 1: Información de Tail Risk
-        tail_risk_info_frame = ttk.LabelFrame(content_frame, text="📊 Información de Tail Risk", padding=10)
-        tail_risk_info_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.tail_risk_summary_label = ttk.Label(tail_risk_info_frame, text="Resumen: No disponible")
-        self.tail_risk_summary_label.pack(anchor="w")
-        
-        self.tail_risk_max_drawdown_label = ttk.Label(tail_risk_info_frame, text="Máx. Drawdown: N/A")
-        self.tail_risk_max_drawdown_label.pack(anchor="w")
-        
-        self.tail_risk_tail_ratio_label = ttk.Label(tail_risk_info_frame, text="Tail Ratio: N/A")
-        self.tail_risk_tail_ratio_label.pack(anchor="w")
-        
-        # Sección 2: Botones de Control
-        control_frame = ttk.Frame(content_frame)
-        control_frame.pack(fill="x", padx=10, pady=10)
-        
-        self.analyze_tail_risk_button = ttk.Button(
-            control_frame, 
-            text="📊 Analizar Tail Risk",
-            command=self._analyze_tail_risk
-        )
-        self.analyze_tail_risk_button.pack(side="left", padx=5)
-        
-        self.tail_risk_results_button = ttk.Button(
-            control_frame, 
-            text="📈 Ver Resultados",
-            command=self._view_tail_risk_results
-        )
-        self.tail_risk_results_button.pack(side="left", padx=5)
-        
-        # Configurar scroll
-        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        
-        self.notebook.add(tail_risk_frame, text="🧱 Tail Risk")
-    
-    def _detect_current_regime(self):
-        """Detecta el régimen de mercado actual."""
-        try:
-            logger.info("🔍 Detectando régimen de mercado...")
-            
-            # Obtener datos de mercado si están disponibles
-            market_data = self.shared_data.get('market_data')
-            if market_data is None:
-                show_error_message("Error", "No hay datos de mercado disponibles")
-                return
-            
-            # Importar y usar el detector de régimen
-            from src.core.market_regime_analyzer import MarketRegimeDetector
-            regime_detector = MarketRegimeDetector()
-            
-            # Detectar régimen
-            current_regime = regime_detector.detect_current_regime(market_data)
-            
-            # Actualizar interfaz
-            self.regime_current_label.config(text=f"Régimen: {current_regime.upper()}")
-            self.regime_confidence_label.config(text="Confianza: Alta")
-            
-            # Guardar régimen en datos compartidos
-            self.shared_data['current_regime'] = current_regime
-            
-            logger.info(f"✅ Régimen detectado: {current_regime}")
-            show_info_message("Éxito", f"Régimen detectado: {current_regime}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error detectando régimen: {e}")
-            show_error_message("Error", f"Error detectando régimen: {str(e)}")
-    
-    def _optimize_weights(self):
-        """Optimiza pesos basado en el régimen actual."""
-        try:
-            logger.info("⚙️ Optimizando pesos...")
-            
-            current_regime = self.shared_data.get('current_regime')
-            if not current_regime:
-                show_error_message("Error", "Primero detecta el régimen actual")
-                return
-            
-            strategies = self.shared_data.get('loaded_data')
-            if strategies is None:
-                show_error_message("Error", "No hay estrategias cargadas")
-                return
-            
-            # Importar y usar el detector de régimen
-            from src.core.market_regime_analyzer import MarketRegimeDetector
-            regime_detector = MarketRegimeDetector()
-            
-            # Calcular rendimiento por régimen
-            regime_performance = regime_detector.calculate_regime_performance(strategies, current_regime)
-            
-            # Optimizar pesos
-            optimized_weights = regime_detector.optimize_weights_by_regime(regime_performance, current_regime)
-            
-            # Actualizar interfaz
-            self.weights_profitability_label.config(text=f"Rentabilidad: {optimized_weights.get('profitability', 0.4)*100:.1f}%")
-            self.weights_risk_label.config(text=f"Riesgo: {optimized_weights.get('risk', 0.3)*100:.1f}%")
-            self.weights_consistency_label.config(text=f"Consistencia: {optimized_weights.get('consistency', 0.3)*100:.1f}%")
-            self.weights_ml_label.config(text=f"ML: {optimized_weights.get('ml', 0.15)*100:.1f}%")
-            
-            # Guardar pesos optimizados
-            self.shared_data['optimized_weights'] = optimized_weights
-            
-            logger.info(f"✅ Pesos optimizados: {optimized_weights}")
-            show_info_message("Éxito", "Pesos optimizados correctamente")
-            
-        except Exception as e:
-            logger.error(f"❌ Error optimizando pesos: {e}")
-            show_error_message("Error", f"Error optimizando pesos: {str(e)}")
-    
-    def _apply_adaptive_scoring(self):
-        """Aplica scoring adaptativo a las estrategias."""
-        try:
-            logger.info("🎯 Aplicando scoring adaptativo...")
-            
-            strategies = self.shared_data.get('loaded_data')
-            optimized_weights = self.shared_data.get('optimized_weights')
-            
-            if strategies is None:
-                show_error_message("Error", "No hay estrategias cargadas")
-                return
-            
-            if optimized_weights is None:
-                show_error_message("Error", "Primero optimiza los pesos")
-                return
-            
-            # Importar y usar el detector de régimen
-            from src.core.market_regime_analyzer import MarketRegimeDetector
-            regime_detector = MarketRegimeDetector()
-            
-            # Aplicar scoring adaptativo
-            adaptive_scores = regime_detector.apply_adaptive_scoring(strategies, optimized_weights)
-            
-            # Actualizar lista de estrategias óptimas
-            optimal_strategies = adaptive_scores.head(10)['Strategy_Name'].tolist()
-            self.optimal_count_label.config(text=f"Cantidad: {len(optimal_strategies)}")
-            
-            # Limpiar y llenar listbox
-            self.optimal_listbox.delete(0, tk.END)
-            for i, strategy in enumerate(optimal_strategies, 1):
-                self.optimal_listbox.insert(tk.END, f"{i}. {strategy}")
-            
-            # Guardar resultados
-            self.shared_data['adaptive_scores'] = adaptive_scores
-            
-            logger.info(f"✅ Scoring adaptativo aplicado a {len(adaptive_scores)} estrategias")
-            show_info_message("Éxito", f"Scoring adaptativo aplicado a {len(adaptive_scores)} estrategias")
-            
-        except Exception as e:
-            logger.error(f"❌ Error aplicando scoring adaptativo: {e}")
-            show_error_message("Error", f"Error aplicando scoring adaptativo: {str(e)}")
-    
-    def _analyze_tail_risk(self):
-        """Ejecuta el análisis de Tail Risk."""
-        try:
-            logger.info("📊 Analizando Tail Risk...")
-            
-            strategies = self.shared_data.get('loaded_data')
-            if strategies is None:
-                show_error_message("Error", "No hay estrategias cargadas para analizar Tail Risk")
-                return
-            
-            # Crear instancia del analizador de Tail Risk
-            tail_risk_analyzer = TailRiskAnalyzer()
-            
-            # Realizar análisis usando el método correcto
-            results = tail_risk_analyzer.analyze_tail_risk_metrics(strategies)
-            
-            if "error" in results:
-                show_error_message("Error", f"Error en análisis de Tail Risk: {results['error']}")
-                return
-            
-            # Calcular métricas agregadas
-            summary = f"Analizadas {len(results)} estrategias"
-            max_drawdown = max([r.get('max_drawdown', 0) for r in results.values() if not pd.isna(r.get('max_drawdown', 0))], default=0)
-            avg_var_95 = np.mean([r.get('var_95', 0) for r in results.values() if not pd.isna(r.get('var_95', 0))])
-            
-            # Actualizar interfaz
-            self.tail_risk_summary_label.config(text=f"Resumen: {summary}")
-            self.tail_risk_max_drawdown_label.config(text=f"Máx. Drawdown: {max_drawdown:.2f}%")
-            self.tail_risk_tail_ratio_label.config(text=f"Avg VaR 95%: {avg_var_95:.4f}")
-            
-            # Guardar resultados
-            self.shared_data['tail_risk_results'] = results
-            
-            logger.info(f"✅ Tail Risk analizado. {summary}")
-            show_info_message("Éxito", "Tail Risk analizado correctamente")
-            
-        except Exception as e:
-            logger.error(f"❌ Error analizando Tail Risk: {e}")
-            show_error_message("Error", f"Error analizando Tail Risk: {str(e)}")
-    
-    def _view_tail_risk_results(self):
-        """Muestra los resultados del análisis de Tail Risk."""
-        try:
-            results = self.shared_data.get('tail_risk_results')
-            if results is None:
-                show_error_message("Error", "No hay resultados de Tail Risk para mostrar")
-                return
-            
-            # Crear una ventana emergente para mostrar los resultados
-            tail_risk_window = tk.Toplevel(self)
-            tail_risk_window.title("Resultados de Tail Risk")
-            tail_risk_window.geometry("800x600")
-            center_window(tail_risk_window, 800, 600)
-
-            # Frame principal con scroll
-            main_frame = ttk.Frame(tail_risk_window)
-            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-            
-            # Título
-            title_label = ttk.Label(main_frame, text="📊 Resultados de Análisis de Tail Risk", 
-                                   font=("Arial", 12, "bold"))
-            title_label.pack(pady=(0, 10))
-
-            # Texto para mostrar los resultados detallados
-            results_text = "=== RESULTADOS DE TAIL RISK ===\n\n"
-            
-            for strategy_name, metrics in results.items():
-                if strategy_name == "error":
-                    continue
-                    
-                results_text += f"🔸 ESTRATEGIA: {strategy_name}\n"
-                results_text += f"   VaR 95%: {metrics.get('var_95', 'N/A'):.4f}\n"
-                results_text += f"   CVaR 95%: {metrics.get('cvar_95', 'N/A'):.4f}\n"
-                results_text += f"   Expected Shortfall: {metrics.get('expected_shortfall', 'N/A'):.4f}\n"
-                results_text += f"   Max Drawdown: {metrics.get('max_drawdown', 'N/A'):.2f}%\n"
-                results_text += f"   Tail Concentration: {metrics.get('tail_concentration', 'N/A'):.4f}\n"
-                results_text += f"   Extreme Loss Prob: {metrics.get('extreme_loss_probability', 'N/A'):.4f}\n"
-                results_text += f"   Skewness: {metrics.get('skewness', 'N/A'):.4f}\n"
-                results_text += f"   Kurtosis: {metrics.get('kurtosis', 'N/A'):.4f}\n"
-                results_text += "-" * 50 + "\n\n"
-            
-            # Widget de texto con scroll
-            text_frame = ttk.Frame(main_frame)
-            text_frame.pack(fill="both", expand=True)
-            
-            text_widget = tk.Text(text_frame, font=("Consolas", 9), wrap=tk.WORD)
-            scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
-            text_widget.configure(yscrollcommand=scrollbar.set)
-            
-            text_widget.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
-            
-            text_widget.insert(tk.END, results_text)
-            text_widget.configure(state=tk.DISABLED)
-
-            # Botones de acción
-            button_frame = ttk.Frame(main_frame)
-            button_frame.pack(fill="x", pady=10)
-            
-            # Botón para copiar resultados
-            copy_btn = ttk.Button(button_frame, text="📋 Copiar Resultados", 
-                                 command=lambda: self._copy_tail_risk_results(results_text))
-            copy_btn.pack(side="left", padx=5)
-            
-            # Botón para cerrar
-            close_button = ttk.Button(button_frame, text="Cerrar", command=tail_risk_window.destroy)
-            close_button.pack(side="right", padx=5)
-
-            logger.info("📈 Mostrando resultados detallados de Tail Risk")
-            
-        except Exception as e:
-            logger.error(f"❌ Error mostrando resultados de Tail Risk: {e}")
-            show_error_message("Error", f"Error mostrando resultados de Tail Risk: {str(e)}")
-    
-    def _copy_tail_risk_results(self, results_text: str):
-        """Copia los resultados de Tail Risk al portapapeles."""
-        try:
-            self.clipboard_clear()
-            self.clipboard_append(results_text)
-            show_info_message("Éxito", "Resultados de Tail Risk copiados al portapapeles")
-            logger.info("📋 Resultados de Tail Risk copiados al portapapeles")
-        except Exception as e:
-            logger.error(f"❌ Error copiando resultados: {e}")
-            show_error_message("Error", f"Error copiando resultados: {str(e)}")
-    
-    def _create_axi_select_tab(self):
-        """Crea la pestaña de análisis AXISelect."""
-        axi_select_frame = ttk.Frame(self.notebook)
-        
-        # Título
-        title_label = ttk.Label(
-            axi_select_frame, 
-            text="🎯 Análisis AXISelect Predictivo", 
-            font=("Arial", 14, "bold")
-        )
-        title_label.pack(pady=10)
-        
-        # Frame principal con scroll
-        main_scroll = ttk.Scrollbar(axi_select_frame, orient="vertical")
-        main_scroll.pack(side="right", fill="y")
-        
-        canvas = tk.Canvas(axi_select_frame, yscrollcommand=main_scroll.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        main_scroll.config(command=canvas.yview)
-        
-        # Frame interno para contenido
-        content_frame = ttk.Frame(canvas)
-        canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        
-        # Sección 1: Información del Sistema Predictivo
-        axi_info_frame = ttk.LabelFrame(content_frame, text="📊 Sistema Predictivo AXISelect", padding=10)
-        axi_info_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.axi_summary_label = ttk.Label(axi_info_frame, text="Resumen: No disponible")
-        self.axi_summary_label.pack(anchor="w")
-        
-        self.axi_models_label = ttk.Label(axi_info_frame, text="Modelos disponibles: N/A")
-        self.axi_models_label.pack(anchor="w")
-        
-        self.axi_confidence_label = ttk.Label(axi_info_frame, text="Confianza: N/A")
-        self.axi_confidence_label.pack(anchor="w")
-        
-        # Sección 2: Configuración de Modelos
-        config_frame = ttk.LabelFrame(content_frame, text="⚙️ Configuración de Modelos", padding=10)
-        config_frame.pack(fill="x", padx=10, pady=5)
-        
-        # Variables de control para modelos
-        self.axi_models_vars = {}
-        model_types = [
-            ("Random Forest", "random_forest"),
-            ("Linear Regression", "linear_regression"),
-            ("Gradient Boosting", "gradient_boosting"),
-            ("MLP Sklearn", "mlp_sklearn"),
-            ("LightGBM", "lightgbm"),
-            ("CatBoost", "catboost"),
-            ("PyTorch NN", "pytorch_nn")
-        ]
-        
-        for i, (name, key) in enumerate(model_types):
-            var = tk.BooleanVar(value=True)
-            self.axi_models_vars[key] = var
-            
-            cb = ttk.Checkbutton(config_frame, text=f"📊 {name}", variable=var)
-            cb.grid(row=i//2, column=i%2, sticky=tk.W, pady=2, padx=5)
-        
-        # Sección 3: Botones de Control
-        control_frame = ttk.Frame(content_frame)
-        control_frame.pack(fill="x", padx=10, pady=10)
-        
-        self.analyze_axi_button = ttk.Button(
-            control_frame, 
-            text="🎯 Ejecutar Análisis AXISelect",
-            command=self._analyze_axi_select
-        )
-        self.analyze_axi_button.pack(side="left", padx=5)
-        
-        self.axi_results_button = ttk.Button(
-            control_frame, 
-            text="📈 Ver Resultados",
-            command=self._view_axi_select_results
-        )
-        self.axi_results_button.pack(side="left", padx=5)
-        
-        # Configurar scroll
-        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        
-        self.notebook.add(axi_select_frame, text="🎯 AXISelect")
-    
-    def _analyze_axi_select(self):
-        """Ejecuta el análisis AXISelect."""
-        try:
-            logger.info("🎯 Analizando AXISelect...")
-            
-            strategies = self.shared_data.get('loaded_data')
-            if strategies is None:
-                show_error_message("Error", "No hay estrategias cargadas para analizar AXISelect")
-                return
-            
-            # Crear instancia del sistema predictivo
-            axi_system = AXISelectPredictiveSystem()
-            
-            # Preparar datos para predicción (usar CAGR como target)
-            if 'CAGR' not in strategies.columns:
-                show_error_message("Error", "No se encontró la columna CAGR para análisis AXISelect")
-                return
-            
-            # Seleccionar modelos activos
-            active_models = [key for key, var in self.axi_models_vars.items() if var.get()]
-            
-            # Realizar predicción híbrida
-            results = axi_system.predict_hybrid(strategies, 'CAGR')
-            
-            # Actualizar interfaz
-            self.axi_summary_label.config(text=f"Resumen: {len(active_models)} modelos activos")
-            self.axi_models_label.config(text=f"Modelos: {', '.join(active_models)}")
-            self.axi_confidence_label.config(text=f"Confianza: {results.get('confidence', 0):.2f}")
-            
-            # Guardar resultados
-            self.shared_data['axi_select_results'] = results
-            
-            logger.info(f"✅ AXISelect analizado. Modelos: {len(active_models)}")
-            show_info_message("Éxito", "Análisis AXISelect completado correctamente")
-            
-        except Exception as e:
-            logger.error(f"❌ Error analizando AXISelect: {e}")
-            show_error_message("Error", f"Error analizando AXISelect: {str(e)}")
-    
-    def _view_axi_select_results(self):
-        """Muestra los resultados del análisis AXISelect."""
-        try:
-            results = self.shared_data.get('axi_select_results')
-            if results is None:
-                show_error_message("Error", "No hay resultados de AXISelect para mostrar")
-                return
-            
-            # Crear una ventana emergente para mostrar los resultados
-            axi_window = tk.Toplevel(self)
-            axi_window.title("Resultados de Análisis AXISelect")
-            axi_window.geometry("900x700")
-            center_window(axi_window, 900, 700)
-
-            # Frame principal con scroll
-            main_frame = ttk.Frame(axi_window)
-            main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-            
-            # Título
-            title_label = ttk.Label(main_frame, text="🎯 Resultados de Análisis AXISelect Predictivo", 
-                                   font=("Arial", 12, "bold"))
-            title_label.pack(pady=(0, 10))
-
-            # Texto para mostrar los resultados detallados
-            results_text = "=== RESULTADOS DE AXISELECT ===\n\n"
-            
-            # Información general
-            results_text += f"🔸 Confianza General: {results.get('confidence', 'N/A'):.4f}\n"
-            results_text += f"🔸 Modelos Utilizados: {len(results.get('models', {}))}\n"
-            results_text += f"🔸 Métricas de Performance:\n"
-            
-            # Métricas de performance
-            performance = results.get('performance', {})
-            for metric, value in performance.items():
-                results_text += f"   - {metric}: {value:.4f}\n"
-            
-            results_text += "\n🔸 Importancia de Features:\n"
-            
-            # Feature importance
-            feature_importance = results.get('feature_importance', {})
-            for feature, importance in sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:10]:
-                results_text += f"   - {feature}: {importance:.4f}\n"
-            
-            results_text += "\n🔸 Análisis SHAP:\n"
-            
-            # SHAP analysis
-            shap_analysis = results.get('shap_analysis', {})
-            for key, value in shap_analysis.items():
-                if isinstance(value, (int, float)):
-                    results_text += f"   - {key}: {value:.4f}\n"
-                else:
-                    results_text += f"   - {key}: {value}\n"
-            
-            # Widget de texto con scroll
-            text_frame = ttk.Frame(main_frame)
-            text_frame.pack(fill="both", expand=True)
-            
-            text_widget = tk.Text(text_frame, font=("Consolas", 9), wrap=tk.WORD)
-            scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
-            text_widget.configure(yscrollcommand=scrollbar.set)
-            
-            text_widget.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
-            
-            text_widget.insert(tk.END, results_text)
-            text_widget.configure(state=tk.DISABLED)
-
-            # Botones de acción
-            button_frame = ttk.Frame(main_frame)
-            button_frame.pack(fill="x", pady=10)
-            
-            # Botón para copiar resultados
-            copy_btn = ttk.Button(button_frame, text="📋 Copiar Resultados", 
-                                 command=lambda: self._copy_axi_select_results(results_text))
-            copy_btn.pack(side="left", padx=5)
-            
-            # Botón para cerrar
-            close_button = ttk.Button(button_frame, text="Cerrar", command=axi_window.destroy)
-            close_button.pack(side="right", padx=5)
-
-            logger.info("📈 Mostrando resultados detallados de AXISelect")
-            
-        except Exception as e:
-            logger.error(f"❌ Error mostrando resultados de AXISelect: {e}")
-            show_error_message("Error", f"Error mostrando resultados de AXISelect: {str(e)}")
-    
-    def _copy_axi_select_results(self, results_text: str):
-        """Copia los resultados de AXISelect al portapapeles."""
-        try:
-            self.clipboard_clear()
-            self.clipboard_append(results_text)
-            show_info_message("Éxito", "Resultados de AXISelect copiados al portapapeles")
-            logger.info("📋 Resultados de AXISelect copiados al portapapeles")
-        except Exception as e:
-            logger.error(f"❌ Error copiando resultados: {e}")
-            show_error_message("Error", f"Error copiando resultados: {str(e)}")
+        # Crear tabla con scrollbars
+        self._create_data_table(table_frame)
     
     def _create_scientific_analysis_tab(self):
-        """Crea la pestaña de análisis científico."""
-        scientific_frame = ttk.Frame(self.notebook)
+        """Crea pestaña de análisis científico."""
+        analysis_frame = ttk.Frame(self.notebook)
+        self.notebook.add(analysis_frame, text="🧪 Análisis Científico")
         
-        # Título
-        title_label = ttk.Label(
-            scientific_frame, 
-            text="🔬 Análisis Científico Avanzado", 
-            font=("Arial", 14, "bold")
-        )
-        title_label.pack(pady=10)
+        # Controles de análisis
+        controls_frame = ttk.Frame(analysis_frame)
+        controls_frame.pack(fill="x", padx=10, pady=5)
         
-        # Frame principal con scroll
-        main_scroll = ttk.Scrollbar(scientific_frame, orient="vertical")
-        main_scroll.pack(side="right", fill="y")
+        ttk.Button(controls_frame, text="🚀 Ejecutar Análisis", 
+                  command=self._run_scientific_analysis).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="📊 Ver Resultados", 
+                  command=self._show_scientific_results).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="💾 Guardar Análisis", 
+                  command=self._save_scientific_analysis).pack(side="left", padx=5)
         
-        canvas = tk.Canvas(scientific_frame, yscrollcommand=main_scroll.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        main_scroll.config(command=canvas.yview)
+        # Área de resultados
+        results_frame = ttk.Frame(analysis_frame)
+        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Frame interno para contenido
-        content_frame = ttk.Frame(canvas)
-        canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        
-        # Sección 1: Información del Análisis Científico
-        scientific_info_frame = ttk.LabelFrame(content_frame, text="📊 Análisis Científico", padding=10)
-        scientific_info_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.scientific_summary_label = ttk.Label(scientific_info_frame, text="Resumen: No disponible")
-        self.scientific_summary_label.pack(anchor="w")
-        
-        self.scientific_strategies_label = ttk.Label(scientific_info_frame, text="Estrategias filtradas: N/A")
-        self.scientific_strategies_label.pack(anchor="w")
-        
-        self.scientific_analysis_label = ttk.Label(scientific_info_frame, text="Análisis activo: N/A")
-        self.scientific_analysis_label.pack(anchor="w")
-        
-        # Sección 2: Tipos de Análisis Disponibles
-        analysis_frame = ttk.LabelFrame(content_frame, text="🔍 Tipos de Análisis", padding=10)
-        analysis_frame.pack(fill="x", padx=10, pady=5)
-        
-        # Variables de control para tipos de análisis
-        self.scientific_analysis_vars = {}
-        analysis_types = [
-            ("Predictabilidad Core", "predictability"),
-            ("Predictabilidad Empírica", "empirical_predictability"),
-            ("Regímenes de Mercado", "market_regimes"),
-            ("Robustez", "robustness"),
-            ("Walk Forward", "walk_forward"),
-            ("Simulación Nula", "null_simulation"),
-            ("Tail Risk", "tail_risk"),
-            ("Análisis Comprehensivo", "comprehensive")
-        ]
-        
-        for i, (name, key) in enumerate(analysis_types):
-            var = tk.BooleanVar(value=True)
-            self.scientific_analysis_vars[key] = var
-            
-            cb = ttk.Checkbutton(analysis_frame, text=f"🔬 {name}", variable=var)
-            cb.grid(row=i//2, column=i%2, sticky=tk.W, pady=2, padx=5)
-        
-        # Sección 3: Botones de Control
-        control_frame = ttk.Frame(content_frame)
-        control_frame.pack(fill="x", padx=10, pady=10)
-        
-        self.analyze_scientific_button = ttk.Button(
-            control_frame, 
-            text="🔬 Ejecutar Análisis Científico",
-            command=self._analyze_scientific
-        )
-        self.analyze_scientific_button.pack(side="left", padx=5)
-        
-        self.scientific_results_button = ttk.Button(
-            control_frame, 
-            text="📈 Ver Resultados",
-            command=self._view_scientific_results
-        )
-        self.scientific_results_button.pack(side="left", padx=5)
-        
-        # Configurar scroll
-        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        
-        self.notebook.add(scientific_frame, text="🔬 Científico")
+        self.scientific_text = tk.Text(results_frame, wrap="word")
+        self.scientific_text.pack(fill="both", expand=True)
     
-    def _analyze_scientific(self):
-        """Ejecuta el análisis científico."""
+    def _create_tail_risk_tab(self):
+        """Crea pestaña de Tail Risk Analysis."""
+        tail_risk_frame = ttk.Frame(self.notebook)
+        self.notebook.add(tail_risk_frame, text="📈 Tail Risk Analysis")
+        
+        # Controles de Tail Risk
+        controls_frame = ttk.Frame(tail_risk_frame)
+        controls_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Button(controls_frame, text="📊 Analizar Tail Risk", 
+                  command=self._run_tail_risk_analysis).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="📈 Ver Gráficos", 
+                  command=self._show_tail_risk_charts).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="💾 Exportar Análisis", 
+                  command=self._export_tail_risk).pack(side="left", padx=5)
+        
+        # Área de resultados
+        results_frame = ttk.Frame(tail_risk_frame)
+        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        self.tail_risk_text = tk.Text(results_frame, wrap="word")
+        self.tail_risk_text.pack(fill="both", expand=True)
+    
+    def _create_axis_tab(self):
+        """Crea pestaña de AXISelect Analysis."""
+        axis_frame = ttk.Frame(self.notebook)
+        self.notebook.add(axis_frame, text="🎯 AXISelect Analysis")
+        
+        # Controles de AXISelect
+        controls_frame = ttk.Frame(axis_frame)
+        controls_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Button(controls_frame, text="🎯 Ejecutar AXISelect", 
+                  command=self._run_axis_analysis).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="📊 Ver Selección", 
+                  command=self._show_axis_results).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="💾 Guardar Selección", 
+                  command=self._save_axis_selection).pack(side="left", padx=5)
+        
+        # Área de resultados
+        results_frame = ttk.Frame(axis_frame)
+        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        self.axis_text = tk.Text(results_frame, wrap="word")
+        self.axis_text.pack(fill="both", expand=True)
+    
+    def _create_comparison_tab(self):
+        """Crea pestaña de comparación de estrategias."""
+        comparison_frame = ttk.Frame(self.notebook)
+        self.notebook.add(comparison_frame, text="⚖️ Comparación")
+        
+        # Controles de comparación
+        controls_frame = ttk.Frame(comparison_frame)
+        controls_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Button(controls_frame, text="⚖️ Comparar Seleccionadas", 
+                  command=self._compare_selected_strategies).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="📊 Ver Comparación", 
+                  command=self._show_comparison_results).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="💾 Exportar Comparación", 
+                  command=self._export_comparison).pack(side="left", padx=5)
+        
+        # Área de resultados
+        results_frame = ttk.Frame(comparison_frame)
+        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        self.comparison_text = tk.Text(results_frame, wrap="word")
+        self.comparison_text.pack(fill="both", expand=True)
+    
+    def _create_charts_tab(self):
+        """Crea pestaña de gráficos."""
+        charts_frame = ttk.Frame(self.notebook)
+        self.notebook.add(charts_frame, text="📈 Gráficos")
+        
+        # Controles de gráficos
+        controls_frame = ttk.Frame(charts_frame)
+        controls_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Button(controls_frame, text="📊 Crear Gráficos", 
+                  command=self._create_charts).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="🖼️ Exportar Gráficos", 
+                  command=self._export_charts).pack(side="left", padx=5)
+        ttk.Button(controls_frame, text="🔄 Actualizar", 
+                  command=self._refresh_charts).pack(side="left", padx=5)
+        
+        # Área de gráficos
+        charts_area_frame = ttk.Frame(charts_frame)
+        charts_area_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        self.charts_text = tk.Text(charts_area_frame, wrap="word")
+        self.charts_text.pack(fill="both", expand=True)
+    
+    def _create_data_table(self, parent: ttk.Frame):
+        """Crea tabla de datos con scrollbars."""
+        # Frame para tabla y scrollbars
+        table_container = ttk.Frame(parent)
+        table_container.pack(fill="both", expand=True)
+        
+        # Crear Treeview
+        columns = ["Strategy_Name", "Factor_K", "CAGR_IS", "Sharpe_Ratio_IS", "Max_Drawdown_IS"]
+        self.data_tree = ttk.Treeview(table_container, columns=columns, show="headings", height=20)
+        
+        # Configurar columnas
+        for col in columns:
+            self.data_tree.heading(col, text=col)
+            self.data_tree.column(col, width=150)
+        
+        # Scrollbars
+        v_scrollbar = ttk.Scrollbar(table_container, orient="vertical", command=self.data_tree.yview)
+        h_scrollbar = ttk.Scrollbar(table_container, orient="horizontal", command=self.data_tree.xview)
+        self.data_tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        
+        # Layout
+        self.data_tree.grid(row=0, column=0, sticky="nsew")
+        v_scrollbar.grid(row=0, column=1, sticky="ns")
+        h_scrollbar.grid(row=1, column=0, sticky="ew")
+        
+        table_container.grid_rowconfigure(0, weight=1)
+        table_container.grid_columnconfigure(0, weight=1)
+        
+        # Binding para selección
+        self.data_tree.bind("<<TreeviewSelect>>", self._on_strategy_selected)
+    
+    def _setup_menu(self):
+        """Configura el menú principal."""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # Menú Archivo
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Archivo", menu=file_menu)
+        file_menu.add_command(label="Cargar Datos", command=self._load_data)
+        file_menu.add_command(label="Guardar Configuración", command=self._save_configuration)
+        file_menu.add_separator()
+        file_menu.add_command(label="Salir", command=self.root.quit)
+        
+        # Menú Análisis
+        analysis_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Análisis", menu=analysis_menu)
+        analysis_menu.add_command(label="Análisis Científico", command=self._run_scientific_analysis)
+        analysis_menu.add_command(label="Tail Risk Analysis", command=self._run_tail_risk_analysis)
+        analysis_menu.add_command(label="AXISelect Analysis", command=self._run_axis_analysis)
+        
+        # Menú Herramientas
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Herramientas", menu=tools_menu)
+        tools_menu.add_command(label="Filtros Avanzados", command=self._show_advanced_filters)
+        tools_menu.add_command(label="Gráficos Interactivos", command=self._show_interactive_charts)
+        tools_menu.add_command(label="Comparar Estrategias", command=self._show_strategy_comparison)
+        tools_menu.add_command(label="Exportación Avanzada", command=self._show_advanced_export)
+        
+        # Menú Ayuda
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Ayuda", menu=help_menu)
+        help_menu.add_command(label="Manual de Usuario", command=self._show_help)
+        help_menu.add_command(label="Acerca de", command=self._show_about)
+    
+    def _setup_status_bar(self):
+        """Configura la barra de estado."""
+        self.status_bar = ttk.Frame(self.root)
+        self.status_bar.pack(side="bottom", fill="x")
+        
+        self.status_label = ttk.Label(self.status_bar, text="Listo")
+        self.status_label.pack(side="left", padx=5)
+        
+        self.progress_bar = ttk.Progressbar(self.status_bar, mode="indeterminate")
+        self.progress_bar.pack(side="right", padx=5)
+    
+    def _setup_callbacks(self):
+        """Configura callbacks y eventos."""
+        # Actualizar interfaz desde cola de mensajes
+        self.root.after(100, self._process_messages)
+    
+    def _initialize_advanced_managers(self):
+        """Inicializa los gestores avanzados."""
         try:
-            logger.info("🔬 Analizando científico...")
+            self.chart_manager = create_interactive_chart_manager(self.root)
+            self.comparison_manager = create_strategy_comparison_manager(self.root)
+            self.export_manager = create_advanced_export_manager(self.root)
             
-            strategies = self.shared_data.get('loaded_data')
-            if strategies is None:
-                show_error_message("Error", "No hay estrategias cargadas para análisis científico")
-                return
-            
-            # Crear filtro de análisis científico
-            scientific_filter = ScientificAnalysisFilter(strategies)
-            
-            # Seleccionar tipos de análisis activos
-            active_analyses = [key for key, var in self.scientific_analysis_vars.items() if var.get()]
-            
-            # Ejecutar análisis comprehensivo
-            results = {}
-            for analysis_type in active_analyses:
-                try:
-                    result = scientific_filter.apply_scientific_analysis(analysis_type)
-                    results[analysis_type] = result
-                    logger.info(f"✅ Análisis {analysis_type} completado")
-                except Exception as e:
-                    logger.error(f"❌ Error en análisis {analysis_type}: {e}")
-                    results[analysis_type] = {"error": str(e)}
-            
-            # Actualizar interfaz
-            self.scientific_summary_label.config(text=f"Resumen: {len(active_analyses)} análisis ejecutados")
-            self.scientific_strategies_label.config(text=f"Estrategias: {len(strategies)} disponibles")
-            self.scientific_analysis_label.config(text=f"Análisis: {', '.join(active_analyses)}")
-            
-            # Guardar resultados
-            self.shared_data['scientific_results'] = results
-            
-            logger.info(f"✅ Análisis científico completado. Tipos: {len(active_analyses)}")
-            show_info_message("Éxito", "Análisis científico completado correctamente")
+            logger.info("✅ Gestores avanzados inicializados")
             
         except Exception as e:
-            logger.error(f"❌ Error analizando científico: {e}")
-            show_error_message("Error", f"Error analizando científico: {str(e)}")
+            logger.error(f"Error inicializando gestores avanzados: {e}")
+            # Crear gestores mock si falla la inicialización
+            self.chart_manager = Mock()
+            self.comparison_manager = Mock()
+            self.export_manager = Mock()
     
-    def _view_scientific_results(self):
-        """Muestra los resultados del análisis científico."""
+    def _load_data(self):
+        """Carga datos de estrategias."""
         try:
-            results = self.shared_data.get('scientific_results')
-            if results is None:
-                show_error_message("Error", "No hay resultados científicos para mostrar")
+            self._update_status("Cargando datos...")
+            self.progress_bar.start()
+            
+            # Ejecutar en hilo separado
+            thread = threading.Thread(target=self._load_data_thread)
+            thread.daemon = True
+            thread.start()
+            
+        except Exception as e:
+            logger.error(f"Error cargando datos: {e}")
+            self._update_status("Error cargando datos")
+    
+    def _load_data_thread(self):
+        """Hilo para cargar datos."""
+        try:
+            # Cargar datos usando DataManager
+            data = self.data_manager.load_data()
+            
+            if data is not None and len(data) > 0:
+                self.current_data = data
+                self.filtered_data = data.copy()
+                
+                # Actualizar interfaz en hilo principal
+                self.message_queue.put(("data_loaded", data))
+                
+                logger.info(f"✅ Datos cargados: {len(data)} estrategias")
+            else:
+                self.message_queue.put(("error", "No se pudieron cargar datos"))
+                
+        except Exception as e:
+            logger.error(f"Error en hilo de carga: {e}")
+            self.message_queue.put(("error", f"Error cargando datos: {e}"))
+    
+    def _show_advanced_filters(self):
+        """Muestra popup de filtros avanzados."""
+        try:
+            if self.current_data is None:
+                messagebox.showwarning("Filtros", "No hay datos cargados")
                 return
             
-            # Crear una ventana emergente para mostrar los resultados
-            scientific_window = tk.Toplevel(self)
-            scientific_window.title("Resultados de Análisis Científico")
-            scientific_window.geometry("1000x800")
-            center_window(scientific_window, 1000, 800)
-
-            # Frame principal con scroll
-            main_frame = ttk.Frame(scientific_window)
+            # Crear popup de filtros avanzados
+            popup = create_advanced_filters_popup(
+                self.root, 
+                self.current_data,
+                self._on_filters_changed
+            )
+            
+            # Mostrar popup
+            popup.show()
+            
+        except Exception as e:
+            logger.error(f"Error mostrando filtros avanzados: {e}")
+            messagebox.showerror("Error", f"Error mostrando filtros: {e}")
+    
+    def _show_interactive_charts(self):
+        """Muestra gráficos interactivos."""
+        try:
+            if self.current_data is None:
+                messagebox.showwarning("Gráficos", "No hay datos cargados")
+                return
+            
+            # Crear ventana de gráficos interactivos
+            charts_window = tk.Toplevel(self.root)
+            charts_window.title("📊 Gráficos Interactivos")
+            charts_window.geometry("1000x700")
+            
+            # Crear notebook para diferentes tipos de gráficos
+            notebook = ttk.Notebook(charts_window)
+            notebook.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # Gráfico de correlación
+            corr_frame = ttk.Frame(notebook)
+            notebook.add(corr_frame, text="🔗 Correlación")
+            
+            corr_config = self.chart_manager.create_correlation_matrix_chart(
+                self.current_data, "Matriz de Correlación de Estrategias"
+            )
+            corr_widget = self.chart_manager.create_chart_widget(corr_frame, corr_config)
+            corr_widget.pack(fill="both", expand=True)
+            
+            # Gráfico de dispersión
+            scatter_frame = ttk.Frame(notebook)
+            notebook.add(scatter_frame, text="📊 Dispersión")
+            
+            scatter_config = self.chart_manager.create_scatter_plot(
+                self.current_data, "CAGR_IS", "Sharpe_Ratio_IS", 
+                color_col="Factor_K", title="CAGR vs Sharpe Ratio"
+            )
+            scatter_widget = self.chart_manager.create_chart_widget(scatter_frame, scatter_config)
+            scatter_widget.pack(fill="both", expand=True)
+            
+            # Histograma
+            hist_frame = ttk.Frame(notebook)
+            notebook.add(hist_frame, text="📈 Histograma")
+            
+            hist_config = self.chart_manager.create_histogram_chart(
+                self.current_data, "Factor_K", title="Distribución Factor K"
+            )
+            hist_widget = self.chart_manager.create_chart_widget(hist_frame, hist_config)
+            hist_widget.pack(fill="both", expand=True)
+            
+        except Exception as e:
+            logger.error(f"Error mostrando gráficos interactivos: {e}")
+            messagebox.showerror("Error", f"Error mostrando gráficos: {e}")
+    
+    def _show_strategy_comparison(self):
+        """Muestra comparación de estrategias."""
+        try:
+            if self.current_data is None:
+                messagebox.showwarning("Comparación", "No hay datos cargados")
+                return
+            
+            # Crear ventana de comparación
+            comparison_window = tk.Toplevel(self.root)
+            comparison_window.title("⚖️ Comparación de Estrategias")
+            comparison_window.geometry("1200x800")
+            
+            # Frame principal
+            main_frame = ttk.Frame(comparison_window)
             main_frame.pack(fill="both", expand=True, padx=10, pady=10)
             
-            # Título
-            title_label = ttk.Label(main_frame, text="🔬 Resultados de Análisis Científico Avanzado", 
-                                   font=("Arial", 12, "bold"))
-            title_label.pack(pady=(0, 10))
-
-            # Texto para mostrar los resultados detallados
-            results_text = "=== RESULTADOS DE ANÁLISIS CIENTÍFICO ===\n\n"
+            # Panel de selección
+            selection_frame = ttk.LabelFrame(main_frame, text="Seleccionar Estrategias")
+            selection_frame.pack(fill="x", pady=(0, 10))
             
-            # Mostrar resultados por tipo de análisis
-            for analysis_type, result in results.items():
-                results_text += f"🔸 ANÁLISIS: {analysis_type.upper()}\n"
-                results_text += f"   Estado: {'✅ Exitoso' if result.success else '❌ Error'}\n"
-                
-                if result.success:
-                    results_text += f"   Estrategias analizadas: {result.filtered_strategies_count}\n"
-                    results_text += f"   Timestamp: {result.timestamp}\n"
-                    
-                    # Mostrar resultados específicos
-                    analysis_results = result.results
-                    if isinstance(analysis_results, dict):
-                        for key, value in analysis_results.items():
-                            if isinstance(value, (int, float)):
-                                results_text += f"   - {key}: {value:.4f}\n"
-                            elif isinstance(value, str):
-                                results_text += f"   - {key}: {value}\n"
-                            elif isinstance(value, dict):
-                                results_text += f"   - {key}: {len(value)} elementos\n"
-                            else:
-                                results_text += f"   - {key}: {type(value).__name__}\n"
-                else:
-                    results_text += f"   Error: {result.error_message}\n"
-                
-                results_text += "-" * 50 + "\n\n"
+            # Lista de estrategias disponibles
+            strategies_listbox = tk.Listbox(selection_frame, height=8, selectmode="multiple")
+            strategies_listbox.pack(fill="x", padx=5, pady=5)
             
-            # Widget de texto con scroll
-            text_frame = ttk.Frame(main_frame)
-            text_frame.pack(fill="both", expand=True)
+            for strategy in self.current_data['Strategy_Name'].unique():
+                strategies_listbox.insert(tk.END, strategy)
             
-            text_widget = tk.Text(text_frame, font=("Consolas", 9), wrap=tk.WORD)
-            scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
-            text_widget.configure(yscrollcommand=scrollbar.set)
-            
-            text_widget.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
-            
-            text_widget.insert(tk.END, results_text)
-            text_widget.configure(state=tk.DISABLED)
-
             # Botones de acción
-            button_frame = ttk.Frame(main_frame)
-            button_frame.pack(fill="x", pady=10)
+            button_frame = ttk.Frame(selection_frame)
+            button_frame.pack(fill="x", padx=5, pady=5)
             
-            # Botón para copiar resultados
-            copy_btn = ttk.Button(button_frame, text="📋 Copiar Resultados", 
-                                 command=lambda: self._copy_scientific_results(results_text))
-            copy_btn.pack(side="left", padx=5)
-            
-            # Botón para cerrar
-            close_button = ttk.Button(button_frame, text="Cerrar", command=scientific_window.destroy)
-            close_button.pack(side="right", padx=5)
-
-            logger.info("📈 Mostrando resultados detallados de análisis científico")
-            
-        except Exception as e:
-            logger.error(f"❌ Error mostrando resultados científicos: {e}")
-            show_error_message("Error", f"Error mostrando resultados científicos: {str(e)}")
-    
-    def _copy_scientific_results(self, results_text: str):
-        """Copia los resultados científicos al portapapeles."""
-        try:
-            self.clipboard_clear()
-            self.clipboard_append(results_text)
-            show_info_message("Éxito", "Resultados científicos copiados al portapapeles")
-            logger.info("📋 Resultados científicos copiados al portapapeles")
-        except Exception as e:
-            logger.error(f"❌ Error copiando resultados: {e}")
-            show_error_message("Error", f"Error copiando resultados: {str(e)}")
-    
-    def _setup_navigation(self):
-        """Configura la navegación entre pasos."""
-        # Bind para cambio de pestaña
-        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
-    
-    def _setup_logging(self):
-        """Configura el logging para la interfaz."""
-        try:
-            # Configurar handler para el widget de texto
-            from .utils import setup_logging_to_widget
-            setup_logging_to_widget(self.log_text)
-            
-            logger.info("✅ Logging configurado para la interfaz")
-            
-        except Exception as e:
-            logger.error(f"❌ Error configurando logging: {e}")
-    
-    def _on_tab_changed(self, event):
-        """Maneja el cambio de pestaña."""
-        try:
-            current_tab = self.notebook.select()
-            tab_id = self.notebook.index(current_tab)
-            
-            # Actualizar paso actual
-            if tab_id < 6:  # Solo los pasos del wizard
-                self.current_step = tab_id + 1
-                logger.info(f"✅ Cambiado al paso {self.current_step}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error cambiando pestaña: {e}")
-    
-    def _go_to_step(self, step_number):
-        """Navega a un paso específico del wizard."""
-        try:
-            if step_number in self.wizard_steps:
-                self.notebook.select(self.wizard_steps[step_number])
-                self.current_step = step_number
-                logger.info(f"✅ Navegando al paso {step_number}")
-            else:
-                logger.warning(f"⚠️ Paso {step_number} no encontrado")
+            def compare_selected():
+                selected_indices = strategies_listbox.curselection()
+                selected_strategies = [strategies_listbox.get(i) for i in selected_indices]
                 
+                if len(selected_strategies) < 2:
+                    messagebox.showwarning("Comparación", "Selecciona al menos 2 estrategias")
+                    return
+                
+                # Configurar comparación
+                self.comparison_manager.set_data(self.current_data)
+                self.comparison_manager.select_strategies(selected_strategies)
+                
+                # Ejecutar comparación
+                results = self.comparison_manager.compare_strategies()
+                
+                # Mostrar resultados
+                results_frame = ttk.Frame(main_frame)
+                results_frame.pack(fill="both", expand=True)
+                
+                results_widget = self.comparison_manager.create_comparison_widget(results_frame, results)
+                results_widget.pack(fill="both", expand=True)
+            
+            ttk.Button(button_frame, text="⚖️ Comparar Seleccionadas", 
+                      command=compare_selected).pack(side="left", padx=5)
+            ttk.Button(button_frame, text="🗑️ Limpiar Selección", 
+                      command=lambda: strategies_listbox.selection_clear(0, tk.END)).pack(side="left", padx=5)
+            
         except Exception as e:
-            logger.error(f"❌ Error navegando al paso {step_number}: {e}")
+            logger.error(f"Error mostrando comparación: {e}")
+            messagebox.showerror("Error", f"Error mostrando comparación: {e}")
     
-    def _on_data_loaded(self, data):
-        """Callback cuando se cargan datos."""
+    def _show_advanced_export(self):
+        """Muestra diálogo de exportación avanzada."""
         try:
-            self.shared_data['loaded_data'] = data
-            self.data_loaded = True
+            if self.current_data is None:
+                messagebox.showwarning("Exportación", "No hay datos cargados")
+                return
             
-            # Habilitar siguiente paso
-            if hasattr(self, 'step_frames') and 'step2' in self.step_frames:
-                step2 = self.step_frames['step2']
-                if hasattr(step2, 'is_ready_for_next_step'):
-                    # El paso 2 ahora puede continuar
-                    pass
+            # Configurar datos para exportación
+            self.export_manager.set_data(self.current_data)
             
-            logger.info("✅ Datos cargados correctamente")
-            show_info_message("Éxito", "Datos cargados correctamente")
+            # Crear ventana de exportación
+            export_window = tk.Toplevel(self.root)
+            export_window.title("📤 Exportación Avanzada")
+            export_window.geometry("600x400")
+            
+            # Crear diálogo de exportación
+            export_widget = self.export_manager.create_export_dialog(export_window)
+            export_widget.pack(fill="both", expand=True, padx=10, pady=10)
             
         except Exception as e:
-            logger.error(f"❌ Error procesando datos cargados: {e}")
-            show_error_message("Error", f"Error procesando datos: {str(e)}")
+            logger.error(f"Error mostrando exportación avanzada: {e}")
+            messagebox.showerror("Error", f"Error mostrando exportación: {e}")
     
-    def _on_config_changed(self):
-        """Callback cuando cambia la configuración."""
+    def _on_filters_changed(self, filtered_data: pd.DataFrame):
+        """Callback cuando cambian los filtros."""
         try:
-            # Obtener configuración del paso 2
-            if hasattr(self, 'step_frames') and 'step2' in self.step_frames:
-                step2 = self.step_frames['step2']
-                if hasattr(step2, 'get_configuration'):
-                    config = step2.get_configuration()
-                    self.shared_data['configuration'] = config
-                    self.config_ready = True
+            self.filtered_data = filtered_data
+            self._update_data_display()
+            self._update_statistics()
+            
+            logger.info(f"✅ Filtros aplicados: {len(filtered_data)} estrategias")
+            
+        except Exception as e:
+            logger.error(f"Error actualizando filtros: {e}")
+    
+    def _update_data_display(self):
+        """Actualiza la visualización de datos."""
+        try:
+            if self.filtered_data is None:
+                return
+            
+            # Limpiar tabla
+            for item in self.data_tree.get_children():
+                self.data_tree.delete(item)
+            
+            # Insertar datos filtrados
+            for idx, row in self.filtered_data.iterrows():
+                values = [
+                    row.get('Strategy_Name', ''),
+                    f"{row.get('Factor_K', 0):.3f}",
+                    f"{row.get('CAGR_IS', 0):.3f}",
+                    f"{row.get('Sharpe_Ratio_IS', 0):.3f}",
+                    f"{row.get('Max_Drawdown_IS', 0):.3f}"
+                ]
+                self.data_tree.insert("", "end", values=values)
+            
+        except Exception as e:
+            logger.error(f"Error actualizando visualización: {e}")
+    
+    def _update_statistics(self):
+        """Actualiza las estadísticas mostradas."""
+        try:
+            if self.filtered_data is None:
+                return
+            
+            stats_text = f"""
+📊 ESTADÍSTICAS ACTUALES
+========================
+
+Total de estrategias: {len(self.filtered_data)}
+
+Factor K:
+  - Promedio: {self.filtered_data['Factor_K'].mean():.3f}
+  - Máximo: {self.filtered_data['Factor_K'].max():.3f}
+  - Mínimo: {self.filtered_data['Factor_K'].min():.3f}
+
+CAGR IS:
+  - Promedio: {self.filtered_data['CAGR_IS'].mean():.3f}
+  - Máximo: {self.filtered_data['CAGR_IS'].max():.3f}
+  - Mínimo: {self.filtered_data['CAGR_IS'].min():.3f}
+
+Sharpe Ratio IS:
+  - Promedio: {self.filtered_data['Sharpe_Ratio_IS'].mean():.3f}
+  - Máximo: {self.filtered_data['Sharpe_Ratio_IS'].max():.3f}
+  - Mínimo: {self.filtered_data['Sharpe_Ratio_IS'].min():.3f}
+"""
+            
+            self.stats_text.delete("1.0", tk.END)
+            self.stats_text.insert("1.0", stats_text)
+            
+        except Exception as e:
+            logger.error(f"Error actualizando estadísticas: {e}")
+    
+    def _process_messages(self):
+        """Procesa mensajes de la cola."""
+        try:
+            while not self.message_queue.empty():
+                message = self.message_queue.get_nowait()
+                
+                if isinstance(message, dict):
+                    msg_type = message.get('type')
                     
-                    logger.info("✅ Configuración actualizada")
+                    if msg_type == "data_loaded":
+                        self._update_data_display()
+                        self._update_statistics()
+                        self._update_status(f"Datos cargados: {len(message.get('data', []))} estrategias")
+                        self.progress_bar.stop()
+                        
+                    elif msg_type == "export_complete":
+                        summary = message.get('summary', '')
+                        results = message.get('results', {})
+                        
+                        # Mostrar resumen de exportación
+                        messagebox.showinfo("✅ Exportación .SQX Completada", summary)
+                        self._update_status(f"Exportación completada: {len(results.get('exported_files', []))} archivos .sqx")
+                        
+                    elif msg_type == "export_error":
+                        error_msg = message.get('error', 'Error desconocido')
+                        messagebox.showerror("❌ Error en Exportación", f"Error en exportación .sqx: {error_msg}")
+                        self._update_status("Error en exportación .sqx")
+                        
+                    elif msg_type == "error":
+                        self._update_status(f"Error: {message.get('data', 'Error desconocido')}")
+                        self.progress_bar.stop()
+                        messagebox.showerror("Error", message.get('data', 'Error desconocido'))
+                else:
+                    # Manejo de mensajes legacy
+                    msg_type, data = message
+                    
+                    if msg_type == "data_loaded":
+                        self._update_data_display()
+                        self._update_statistics()
+                        self._update_status(f"Datos cargados: {len(data)} estrategias")
+                        self.progress_bar.stop()
+                        
+                    elif msg_type == "error":
+                        self._update_status(f"Error: {data}")
+                        self.progress_bar.stop()
+                        messagebox.showerror("Error", data)
+            
+            # Programar siguiente verificación
+            self.root.after(100, self._process_messages)
             
         except Exception as e:
-            logger.error(f"❌ Error procesando cambio de configuración: {e}")
+            logger.error(f"Error procesando mensajes: {e}")
     
-    def get_shared_data(self) -> Dict[str, Any]:
-        """Obtiene los datos compartidos entre pasos."""
-        return self.shared_data.copy()
+    def _update_status(self, message: str):
+        """Actualiza el mensaje de estado."""
+        self.status_label.config(text=message)
     
-    def set_shared_data(self, key: str, value: Any):
-        """Establece un valor en los datos compartidos."""
-        self.shared_data[key] = value
+    def _run_scientific_analysis(self):
+        """Ejecuta análisis científico."""
+        messagebox.showinfo("Análisis", "Análisis científico en desarrollo")
     
-    def run_analysis(self):
-        """Ejecuta el análisis completo."""
+    def _run_tail_risk_analysis(self):
+        """Ejecuta análisis de Tail Risk."""
+        messagebox.showinfo("Tail Risk", "Análisis de Tail Risk en desarrollo")
+    
+    def _run_axis_analysis(self):
+        """Ejecuta análisis AXISelect."""
+        messagebox.showinfo("AXISelect", "Análisis AXISelect en desarrollo")
+    
+    def _refresh_data(self):
+        """Actualiza los datos."""
+        messagebox.showinfo("Actualizar", "Actualización de datos en desarrollo")
+    
+    def _save_configuration(self):
+        """Guarda la configuración."""
+        messagebox.showinfo("Configuración", "Guardado de configuración en desarrollo")
+    
+    def _export_sqx_files(self):
+        """Exportar estrategias seleccionadas a archivos .sqx."""
         try:
-            if not self.data_loaded:
-                show_error_message("Error", "Por favor, carga los datos primero")
+            if self.current_data is None or len(self.current_data) == 0:
+                messagebox.showwarning("Advertencia", "No hay datos cargados para exportar.")
                 return
             
-            if not self.config_ready:
-                show_error_message("Error", "Por favor, configura el análisis primero")
+            # Seleccionar directorio de salida
+            output_dir = filedialog.askdirectory(
+                title="Seleccionar directorio para archivos .sqx",
+                initialdir=Path.cwd()
+            )
+            
+            if not output_dir:
                 return
             
-            # Aquí se implementaría la lógica de análisis
-            logger.info("🚀 Iniciando análisis...")
-            show_info_message("Análisis", "Análisis iniciado...")
+            output_path = Path(output_dir)
+            
+            # Inicializar exportador .sqx
+            sqx_exporter = SQXExporter()
+            
+            # Mostrar progreso
+            self._update_status("📁 Iniciando exportación .sqx...")
+            
+            # Ejecutar exportación en hilo separado
+            def export_thread():
+                try:
+                    # Usar datos actuales o filtrados
+                    data_to_export = self.filtered_data if self.filtered_data is not None else self.current_data
+                    
+                    # Ejecutar flujo completo de exportación
+                    results = sqx_exporter.complete_sqx_workflow(
+                        strategies_data=data_to_export,
+                        output_dir=output_path,
+                        ranking_column='CAGR'
+                    )
+                    
+                    # Mostrar resumen
+                    summary = sqx_exporter.get_export_summary(results)
+                    
+                    # Enviar mensaje a la cola
+                    self.message_queue.put({
+                        'type': 'export_complete',
+                        'summary': summary,
+                        'results': results
+                    })
+                    
+                except Exception as e:
+                    self.message_queue.put({
+                        'type': 'export_error',
+                        'error': str(e)
+                    })
+            
+            # Iniciar hilo de exportación
+            export_thread_obj = threading.Thread(target=export_thread)
+            export_thread_obj.daemon = True
+            export_thread_obj.start()
             
         except Exception as e:
-            logger.error(f"❌ Error ejecutando análisis: {e}")
-            show_error_message("Error", f"Error ejecutando análisis: {str(e)}")
+            logger.error(f"❌ Error en exportación .sqx: {e}")
+            messagebox.showerror("Error", f"Error en exportación .sqx: {e}")
     
-    def export_results(self):
-        """Exporta los resultados."""
-        try:
-            if not self.shared_data.get('analysis_results'):
-                show_error_message("Error", "No hay resultados para exportar")
-                return
-            
-            # Aquí se implementaría la lógica de exportación
-            logger.info("📤 Exportando resultados...")
-            show_info_message("Exportación", "Resultados exportados...")
-            
-        except Exception as e:
-            logger.error(f"❌ Error exportando resultados: {e}")
-            show_error_message("Error", f"Error exportando resultados: {str(e)}")
+    def _show_help(self):
+        """Muestra la ayuda."""
+        messagebox.showinfo("Ayuda", "Sistema de ayuda en desarrollo")
     
-    def reset_wizard(self):
-        """Reinicia el wizard."""
-        try:
-            # Reiniciar todos los pasos
-            for step_name, step_frame in self.step_frames.items():
-                if hasattr(step_frame, 'reset_step'):
-                    step_frame.reset_step()
-            
-            # Limpiar datos compartidos
-            self.shared_data = {
-                'loaded_data': None,
-                'configuration': None,
-                'analysis_results': None,
-                'filtered_results': None,
-                'advisor_results': None
-            }
-            
-            # Ir al primer paso
-            self._go_to_step(1)
-            
-            logger.info("✅ Wizard reiniciado")
-            show_info_message("Reinicio", "Wizard reiniciado correctamente")
-            
-        except Exception as e:
-            logger.error(f"❌ Error reiniciando wizard: {e}")
-            show_error_message("Error", f"Error reiniciando wizard: {str(e)}")
+    def _show_about(self):
+        """Muestra información sobre la aplicación."""
+        messagebox.showinfo("Acerca de", "QVA Strategy Studio v2.0\nAnálisis Cuantitativo Avanzado")
     
-    def show_about(self):
-        """Muestra el diálogo 'Acerca de'."""
+    def _apply_quick_filters(self):
+        """Aplica filtros rápidos."""
+        messagebox.showinfo("Filtros", "Filtros rápidos en desarrollo")
+    
+    def _select_all_strategies(self):
+        """Selecciona todas las estrategias."""
+        messagebox.showinfo("Selección", "Selección de estrategias en desarrollo")
+    
+    def _clear_selection(self):
+        """Limpia la selección."""
+        messagebox.showinfo("Limpieza", "Limpieza de selección en desarrollo")
+    
+    def _show_strategy_details(self):
+        """Muestra detalles de estrategia."""
+        messagebox.showinfo("Detalles", "Detalles de estrategia en desarrollo")
+    
+    def _analyze_selected(self):
+        """Analiza estrategias seleccionadas."""
+        messagebox.showinfo("Análisis", "Análisis de seleccionadas en desarrollo")
+    
+    def _export_selected(self):
+        """Exporta estrategias seleccionadas."""
+        messagebox.showinfo("Exportación", "Exportación de seleccionadas en desarrollo")
+    
+    def _refresh_main_data(self):
+        """Actualiza datos principales."""
+        messagebox.showinfo("Actualizar", "Actualización de datos principales en desarrollo")
+    
+    def _show_data_statistics(self):
+        """Muestra estadísticas de datos."""
+        messagebox.showinfo("Estadísticas", "Estadísticas de datos en desarrollo")
+    
+    def _search_strategies(self):
+        """Busca estrategias."""
+        messagebox.showinfo("Búsqueda", "Búsqueda de estrategias en desarrollo")
+    
+    def _show_scientific_results(self):
+        """Muestra resultados científicos."""
+        messagebox.showinfo("Resultados", "Resultados científicos en desarrollo")
+    
+    def _save_scientific_analysis(self):
+        """Guarda análisis científico."""
+        messagebox.showinfo("Guardar", "Guardado de análisis científico en desarrollo")
+    
+    def _show_tail_risk_charts(self):
+        """Muestra gráficos de Tail Risk."""
+        messagebox.showinfo("Gráficos", "Gráficos de Tail Risk en desarrollo")
+    
+    def _export_tail_risk(self):
+        """Exporta análisis de Tail Risk."""
+        messagebox.showinfo("Exportar", "Exportación de Tail Risk en desarrollo")
+    
+    def _show_axis_results(self):
+        """Muestra resultados de AXISelect."""
+        messagebox.showinfo("Resultados", "Resultados de AXISelect en desarrollo")
+    
+    def _save_axis_selection(self):
+        """Guarda selección de AXISelect."""
+        messagebox.showinfo("Guardar", "Guardado de selección AXISelect en desarrollo")
+    
+    def _compare_selected_strategies(self):
+        """Compara estrategias seleccionadas."""
+        messagebox.showinfo("Comparar", "Comparación de estrategias en desarrollo")
+    
+    def _show_comparison_results(self):
+        """Muestra resultados de comparación."""
+        messagebox.showinfo("Resultados", "Resultados de comparación en desarrollo")
+    
+    def _export_comparison(self):
+        """Exporta comparación."""
+        messagebox.showinfo("Exportar", "Exportación de comparación en desarrollo")
+    
+    def _create_charts(self):
+        """Crea gráficos."""
+        messagebox.showinfo("Gráficos", "Creación de gráficos en desarrollo")
+    
+    def _export_charts(self):
+        """Exporta gráficos."""
+        messagebox.showinfo("Exportar", "Exportación de gráficos en desarrollo")
+    
+    def _refresh_charts(self):
+        """Actualiza gráficos."""
+        messagebox.showinfo("Actualizar", "Actualización de gráficos en desarrollo")
+    
+    def _on_strategy_selected(self, event):
+        """Callback cuando se selecciona una estrategia."""
+        pass
+    
+    def run(self):
+        """Ejecuta la aplicación."""
         try:
-            from .utils import create_about_dialog
-            create_about_dialog(self)
+            logger.info("🚀 Iniciando QVA Strategy Studio")
+            self.root.mainloop()
             
         except Exception as e:
-            logger.error(f"❌ Error mostrando diálogo 'Acerca de': {e}")
-            show_error_message("Error", f"Error mostrando información: {str(e)}")
+            logger.error(f"Error ejecutando aplicación: {e}")
 
-
-def create_main_window():
-    """
-    Función factory para crear la ventana principal.
-    
-    Returns:
-        MainWindow: Instancia de la ventana principal
-    """
+# Funciones de conveniencia
+def create_main_window() -> MainWindow:
+    """Crea la ventana principal de la aplicación."""
     return MainWindow()
 
-
-if __name__ == "__main__":
-    # Test de la ventana principal
+def run_gui():
+    """Ejecuta la interfaz gráfica."""
     app = create_main_window()
-    app.mainloop() 
+    app.run() 

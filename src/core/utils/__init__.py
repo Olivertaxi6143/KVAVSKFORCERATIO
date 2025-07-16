@@ -1,27 +1,56 @@
 """
-Utils Específicos del Core Engine
-=================================
+Módulo de Utilidades del Core
+=============================
 
-Este módulo proporciona acceso a utilidades específicas del core engine:
-- error_handler: Manejo centralizado de errores
-- validation_utils: Validación específica del core (NO de datos)
+Utilidades centrales para el sistema de análisis cuantitativo:
+- memory_optimizer.py: Optimización de memoria para datasets grandes
+- parallel_trainer.py: Paralelización de entrenamiento de modelos
+- intelligent_cache.py: Cache inteligente para resultados
+- error_handler.py: Manejo centralizado de errores
+- validation_utils.py: Utilidades de validación
 
-NOTA: Todas las funciones de tratamiento de datos han sido migradas a src/data/
 Autor: Sistema de Análisis Cuantitativo
-Fecha: 2025-01-27
+Fecha: 2025-01-15
 """
 
-# Imports de error handling
+# Imports desde memory_optimizer.py
+from .memory_optimizer import (
+    MemoryOptimizer,
+    MemoryConfig,
+    optimize_large_dataset,
+    get_memory_usage,
+    get_optimization_stats
+)
+
+# Imports desde parallel_trainer.py
+from .parallel_trainer import (
+    ParallelTrainer,
+    ParallelConfig,
+    train_models_parallel,
+    get_training_stats,
+    monitor_training_progress
+)
+
+# Imports desde intelligent_cache.py
+from .intelligent_cache import (
+    IntelligentCache,
+    CacheConfig,
+    cache_result,
+    get_cached_result,
+    get_cache_stats,
+    clear_cache
+)
+
+# Imports desde error_handler.py
 from .error_handler import (
     RobustErrorHandler,
     retry_on_error,
     handle_specific_errors,
     validate_input,
-    log_execution_time,
-    GUIAnalysisError
+    log_execution_time
 )
 
-# Imports de validación específica del core
+# Imports desde validation_utils.py
 from .validation_utils import (
     validate_config,
     validate_kpi_config,
@@ -35,17 +64,38 @@ from .validation_utils import (
     validate_analysis_results
 )
 
-# Lista de funciones exportadas (solo core-specific)
+# Lista de todas las funciones exportadas
 __all__ = [
-    # Error handling
+    # Memory Optimizer
+    'MemoryOptimizer',
+    'MemoryConfig',
+    'optimize_large_dataset',
+    'get_memory_usage',
+    'get_optimization_stats',
+    
+    # Parallel Trainer
+    'ParallelTrainer',
+    'ParallelConfig',
+    'train_models_parallel',
+    'get_training_stats',
+    'monitor_training_progress',
+    
+    # Intelligent Cache
+    'IntelligentCache',
+    'CacheConfig',
+    'cache_result',
+    'get_cached_result',
+    'get_cache_stats',
+    'clear_cache',
+    
+    # Error Handler
     'RobustErrorHandler',
     'retry_on_error',
     'handle_specific_errors',
     'validate_input',
     'log_execution_time',
-    'GUIAnalysisError',
     
-    # Core validation
+    # Validation Utils
     'validate_config',
     'validate_kpi_config',
     'validate_trading_style_config',

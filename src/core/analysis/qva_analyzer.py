@@ -899,7 +899,8 @@ class QVAScorerEnhanced:
                 'profit_target': 'small_consistent',
                 'max_drawdown_tolerance': 0.15,
                 'sharpe_minimum': 1.5,
-                'profit_factor_minimum': 1.2
+                'profit_factor_minimum': 1.2,
+                'profitability_focus': 'high_frequency'
             },
             'Day Trading': {
                 'timeframe': 'M5-H1',
@@ -908,7 +909,8 @@ class QVAScorerEnhanced:
                 'profit_target': 'moderate_consistent',
                 'max_drawdown_tolerance': 0.20,
                 'sharpe_minimum': 1.3,
-                'profit_factor_minimum': 1.4
+                'profit_factor_minimum': 1.4,
+                'profitability_focus': 'consistent'
             },
             'Swing Trading': {
                 'timeframe': 'H1-D1',
@@ -917,7 +919,8 @@ class QVAScorerEnhanced:
                 'profit_target': 'moderate_swing',
                 'max_drawdown_tolerance': 0.25,
                 'sharpe_minimum': 1.1,
-                'profit_factor_minimum': 1.6
+                'profit_factor_minimum': 1.6,
+                'profitability_focus': 'balanced'
             },
             'Position Trading': {
                 'timeframe': 'D1-W1',
@@ -926,7 +929,8 @@ class QVAScorerEnhanced:
                 'profit_target': 'large_swing',
                 'max_drawdown_tolerance': 0.30,
                 'sharpe_minimum': 0.9,
-                'profit_factor_minimum': 1.8
+                'profit_factor_minimum': 1.8,
+                'profitability_focus': 'long_term'
             },
             'Breakout': {
                 'timeframe': 'H1-D1',
@@ -935,7 +939,8 @@ class QVAScorerEnhanced:
                 'profit_target': 'breakout_moves',
                 'max_drawdown_tolerance': 0.25,
                 'sharpe_minimum': 1.2,
-                'profit_factor_minimum': 1.5
+                'profit_factor_minimum': 1.5,
+                'profitability_focus': 'momentum'
             },
             'General': {
                 'timeframe': 'H1',
@@ -944,7 +949,8 @@ class QVAScorerEnhanced:
                 'profit_target': 'balanced',
                 'max_drawdown_tolerance': 0.25,
                 'sharpe_minimum': 1.0,
-                'profit_factor_minimum': 1.5
+                'profit_factor_minimum': 1.5,
+                'profitability_focus': 'balanced'
             }
         }
         

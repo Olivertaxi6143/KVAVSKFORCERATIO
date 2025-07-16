@@ -1,209 +1,115 @@
 {
-  "trading_style": "Intradía",
+  "trading_style": "Day_Trading",
   "selected_kpis": {
-    "Strategy Name": {
+    "Sharpe_Ratio": {
       "enabled": true,
-      "weight": 1.0
-    },
-    "Filters result": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "TimeFrame": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Total Data Months": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "# of trades": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "CAGR (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "CAGR (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Drawdown (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Drawdown (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Sharpe Ratio (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Sharpe Ratio (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Profit factor (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Profit factor (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Winning Percent (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Winning Percent (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Net profit (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Net profit (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "CalmarRatio (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "CalmarRatio (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "SQN Score (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "SQN Score (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "R Expectancy (IS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "R Expectancy (OOS)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Winning Percent": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Exposure": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "CAGR": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Drawdown": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Avg. Stagnation Trades": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Max DD %": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Expectancy": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Avg. MAE - Profit/loss": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Avg. MFE - Profit/loss": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Max Consec. Losses": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Payout ratio": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Sharpe Ratio": {
-      "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "Ratio de Sharpe"
     },
     "Profit factor": {
       "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "Factor de Beneficio"
     },
-    "RINAIndex": {
+    "Max_DD_%": {
       "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "Máximo Drawdown"
     },
-    "Ulcer Index %": {
+    "CAGR": {
       "enabled": true,
-      "weight": 1.0
-    },
-    "Ulcer Performance Index": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Stagnation": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "CalmarRatio": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Max Drawdown Duration": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "SQN": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Avg. Bars in Trade": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "VaR (95%)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "CVaR (95%)": {
-      "enabled": true,
-      "weight": 1.0
-    },
-    "Sortino Ratio": {
-      "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "CAGR"
     },
     "RecoveryFactor": {
       "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "Factor de Recuperación"
     },
-    "Stagnation (Trades)": {
+    "VaR (95%)": {
       "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "Value at Risk 95%"
     },
-    "New Peak Trades %": {
+    "CVaR (95%)": {
       "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "Conditional VaR 95%"
     },
-    "Drawdown Trades %": {
+    "Ulcer Index %": {
       "enabled": true,
-      "weight": 1.0
+      "weight": 1.0,
+      "description": "Índice de Úlcera"
+    },
+    "CalmarRatio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Calmar"
+    },
+    "SQN": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "SQN Score"
+    },
+    "RINAIndex": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "RINA Index"
+    },
+    "Stagnation": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Estancamiento"
+    },
+    "Net profit": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Beneficio Neto"
+    },
+    "Winning Percent": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Porcentaje de Victorias"
+    },
+    "Avg. Bars in Trade": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Barras promedio en trade"
+    },
+    "Max Consec. Losses": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Máximas pérdidas consecutivas"
+    },
+    "Drawdown": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Drawdown"
+    },
+    "Max Drawdown Duration": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Duración máxima de drawdown"
+    },
+    "Exposure": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Exposición"
+    },
+    "Sortino Ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de Sortino"
+    },
+    "Payout ratio": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Ratio de payout"
+    },
+    "Expectancy": {
+      "enabled": true,
+      "weight": 1.0,
+      "description": "Expectativa"
     }
   },
   "component_weights": {
@@ -277,9 +183,5 @@
         "VaR (95%)"
       ]
     }
-  },
-  "alpha": 0.8,
-  "top_n": 20,
-  "percentil": 80,
-  "scientific_improvements": true,
-  "data_manager": 
+  }
+}
