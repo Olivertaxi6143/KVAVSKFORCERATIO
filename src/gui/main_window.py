@@ -72,6 +72,7 @@ class MainWindow:
         # Variables de estado
         self.current_data = None
         self.filtered_data = None
+        self.results_df = None
         self.selected_strategies = []
         
         # Cola para comunicación entre hilos
@@ -256,8 +257,9 @@ class MainWindow:
         self._create_performance_tab()
 
         # Pestaña de Análisis de Portfolio
-        self.portfolio_analysis_tab = PortfolioAnalysisTab(self.notebook)
-        self.notebook.add(self.portfolio_analysis_tab, text="Análisis de Portfolio")
+        portfolio_frame = ttk.Frame(self.notebook)
+        self.notebook.add(portfolio_frame, text="Análisis de Portfolio")
+        self.portfolio_analysis_tab = PortfolioAnalysisTab(portfolio_frame)
     
     def _build_right_panel(self, parent: ttk.Frame):
         """Construye el panel derecho."""
@@ -539,7 +541,7 @@ class MainWindow:
         """Hilo para cargar datos."""
         try:
             # Cargar datos usando DataManager
-            data = self.data_manager.load_data()
+            data = self.data_manager.get_clean_data()
             
             if data is not None and len(data) > 0:
                 self.current_data = data
@@ -597,31 +599,40 @@ class MainWindow:
             corr_frame = ttk.Frame(notebook)
             notebook.add(corr_frame, text="🔗 Correlación")
             
-            corr_config = self.chart_manager.create_correlation_matrix_chart(
-                self.current_data, "Matriz de Correlación de Estrategias"
-            )
-            corr_widget = self.chart_manager.create_chart_widget(corr_frame, corr_config)
+            if self.chart_manager is not None:
+                corr_config = self.chart_manager.create_correlation_matrix_chart(
+                    self.current_data, "Matriz de Correlación de Estrategias"
+                )
+                corr_widget = self.chart_manager.create_chart_widget(corr_frame, corr_config)
+            else:
+                corr_widget = ttk.Label(corr_frame, text="Chart Manager no disponible")
             corr_widget.pack(fill="both", expand=True)
             
             # Gráfico de dispersión
             scatter_frame = ttk.Frame(notebook)
             notebook.add(scatter_frame, text="📊 Dispersión")
             
-            scatter_config = self.chart_manager.create_scatter_plot(
-                self.current_data, "CAGR_IS", "Sharpe_Ratio_IS", 
-                color_col="Factor_K", title="CAGR vs Sharpe Ratio"
-            )
-            scatter_widget = self.chart_manager.create_chart_widget(scatter_frame, scatter_config)
+            if self.chart_manager is not None:
+                scatter_config = self.chart_manager.create_scatter_plot(
+                    self.current_data, "CAGR_IS", "Sharpe_Ratio_IS", 
+                    color_col="Factor_K", title="CAGR vs Sharpe Ratio"
+                )
+                scatter_widget = self.chart_manager.create_chart_widget(scatter_frame, scatter_config)
+            else:
+                scatter_widget = ttk.Label(scatter_frame, text="Chart Manager no disponible")
             scatter_widget.pack(fill="both", expand=True)
             
             # Histograma
             hist_frame = ttk.Frame(notebook)
             notebook.add(hist_frame, text="📈 Histograma")
             
-            hist_config = self.chart_manager.create_histogram_chart(
-                self.current_data, "Factor_K", title="Distribución Factor K"
-            )
-            hist_widget = self.chart_manager.create_chart_widget(hist_frame, hist_config)
+            if self.chart_manager is not None:
+                hist_config = self.chart_manager.create_histogram_chart(
+                    self.current_data, "Factor_K", title="Distribución Factor K"
+                )
+                hist_widget = self.chart_manager.create_chart_widget(hist_frame, hist_config)
+            else:
+                hist_widget = ttk.Label(hist_frame, text="Chart Manager no disponible")
             hist_widget.pack(fill="both", expand=True)
             
         except Exception as e:
@@ -668,18 +679,24 @@ class MainWindow:
                     return
                 
                 # Configurar comparación
-                self.comparison_manager.set_data(self.current_data)
-                self.comparison_manager.select_strategies(selected_strategies)
-                
-                # Ejecutar comparación
-                results = self.comparison_manager.compare_strategies()
-                
-                # Mostrar resultados
-                results_frame = ttk.Frame(main_frame)
-                results_frame.pack(fill="both", expand=True)
-                
-                results_widget = self.comparison_manager.create_comparison_widget(results_frame, results)
-                results_widget.pack(fill="both", expand=True)
+                if self.comparison_manager is not None and self.current_data is not None:
+                    self.comparison_manager.set_data(self.current_data)
+                    self.comparison_manager.select_strategies(selected_strategies)
+                    
+                    # Ejecutar comparación
+                    results = self.comparison_manager.compare_strategies()
+                    
+                    # Mostrar resultados
+                    results_frame = ttk.Frame(main_frame)
+                    results_frame.pack(fill="both", expand=True)
+                    
+                    if results is not None:
+                        results_widget = self.comparison_manager.create_comparison_widget(results_frame, results)
+                        results_widget.pack(fill="both", expand=True)
+                    else:
+                        ttk.Label(results_frame, text="No se pudieron generar resultados de comparación").pack()
+                else:
+                    ttk.Label(main_frame, text="Comparison Manager no disponible").pack()
             
             ttk.Button(button_frame, text="⚖️ Comparar Seleccionadas", 
                       command=compare_selected).pack(side="left", padx=5)
@@ -698,16 +715,29 @@ class MainWindow:
                 return
             
             # Configurar datos para exportación
-            self.export_manager.set_data(self.current_data)
-            
-            # Crear ventana de exportación
-            export_window = tk.Toplevel(self.root)
-            export_window.title("📤 Exportación Avanzada")
-            export_window.geometry("600x400")
-            
-            # Crear diálogo de exportación
-            export_widget = self.export_manager.create_export_dialog(export_window)
-            export_widget.pack(fill="both", expand=True, padx=10, pady=10)
+            if self.export_manager is not None and self.current_data is not None:
+                self.export_manager.set_data(self.current_data)
+                
+                # Crear ventana de exportación
+                export_window = tk.Toplevel(self.root)
+                export_window.title("📤 Exportación Avanzada")
+                export_window.geometry("600x400")
+                
+                # Crear diálogo de exportación
+                if self.export_manager is not None and hasattr(self.export_manager, 'create_export_dialog'):
+                    try:
+                        # Crear un frame contenedor para evitar problemas de tipo
+                        container_frame = ttk.Frame(export_window)
+                        container_frame.pack(fill="both", expand=True, padx=10, pady=10)
+                        
+                        export_widget = self.export_manager.create_export_dialog(container_frame)
+                        export_widget.pack(fill="both", expand=True)
+                    except Exception as e:
+                        ttk.Label(export_window, text=f"Error en export manager: {e}").pack()
+                else:
+                    ttk.Label(export_window, text="Export Manager no disponible").pack()
+            else:
+                messagebox.showwarning("Exportación", "Export Manager no disponible")
             
         except Exception as e:
             logger.error(f"Error mostrando exportación avanzada: {e}")
@@ -911,11 +941,14 @@ Sharpe Ratio IS:
                     data_to_export = self.filtered_data if self.filtered_data is not None else self.current_data
                     
                     # Ejecutar flujo completo de exportación
-                    results = sqx_exporter.complete_sqx_workflow(
-                        strategies_data=data_to_export,
-                        output_dir=output_path,
-                        ranking_column='CAGR'
-                    )
+                    if data_to_export is not None:
+                        results = sqx_exporter.complete_sqx_workflow(
+                            strategies_data=data_to_export,
+                            output_dir=output_path,
+                            ranking_column='CAGR'
+                        )
+                    else:
+                        raise ValueError("No hay datos para exportar")
                     
                     # Mostrar resumen
                     summary = sqx_exporter.get_export_summary(results)
@@ -1209,6 +1242,125 @@ CONSIDERACIONES:
 • Comparar con benchmark del mercado
 • Evaluar junto con riesgo (Sharpe, Drawdown)"""
     
+    def _get_calmar_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para Calmar Ratio."""
+        return """⚖️ CALMAR RATIO
+
+Mide el rendimiento anual vs el máximo drawdown.
+
+INTERPRETACIÓN:
+• >4.0: Excelente (rendimiento superior al riesgo)
+• 2.0-4.0: Muy bueno
+• 1.0-2.0: Bueno
+• 0.5-1.0: Aceptable
+• <0.5: Pobre
+
+FÓRMULA:
+Calmar = CAGR / Máximo Drawdown
+
+IMPORTANCIA:
+• Estrategias con Calmar alto son más eficientes
+• Considera tanto retornos como riesgo máximo
+• Métrica preferida por gestores profesionales
+
+RECOMENDACIÓN:
+Valores altos indican mejor gestión de riesgo."""
+    
+    def _get_profit_factor_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para Profit Factor."""
+        return """💰 PROFIT FACTOR
+
+Ratio entre ganancias totales y pérdidas totales.
+
+INTERPRETACIÓN:
+• >3.0: Excelente (muy rentable)
+• 2.0-3.0: Muy bueno
+• 1.5-2.0: Bueno
+• 1.2-1.5: Aceptable
+• <1.2: Pobre
+
+FÓRMULA:
+Profit Factor = Ganancias Totales / Pérdidas Totales
+
+IMPORTANCIA:
+• Indica la eficiencia de la estrategia
+• Valores >1 indican estrategia rentable
+• Cuanto mayor, mejor la gestión de riesgo
+
+CONSIDERACIONES:
+• Evaluar junto con número de trades
+• Considerar estabilidad temporal del ratio"""
+    
+    def _get_win_rate_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para Win Rate."""
+        return """🎯 WIN RATE
+
+Porcentaje de trades ganadores vs total de trades.
+
+INTERPRETACIÓN:
+• >70%: Excelente (alta precisión)
+• 60-70%: Muy bueno
+• 50-60%: Bueno
+• 40-50%: Aceptable
+• <40%: Pobre
+
+IMPORTANCIA:
+• Indica la precisión de la estrategia
+• No es lo único importante (considerar tamaño de trades)
+• Estrategias con win rate alto suelen ser más estables
+
+CONSIDERACIONES:
+• Evaluar junto con profit factor
+• Win rate alto no garantiza rentabilidad
+• Considerar distribución de ganancias/pérdidas"""
+    
+    def _get_trades_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para número de trades."""
+        return """📈 NÚMERO DE TRADES
+
+Cantidad total de operaciones realizadas.
+
+INTERPRETACIÓN:
+• >1000: Excelente (mucha experiencia)
+• 500-1000: Muy bueno
+• 200-500: Bueno
+• 100-200: Aceptable
+• <100: Limitado
+
+IMPORTANCIA:
+• Más trades = más datos para análisis
+• Indica actividad de la estrategia
+• Necesario para validación estadística
+
+CONSIDERACIONES:
+• Evaluar junto con período de tiempo
+• Más trades no siempre es mejor
+• Considerar frecuencia de trading"""
+    
+    def _get_recovery_factor_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para Recovery Factor."""
+        return """🔄 RECOVERY FACTOR
+
+Mide la capacidad de recuperación de la estrategia.
+
+INTERPRETACIÓN:
+• >3.0: Excelente (recuperación rápida)
+• 2.0-3.0: Muy bueno
+• 1.5-2.0: Bueno
+• 1.0-1.5: Aceptable
+• <1.0: Pobre
+
+FÓRMULA:
+Recovery Factor = Net Profit / Máximo Drawdown
+
+IMPORTANCIA:
+• Indica resiliencia de la estrategia
+• Valores altos = mejor gestión de crisis
+• Métrica clave para estrategias de largo plazo
+
+RECOMENDACIÓN:
+Estrategias con recovery factor alto son más robustas."""
+    
     def _apply_tooltips_to_metrics(self):
         """Aplica tooltips informativos a las métricas principales."""
         try:
@@ -1229,8 +1381,71 @@ CONSIDERACIONES:
                     self._get_factor_k_tooltip_text(),
                     "Factor K Elite 9.6"
                 )
+                
+                # Tooltip para columna Predictibilidad
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_predictability_tooltip_text(),
+                    "Predictibilidad"
+                )
+                
+                # Tooltip para columna Sharpe Ratio
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_sharpe_tooltip_text(),
+                    "Sharpe Ratio"
+                )
+                
+                # Tooltip para columna Max Drawdown
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_drawdown_tooltip_text(),
+                    "Máximo Drawdown"
+                )
+                
+                # Tooltip para columna CAGR
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_cagr_tooltip_text(),
+                    "CAGR"
+                )
+                
+                # Tooltip para columna Calmar Ratio
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_calmar_tooltip_text(),
+                    "Calmar Ratio"
+                )
+                
+                # Tooltip para columna Profit Factor
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_profit_factor_tooltip_text(),
+                    "Profit Factor"
+                )
+                
+                # Tooltip para columna Win Rate
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_win_rate_tooltip_text(),
+                    "Win Rate"
+                )
+                
+                # Tooltip para columna Trades
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_trades_tooltip_text(),
+                    "Número de Trades"
+                )
+                
+                # Tooltip para columna Recovery Factor
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_recovery_factor_tooltip_text(),
+                    "Recovery Factor"
+                )
             
-            logger.info("✅ Tooltips informativos aplicados a métricas principales")
+            logger.info("✅ Tooltips informativos aplicados a todas las métricas principales")
             
         except Exception as e:
             logger.error(f"Error aplicando tooltips: {e}")
@@ -1487,7 +1702,11 @@ CONSIDERACIONES:
                 return
             
             # Configurar datos para exportación
-            self.export_manager.set_data(self.results_df)
+            if self.export_manager is not None:
+                self.export_manager.set_data(self.results_df)
+            else:
+                messagebox.showwarning("Exportación", "Export Manager no disponible")
+                return
             
             # Seleccionar archivo
             filename = filedialog.asksaveasfilename(
@@ -1498,13 +1717,17 @@ CONSIDERACIONES:
             
             if filename:
                 # Exportar con configuración avanzada
-                success = self.export_manager.export_to_excel_advanced(filename)
+                if hasattr(self.export_manager, 'export_to_excel_advanced'):
+                    success = self.export_manager.export_to_excel_advanced(filename)
+                else:
+                    messagebox.showwarning("Exportación", "Método de exportación no disponible")
+                    return
                 
                 if success:
                     messagebox.showinfo("Éxito", f"Excel exportado exitosamente:\n{filename}")
                     
                     # Abrir archivo si está configurado
-                    if self.config_vars['auto_open'].get():
+                    if hasattr(self, 'config_vars') and self.config_vars.get('auto_open', False):
                         os.startfile(filename)
                 else:
                     messagebox.showerror("Error", "Error al exportar Excel")
@@ -1555,7 +1778,11 @@ CONSIDERACIONES:
                 return
             
             # Configurar datos para exportación
-            self.export_manager.set_data(self.results_df)
+            if self.export_manager is not None:
+                self.export_manager.set_data(self.results_df)
+            else:
+                messagebox.showwarning("Exportación", "Export Manager no disponible")
+                return
             
             # Seleccionar archivo
             filename = filedialog.asksaveasfilename(
@@ -1569,19 +1796,24 @@ CONSIDERACIONES:
                 config = {
                     "title": "Dashboard de Análisis de Estrategias",
                     "theme": "plotly_white",
-                    "include_charts": self.config_vars['include_charts'].get(),
-                    "include_filters": self.config_vars['include_filters'].get(),
-                    "include_summary": self.config_vars['include_summary'].get()
+                    "include_charts": True,
+                    "include_filters": True,
+                    "include_summary": True
                 }
                 
                 # Exportar dashboard
-                success = self.export_manager.export_to_html_dashboard(filename, config)
+                if hasattr(self.export_manager, 'export_to_html_dashboard'):
+                    success = self.export_manager.export_to_html_dashboard(filename, config)
+                else:
+                    messagebox.showwarning("Exportación", "Método de exportación HTML no disponible")
+                    return
                 
                 if success:
                     messagebox.showinfo("Éxito", f"Dashboard HTML creado exitosamente:\n{filename}")
                     
                     # Abrir en navegador si está configurado
-                    if self.config_vars['auto_open'].get():
+                    if hasattr(self, 'config_vars') and self.config_vars.get('auto_open', False):
+                        import webbrowser
                         webbrowser.open(f"file://{os.path.abspath(filename)}")
                 else:
                     messagebox.showerror("Error", "Error al crear dashboard HTML")
@@ -1618,7 +1850,11 @@ CONSIDERACIONES:
                 return
             
             # Configurar datos para exportación
-            self.export_manager.set_data(self.results_df)
+            if self.export_manager is not None:
+                self.export_manager.set_data(self.results_df)
+            else:
+                messagebox.showwarning("Exportación", "Export Manager no disponible")
+                return
             
             # Seleccionar archivo
             filename = filedialog.asksaveasfilename(
@@ -1632,19 +1868,23 @@ CONSIDERACIONES:
                 config = {
                     "title": "Reporte de Análisis de Estrategias",
                     "author": "QVA Strategy Studio",
-                    "include_charts": self.config_vars['include_charts'].get(),
-                    "include_summary": self.config_vars['include_summary'].get(),
+                    "include_charts": True,
+                    "include_summary": True,
                     "include_details": True
                 }
                 
                 # Exportar PDF
-                success = self.export_manager.export_to_pdf_report(filename, config)
+                if hasattr(self.export_manager, 'export_to_pdf_report'):
+                    success = self.export_manager.export_to_pdf_report(filename, config)
+                else:
+                    messagebox.showwarning("Exportación", "Método de exportación PDF no disponible")
+                    return
                 
                 if success:
                     messagebox.showinfo("Éxito", f"Reporte PDF generado exitosamente:\n{filename}")
                     
                     # Abrir archivo si está configurado
-                    if self.config_vars['auto_open'].get():
+                    if hasattr(self, 'config_vars') and self.config_vars.get('auto_open', False):
                         os.startfile(filename)
                 else:
                     messagebox.showerror("Error", "Error al generar PDF")
@@ -1706,41 +1946,46 @@ CONSIDERACIONES:
             messagebox.showerror("Error", f"Error guardando configuración:\n{str(e)}")
     
     def _export_batch(self):
-        """Exporta en múltiples formatos por lotes."""
+        """Exporta en lotes múltiples formatos."""
         try:
             if not hasattr(self, 'results_df') or self.results_df is None:
                 messagebox.showwarning("Sin Datos", "No hay datos para exportar. Ejecute un análisis primero.")
                 return
             
             # Configurar datos para exportación
-            self.export_manager.set_data(self.results_df)
+            if self.export_manager is not None:
+                self.export_manager.set_data(self.results_df)
+            else:
+                messagebox.showwarning("Exportación", "Export Manager no disponible")
+                return
             
-            # Seleccionar directorio de salida
-            output_dir = filedialog.askdirectory(title="Seleccionar Carpeta de Salida")
+            # Seleccionar carpeta de salida
+            batch_folder = filedialog.askdirectory(
+                title="Seleccionar carpeta para exportación por lotes"
+            )
             
-            if output_dir:
-                # Obtener formatos seleccionados
-                selected_formats = [fmt for fmt, var in self.format_vars.items() if var.get()]
+            if batch_folder:
+                # Configuración del lote
+                batch_config = {
+                    'formats': ['excel', 'html', 'pdf'],
+                    'output_folder': batch_folder
+                }
                 
-                if not selected_formats:
-                    messagebox.showwarning("Sin Formatos", "Seleccione al menos un formato para exportar.")
+                # Exportar lote
+                if hasattr(self.export_manager, 'export_batch'):
+                    success = self.export_manager.export_batch(batch_folder, batch_config['formats'])
+                else:
+                    messagebox.showwarning("Exportación", "Método de exportación por lotes no disponible")
                     return
                 
-                # Exportar por lotes
-                success = self.export_manager.export_batch(output_dir, selected_formats)
-                
                 if success:
-                    messagebox.showinfo("Éxito", f"Exportación por lotes completada:\n{output_dir}")
-                    
-                    # Abrir carpeta si está configurado
-                    if self.config_vars['auto_open'].get():
-                        os.startfile(output_dir)
+                    messagebox.showinfo("Éxito", f"Exportación por lotes completada:\n{batch_folder}")
                 else:
                     messagebox.showerror("Error", "Error en exportación por lotes")
                     
         except Exception as e:
-            logger.error(f"Error en exportación por lotes: {e}")
-            messagebox.showerror("Error", f"Error en exportación por lotes:\n{str(e)}")
+            logger.error(f"Error exportando por lotes: {e}")
+            messagebox.showerror("Error", f"Error al exportar por lotes:\n{str(e)}")
     
     def _select_batch_folder(self):
         """Selecciona carpeta para exportación por lotes."""

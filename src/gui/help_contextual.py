@@ -32,7 +32,7 @@ class HelpContextualPanel:
         
         logger.info("✅ HelpContextualPanel inicializado")
     
-    def _initialize_help_content(self) -> Dict[str, Dict[str, str]]:
+    def _initialize_help_content(self) -> dict:
         """Inicializa el contenido de ayuda organizado."""
         return {
             "metricas": {
@@ -61,7 +61,7 @@ class HelpContextualPanel:
                             "Crisis": "50% S, 10% G, 30% E, 10% C"
                         }
                     },
-                    "predictabilidad": {
+                    "predictibilidad": {
                         "title": "🎯 Predictibilidad",
                         "description": "Evalúa la capacidad de la estrategia para mantener su rendimiento en datos futuros.",
                         "scales": [
@@ -199,27 +199,75 @@ class HelpContextualPanel:
                 }
             },
             "faq": {
-                "title": "❓ Preguntas Frecuentes",
+                "title": "❓ Preguntas Frecuentes (FAQ)",
                 "content": {
-                    "mejor_estrategia": {
-                        "question": "¿Cómo identifico la mejor estrategia?",
-                        "answer": "La mejor estrategia combina Factor K alto (≥9.2), predictibilidad excelente (≥85%), Sharpe Ratio superior (≥2.0) y drawdown bajo (<10%)."
+                    "general": {
+                        "title": "🤔 Preguntas Generales",
+                        "questions": {
+                            "¿Qué es QVA Strategy Studio?": {
+                                "answer": "QVA Strategy Studio es una aplicación profesional para análisis cuantitativo de estrategias de trading. Permite evaluar, comparar y seleccionar estrategias basándose en métricas avanzadas como Factor K, predictibilidad, Sharpe ratio y más.",
+                                "tags": ["general", "introduccion"]
+                            },
+                            "¿Cómo interpreto los resultados?": {
+                                "answer": "Los resultados se presentan con badges visuales (🥇🥈🥉⭐⚠️❌) y colores automáticos. Las estrategias Elite (🥇) son las mejores, seguidas por Excellent (🥈), Very Good (🥉), etc. La fila sticky muestra la mejor estrategia.",
+                                "tags": ["interpretacion", "resultados"]
+                            },
+                            "¿Qué métricas son más importantes?": {
+                                "answer": "Factor K es la métrica principal (evalúa calidad general). Predictibilidad indica estabilidad futura. Sharpe ratio mide rendimiento vs riesgo. Drawdown indica el peor escenario. Todas son importantes, evalúa en conjunto.",
+                                "tags": ["metricas", "importancia"]
+                            }
+                        }
                     },
-                    "interpretar_predictibilidad": {
-                        "question": "¿Cómo interpreto la predictibilidad?",
-                        "answer": "La predictibilidad indica qué tan confiable será la estrategia en datos futuros. Valores ≥85% son excelentes, mientras que <60% indican alto riesgo."
+                    "tecnicas": {
+                        "title": "⚙️ Preguntas Técnicas",
+                        "questions": {
+                            "¿Qué formato de archivo necesito?": {
+                                "answer": "La aplicación acepta archivos CSV con delimitador ';' y decimal ','. Las columnas deben incluir: Strategy Name, FactorK, CAGR, Sharpe, MaxDD, Trades, etc. Ver plantilla en la documentación.",
+                                "tags": ["formato", "archivos"]
+                            },
+                            "¿Cómo configuro los filtros?": {
+                                "answer": "Usa los filtros rápidos para rangos básicos o '🔍 Filtros Avanzados' para configuración detallada. Puedes filtrar por Factor K, predictibilidad, Sharpe, drawdown, y más. Los filtros se aplican en tiempo real.",
+                                "tags": ["filtros", "configuracion"]
+                            },
+                            "¿Puedo exportar los resultados?": {
+                                "answer": "Sí, puedes exportar a Excel (múltiples hojas), HTML (dashboard interactivo), PDF (reportes profesionales), y archivos .sqx. Usa '📤 Exportación Avanzada' para opciones completas.",
+                                "tags": ["exportacion", "resultados"]
+                            }
+                        }
                     },
-                    "filtros_eficientes": {
-                        "question": "¿Qué filtros son más eficientes?",
-                        "answer": "Comience con Factor K ≥7.0, Sharpe ≥1.0 y drawdown ≤20%. Luego refine según sus criterios específicos."
+                    "analisis": {
+                        "title": "🧪 Preguntas de Análisis",
+                        "questions": {
+                            "¿Qué es el análisis científico?": {
+                                "answer": "Incluye análisis de Tail Risk (VaR, CVaR), AXISelect (selección de activos), análisis científico avanzado, y asesor financiero inteligente. Proporciona insights profundos sobre las estrategias.",
+                                "tags": ["analisis", "cientifico"]
+                            },
+                            "¿Cómo interpreto la predictibilidad?": {
+                                "answer": "La predictibilidad mide la estabilidad futura. EXCELENTE (≥85%) indica alta confiabilidad, BUENA (70-84%) buena estabilidad, etc. Valores altos sugieren estrategias más confiables.",
+                                "tags": ["predictibilidad", "interpretacion"]
+                            },
+                            "¿Qué significa Factor K Elite 9.6?": {
+                                "answer": "Factor K es una métrica compuesta que evalúa calidad general. Considera Estabilidad (S), Crecimiento (G), Eficiencia (E) y Consistencia (C). Elite (≥9.2) indica estrategias excepcionales.",
+                                "tags": ["factor_k", "metricas"]
+                            }
+                        }
                     },
-                    "exportar_resultados": {
-                        "question": "¿Cómo exporto mis resultados?",
-                        "answer": "Use '📤 Exportación Avanzada' para Excel con múltiples hojas, o '📤 Exportar .SQX' para archivos de estrategia."
-                    },
-                    "optimizar_performance": {
-                        "question": "¿Cómo optimizo el rendimiento?",
-                        "answer": "Use filtros para reducir el dataset, cierre ventanas innecesarias y use análisis por lotes para datasets grandes."
+                    "troubleshooting": {
+                        "title": "🔧 Solución de Problemas",
+                        "questions": {
+                            "¿Qué hago si no se cargan los datos?": {
+                                "answer": "Verifica el formato del archivo CSV (delimitador ';', decimal ','). Asegúrate de que las columnas requeridas estén presentes. Revisa el log de errores para detalles específicos.",
+                                "tags": ["carga", "errores"]
+                            },
+                            "¿Por qué no aparecen resultados después de filtrar?": {
+                                "answer": "Los filtros pueden ser muy restrictivos. Prueba relajando los criterios o usando 'Limpiar Filtros'. Verifica que los rangos de valores sean apropiados para tus datos.",
+                                "tags": ["filtros", "resultados"]
+                            },
+                            "¿Cómo actualizo la aplicación?": {
+                                "answer": "Descarga la última versión desde el repositorio oficial. Respeta la estructura de carpetas y archivos de configuración. Consulta la documentación de actualización para detalles.",
+                                "tags": ["actualizacion", "version"]
+                            }
+                        }
                     }
                 }
             }
@@ -228,24 +276,28 @@ class HelpContextualPanel:
     def show_help_panel(self, section: str = "metricas"):
         """Muestra el panel de ayuda contextual."""
         try:
-            # Cerrar ventana anterior si existe
-            if self.help_window:
+            if self.help_window is not None:
                 self.help_window.destroy()
             
-            # Crear nueva ventana
             self.help_window = tk.Toplevel(self.parent)
             self.help_window.title("❓ Ayuda Contextual - QVA Strategy Studio")
-            self.help_window.geometry("800x600")
+            self.help_window.geometry("900x700")
             self.help_window.resizable(True, True)
             
-            # Configurar ventana
-            self.help_window.transient(self.parent)
-            self.help_window.grab_set()
+            # Configurar estilo
+            style = ttk.Style()
+            style.configure('HelpTitle.TLabel', font=('Arial', 14, 'bold'))
+            style.configure('HelpSection.TLabel', font=('Arial', 12, 'bold'))
+            style.configure('HelpContent.TLabel', font=('Arial', 10))
             
             # Construir interfaz
             self._build_help_interface(section)
             
-            logger.info(f"✅ Panel de ayuda mostrado - Sección: {section}")
+            # Centrar ventana
+            self.help_window.transient(self.parent)
+            self.help_window.grab_set()
+            
+            logger.info(f"✅ Panel de ayuda contextual mostrado (sección: {section})")
             
         except Exception as e:
             logger.error(f"Error mostrando panel de ayuda: {e}")
@@ -257,196 +309,287 @@ class HelpContextualPanel:
         main_frame = ttk.Frame(self.help_window)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Panel izquierdo (navegación)
-        self._build_navigation_panel(main_frame, initial_section)
-        
-        # Panel derecho (contenido)
-        self._build_content_panel(main_frame, initial_section)
-    
-    def _build_navigation_panel(self, parent: ttk.Frame, initial_section: str):
-        """Construye el panel de navegación."""
-        nav_frame = ttk.Frame(parent, width=200)
+        # Panel de navegación (izquierda)
+        nav_frame = ttk.Frame(main_frame, width=250)
         nav_frame.pack(side="left", fill="y", padx=(0, 10))
         nav_frame.pack_propagate(False)
         
+        self._build_navigation_panel(nav_frame, initial_section)
+        
+        # Panel de contenido (derecha)
+        content_frame = ttk.Frame(main_frame)
+        content_frame.pack(side="right", fill="both", expand=True)
+        
+        self._build_content_panel(content_frame, initial_section)
+    
+    def _build_navigation_panel(self, parent: ttk.Frame, initial_section: str):
+        """Construye el panel de navegación."""
         # Título
-        ttk.Label(nav_frame, text="📚 Secciones de Ayuda", 
-                 font=("Arial", 12, "bold")).pack(pady=(0, 10))
+        title_label = ttk.Label(parent, text="📚 Ayuda Contextual", 
+                               style="HelpTitle.TLabel")
+        title_label.pack(pady=(0, 15))
         
-        # Lista de secciones
-        sections_frame = ttk.Frame(nav_frame)
-        sections_frame.pack(fill="both", expand=True)
-        
-        # Crear botones para cada sección
+        # Botones de navegación
         for section_key, section_data in self.help_content.items():
             btn = ttk.Button(
-                sections_frame,
+                parent,
                 text=section_data["title"],
                 command=lambda s=section_key: self._show_section_content(s)
             )
             btn.pack(fill="x", pady=2)
             
-            # Marcar sección inicial como seleccionada
-            if section_key == initial_section:
-                btn.state(['pressed'])
+        # Separador
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=10)
         
         # Botón de cerrar
-        ttk.Button(nav_frame, text="❌ Cerrar", 
-                  command=self.help_window.destroy).pack(pady=(10, 0))
+        close_btn = ttk.Button(
+            parent,
+            text="❌ Cerrar",
+            command=(self.help_window.destroy if self.help_window is not None else lambda: None)
+        )
+        close_btn.pack(fill="x", pady=5)
     
     def _build_content_panel(self, parent: ttk.Frame, initial_section: str):
         """Construye el panel de contenido."""
-        content_frame = ttk.Frame(parent)
-        content_frame.pack(side="right", fill="both", expand=True)
+        # Frame con scroll
+        canvas = tk.Canvas(parent)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
         
-        # Área de contenido con scroll
-        self.content_canvas = tk.Canvas(content_frame)
-        scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=self.content_canvas.yview)
-        self.content_text = tk.Text(self.content_canvas, wrap="word", padx=10, pady=10)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
         
-        # Configurar scroll
-        self.content_text.configure(yscrollcommand=scrollbar.set)
-        self.content_canvas.create_window((0, 0), window=self.content_text, anchor="nw")
-        
-        # Layout
-        self.content_canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        # Configurar scroll
-        self.content_text.bind("<Configure>", lambda e: self.content_canvas.configure(scrollregion=self.content_canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
         
         # Mostrar contenido inicial
-        self._show_section_content(initial_section)
+        self._show_section_content(initial_section, scrollable_frame)
+        
+        # Configurar scroll
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
     
-    def _show_section_content(self, section: str):
-        """Muestra el contenido de una sección específica."""
+    def _show_section_content(self, section: str, parent_frame: ttk.Frame = None):
+        """Muestra el contenido de una sección."""
         try:
-            # Limpiar contenido anterior
-            self.content_text.delete(1.0, tk.END)
-            
-            if section not in self.help_content:
-                self.content_text.insert(tk.END, "❌ Sección no encontrada")
+            if parent_frame is None:
+                logger.error(f"No se encontró un parent_frame válido para mostrar la sección {section}.")
                 return
+            # Limpiar contenido anterior
+            for widget in parent_frame.winfo_children():
+                widget.destroy()
             
             section_data = self.help_content[section]
             
-            # Título de la sección
-            self.content_text.insert(tk.END, f"{section_data['title']}\n", "title")
-            self.content_text.insert(tk.END, "=" * 50 + "\n\n", "separator")
+            # Título de sección
+            section_title = ttk.Label(
+                parent_frame,
+                text=section_data["title"],
+                style="HelpTitle.TLabel"
+            )
+            section_title.pack(pady=(0, 20))
             
-            # Contenido de la sección
+            # Contenido específico según sección
             if section == "metricas":
-                self._show_metrics_content(section_data["content"])
+                self._show_metrics_content(section_data["content"], parent_frame)
             elif section == "interpretacion":
-                self._show_interpretation_content(section_data["content"])
+                self._show_interpretation_content(section_data["content"], parent_frame)
             elif section == "tutoriales":
-                self._show_tutorials_content(section_data["content"])
+                self._show_tutorials_content(section_data["content"], parent_frame)
             elif section == "faq":
-                self._show_faq_content(section_data["content"])
-            
-            # Configurar tags para formato
-            self.content_text.tag_configure("title", font=("Arial", 14, "bold"))
-            self.content_text.tag_configure("subtitle", font=("Arial", 12, "bold"))
-            self.content_text.tag_configure("separator", font=("Arial", 10))
-            self.content_text.tag_configure("highlight", background="yellow")
+                self._show_faq_content(section_data["content"], parent_frame)
             
             self.current_section = section
             
         except Exception as e:
             logger.error(f"Error mostrando contenido de sección {section}: {e}")
-            self.content_text.insert(tk.END, f"❌ Error cargando contenido: {e}")
     
-    def _show_metrics_content(self, content: Dict[str, Any]):
-        """Muestra contenido de métricas."""
+    def _show_metrics_content(self, content: Dict[str, Any], parent: ttk.Frame):
+        """Muestra el contenido de métricas."""
         for metric_key, metric_data in content.items():
-            # Título de la métrica
-            self.content_text.insert(tk.END, f"{metric_data['title']}\n", "subtitle")
-            self.content_text.insert(tk.END, f"{metric_data['description']}\n\n")
+            # Frame para cada métrica
+            metric_frame = ttk.LabelFrame(parent, text=metric_data["title"])
+            metric_frame.pack(fill="x", pady=5)
             
-            # Componentes específicos según la métrica
-            if metric_key == "factor_k":
-                self.content_text.insert(tk.END, "📋 Componentes:\n", "subtitle")
+            # Descripción
+            desc_label = ttk.Label(
+                metric_frame,
+                text=metric_data["description"],
+                style="HelpContent.TLabel",
+                wraplength=600
+            )
+            desc_label.pack(pady=5)
+            
+            # Componentes específicos según métrica
+            if "components" in metric_data:
+                comp_label = ttk.Label(
+                    metric_frame,
+                    text="Componentes:",
+                    style="HelpSection.TLabel"
+                )
+                comp_label.pack(anchor="w", padx=10)
+                
                 for component in metric_data["components"]:
-                    self.content_text.insert(tk.END, f"• {component}\n")
+                    comp_item = ttk.Label(
+                        metric_frame,
+                        text=f"• {component}",
+                        style="HelpContent.TLabel"
+                    )
+                    comp_item.pack(anchor="w", padx=20)
+            
+            # Categorías
+            if "categories" in metric_data:
+                cat_label = ttk.Label(
+                    metric_frame,
+                    text="Categorías:",
+                    style="HelpSection.TLabel"
+                )
+                cat_label.pack(anchor="w", padx=10, pady=(10, 0))
                 
-                self.content_text.insert(tk.END, "\n🏆 Categorías:\n", "subtitle")
                 for category in metric_data["categories"]:
-                    self.content_text.insert(tk.END, f"• {category}\n")
-                
-                self.content_text.insert(tk.END, "\n⚖️ Pesos por Régimen:\n", "subtitle")
-                for regime, weights in metric_data["regime_weights"].items():
-                    self.content_text.insert(tk.END, f"• {regime}: {weights}\n")
+                    cat_item = ttk.Label(
+                        metric_frame,
+                        text=f"• {category}",
+                        style="HelpContent.TLabel"
+                    )
+                    cat_item.pack(anchor="w", padx=20)
             
-            elif metric_key == "predictabilidad":
-                self.content_text.insert(tk.END, "📊 Escalas:\n", "subtitle")
-                for scale in metric_data["scales"]:
-                    self.content_text.insert(tk.END, f"• {scale}\n")
+            # Interpretación
+            if "interpretation" in metric_data:
+                int_label = ttk.Label(
+                    metric_frame,
+                    text="Interpretación:",
+                    style="HelpSection.TLabel"
+                )
+                int_label.pack(anchor="w", padx=10, pady=(10, 0))
                 
-                self.content_text.insert(tk.END, "\n🔍 Factores:\n", "subtitle")
-                for factor in metric_data["factors"]:
-                    self.content_text.insert(tk.END, f"• {factor}\n")
+                for interpretation in metric_data["interpretation"]:
+                    int_item = ttk.Label(
+                        metric_frame,
+                        text=f"• {interpretation}",
+                        style="HelpContent.TLabel"
+                    )
+                    int_item.pack(anchor="w", padx=20)
             
-            elif metric_key in ["sharpe", "drawdown", "cagr"]:
-                if "interpretation" in metric_data:
-                    self.content_text.insert(tk.END, "📈 Interpretación:\n", "subtitle")
-                    for interpretation in metric_data["interpretation"]:
-                        self.content_text.insert(tk.END, f"• {interpretation}\n")
-                
+            # Fórmula
                 if "formula" in metric_data:
-                    self.content_text.insert(tk.END, f"\n🧮 Fórmula:\n{metric_data['formula']}\n")
-            
-            self.content_text.insert(tk.END, "\n" + "-" * 40 + "\n\n")
+                formula_label = ttk.Label(
+                    metric_frame,
+                    text=f"Fórmula: {metric_data['formula']}",
+                    style="HelpContent.TLabel"
+                )
+                formula_label.pack(anchor="w", padx=10, pady=(10, 0))
     
-    def _show_interpretation_content(self, content: Dict[str, Any]):
-        """Muestra contenido de interpretación."""
-        for item_key, item_data in content.items():
-            # Título del item
-            self.content_text.insert(tk.END, f"{item_data['title']}\n", "subtitle")
-            self.content_text.insert(tk.END, f"{item_data['description']}\n\n")
+    def _show_interpretation_content(self, content: Dict[str, Any], parent: ttk.Frame):
+        """Muestra el contenido de interpretación."""
+        for interpret_key, interpret_data in content.items():
+            # Frame para cada interpretación
+            interpret_frame = ttk.LabelFrame(parent, text=interpret_data["title"])
+            interpret_frame.pack(fill="x", pady=5)
             
-            # Contenido específico
-            if item_key == "badges_visuales":
-                self.content_text.insert(tk.END, "🏅 Badges Disponibles:\n", "subtitle")
-                for badge, description in item_data["badges"].items():
-                    self.content_text.insert(tk.END, f"• {badge} {description}\n")
+            # Descripción
+            desc_label = ttk.Label(
+                interpret_frame,
+                text=interpret_data["description"],
+                style="HelpContent.TLabel",
+                wraplength=600
+            )
+            desc_label.pack(pady=5)
             
-            elif item_key == "colores_automaticos":
-                self.content_text.insert(tk.END, "🎨 Esquema de Colores:\n", "subtitle")
-                for category, color in item_data["colors"].items():
-                    self.content_text.insert(tk.END, f"• {category}: {color}\n")
+            # Badges
+            if "badges" in interpret_data:
+                badges_label = ttk.Label(
+                    interpret_frame,
+                    text="Badges:",
+                    style="HelpSection.TLabel"
+                )
+                badges_label.pack(anchor="w", padx=10, pady=(10, 0))
+                
+                for badge, description in interpret_data["badges"].items():
+                    badge_item = ttk.Label(
+                        interpret_frame,
+                        text=f"{badge} {description}",
+                        style="HelpContent.TLabel"
+                    )
+                    badge_item.pack(anchor="w", padx=20)
             
-            elif item_key == "fila_sticky":
-                self.content_text.insert(tk.END, "📌 Criterios de Selección:\n", "subtitle")
-                for criterion in item_data["criteria"]:
-                    self.content_text.insert(tk.END, f"• {criterion}\n")
+            # Criterios
+            if "criteria" in interpret_data:
+                criteria_label = ttk.Label(
+                    interpret_frame,
+                    text="Criterios:",
+                    style="HelpSection.TLabel"
+                )
+                criteria_label.pack(anchor="w", padx=10, pady=(10, 0))
+                
+                for criterion in interpret_data["criteria"]:
+                    crit_item = ttk.Label(
+                        interpret_frame,
+                        text=f"• {criterion}",
+                        style="HelpContent.TLabel"
+                    )
+                    crit_item.pack(anchor="w", padx=20)
             
-            self.content_text.insert(tk.END, "\n" + "-" * 40 + "\n\n")
+            # Colores
+            if "colors" in interpret_data:
+                colors_label = ttk.Label(
+                    interpret_frame,
+                    text="Colores:",
+                    style="HelpSection.TLabel"
+                )
+                colors_label.pack(anchor="w", padx=10, pady=(10, 0))
+                
+                for category, color in interpret_data["colors"].items():
+                    color_item = ttk.Label(
+                        interpret_frame,
+                        text=f"• {category}: {color}",
+                        style="HelpContent.TLabel"
+                    )
+                    color_item.pack(anchor="w", padx=20)
     
-    def _show_tutorials_content(self, content: Dict[str, Any]):
-        """Muestra contenido de tutoriales."""
+    def _show_tutorials_content(self, content: Dict[str, Any], parent: ttk.Frame):
+        """Muestra el contenido de tutoriales."""
         for tutorial_key, tutorial_data in content.items():
-            # Título del tutorial
-            self.content_text.insert(tk.END, f"{tutorial_data['title']}\n", "subtitle")
-            self.content_text.insert(tk.END, "\n📝 Pasos a seguir:\n\n")
+            # Frame para cada tutorial
+            tutorial_frame = ttk.LabelFrame(parent, text=tutorial_data["title"])
+            tutorial_frame.pack(fill="x", pady=5)
             
-            # Pasos del tutorial
-            for i, step in enumerate(tutorial_data["steps"], 1):
-                self.content_text.insert(tk.END, f"{step}\n")
-                if i < len(tutorial_data["steps"]):
-                    self.content_text.insert(tk.END, "\n")
-            
-            self.content_text.insert(tk.END, "\n" + "-" * 40 + "\n\n")
+            # Pasos
+            for step in tutorial_data["steps"]:
+                step_item = ttk.Label(
+                    tutorial_frame,
+                    text=step,
+                    style="HelpContent.TLabel"
+                )
+                step_item.pack(anchor="w", padx=10, pady=2)
     
-    def _show_faq_content(self, content: Dict[str, Any]):
-        """Muestra contenido de FAQ."""
+    def _show_faq_content(self, content: Dict[str, Any], parent: ttk.Frame):
+        """Muestra el contenido del FAQ."""
         for faq_key, faq_data in content.items():
-            # Pregunta
-            self.content_text.insert(tk.END, f"❓ {faq_data['question']}\n", "subtitle")
+            # Frame para cada categoría de FAQ
+            faq_frame = ttk.LabelFrame(parent, text=faq_data["title"])
+            faq_frame.pack(fill="x", pady=5)
+            
+            # Preguntas y respuestas
+            for question, answer_data in faq_data["questions"].items():
+                # Pregunta
+                question_label = ttk.Label(
+                    faq_frame,
+                    text=f"❓ {question}",
+                    style="HelpSection.TLabel"
+                )
+                question_label.pack(anchor="w", padx=10, pady=(10, 5))
             
             # Respuesta
-            self.content_text.insert(tk.END, f"💡 {faq_data['answer']}\n\n")
-            
-            self.content_text.insert(tk.END, "-" * 40 + "\n\n")
+                answer_label = ttk.Label(
+                    faq_frame,
+                    text=answer_data["answer"],
+                    style="HelpContent.TLabel",
+                    wraplength=600
+                )
+                answer_label.pack(anchor="w", padx=20, pady=(0, 10))
     
     def show_contextual_help(self, topic: str):
         """Muestra ayuda contextual para un tema específico."""
@@ -454,15 +597,15 @@ class HelpContextualPanel:
             # Mapear temas a secciones
             topic_mapping = {
                 "factor_k": "metricas",
-                "predictabilidad": "metricas", 
+                "predictibilidad": "metricas", 
                 "sharpe": "metricas",
                 "drawdown": "metricas",
                 "cagr": "metricas",
                 "badges": "interpretacion",
-                "colores": "interpretacion",
-                "sticky": "interpretacion",
-                "tutorial": "tutoriales",
-                "faq": "faq"
+                "filtros": "tutoriales",
+                "carga": "tutoriales",
+                "exportacion": "tutoriales",
+                "errores": "faq"
             }
             
             section = topic_mapping.get(topic, "metricas")
@@ -472,8 +615,7 @@ class HelpContextualPanel:
             
         except Exception as e:
             logger.error(f"Error mostrando ayuda contextual: {e}")
-            messagebox.showerror("Error", f"Error mostrando ayuda: {e}")
 
 def create_help_contextual_panel(parent: tk.Tk) -> HelpContextualPanel:
-    """Crea una instancia del panel de ayuda contextual."""
+    """Crea y retorna una instancia del panel de ayuda contextual."""
     return HelpContextualPanel(parent) 

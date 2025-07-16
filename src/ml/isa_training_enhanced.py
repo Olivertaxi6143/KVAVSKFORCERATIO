@@ -173,16 +173,16 @@ class ISATrainingEnhanced:
             
             self.training_result = TrainingResult(
                 model=self.model,
-                r2_score=r2,
-                mae=mae,
-                rmse=rmse,
-                cross_val_score=cv_score,
+                r2_score=float(r2),
+                mae=float(mae),
+                rmse=float(rmse),
+                cross_val_score=float(cv_score),
                 feature_importance=feature_importance,
                 training_time=training_time,
-                model_params=self.model.get_params(),
+                model_params=self.model.get_params() if self.model is not None else {},
                 shap_values=shap_values,
-                predictions=y_pred,
-                actuals=y_test.values
+                predictions=np.array(y_pred) if y_pred is not None else None,
+                actuals=np.array(y_test.values) if y_test is not None else None
             )
             
             # Guardar modelo si está configurado
@@ -268,13 +268,13 @@ class ISATrainingEnhanced:
             
             # Convertir de vuelta a DataFrame
             X_train_selected = pd.DataFrame(
-                X_train_selected, 
-                columns=selected_features, 
+                X_train_selected,
+                columns=pd.Index(selected_features),
                 index=X_train.index
             )
             X_test_selected = pd.DataFrame(
-                X_test_selected, 
-                columns=selected_features, 
+                X_test_selected,
+                columns=pd.Index(selected_features),
                 index=X_test.index
             )
             
@@ -444,7 +444,7 @@ class ISATrainingEnhanced:
             Dict con importancia de features
         """
         try:
-            if hasattr(self.model, 'feature_importances_'):
+            if self.model is not None and hasattr(self.model, 'feature_importances_'):
                 # Para modelos basados en árboles
                 importance = self.model.feature_importances_
                 feature_names = X.columns
@@ -464,23 +464,22 @@ class ISATrainingEnhanced:
                 
                 return feature_importance
             
-            else:
+            elif self.model is not None and hasattr(self.model, 'coef_'):
                 # Para modelos lineales
-                if hasattr(self.model, 'coef_'):
-                    importance = np.abs(self.model.coef_)
-                    feature_names = X.columns
-                    
-                    feature_importance = dict(zip(feature_names, importance))
-                    feature_importance = dict(
-                        sorted(feature_importance.items(), 
-                               key=lambda x: x[1], reverse=True)
-                    )
-                    
-                    return feature_importance
+                importance = np.abs(self.model.coef_)
+                feature_names = X.columns
                 
-                else:
-                    logger.warning("⚠️ No se puede calcular importancia de features para este modelo")
-                    return {}
+                feature_importance = dict(zip(feature_names, importance))
+                feature_importance = dict(
+                    sorted(feature_importance.items(), 
+                           key=lambda x: x[1], reverse=True)
+                )
+                
+                return feature_importance
+                
+            else:
+                logger.warning("⚠️ No se puede calcular importancia de features para este modelo")
+                return {}
             
         except Exception as e:
             logger.error(f"Error analizando importancia de features: {e}")
@@ -497,7 +496,7 @@ class ISATrainingEnhanced:
             Valores SHAP o None
         """
         try:
-            if hasattr(self.model, 'predict'):
+            if self.model is not None and hasattr(self.model, 'predict'):
                 # Crear explainer SHAP
                 explainer = shap.TreeExplainer(self.model)
                 shap_values = explainer.shap_values(X_test)
@@ -534,8 +533,8 @@ class ISATrainingEnhanced:
                 'model_type': self.config.model_type,
                 'target_column': self.config.target_column,
                 'training_date': datetime.now().isoformat(),
-                'model_params': self.model.get_params(),
-                'feature_names': list(self.model.feature_names_in_) if hasattr(self.model, 'feature_names_in_') else [],
+                'model_params': self.model.get_params() if self.model is not None else {},
+                'feature_names': list(self.model.feature_names_in_) if self.model is not None and hasattr(self.model, 'feature_names_in_') else [],
                 'training_result': {
                     'r2_score': self.training_result.r2_score if self.training_result else None,
                     'mae': self.training_result.mae if self.training_result else None,
@@ -601,12 +600,14 @@ class ISATrainingEnhanced:
             # Seleccionar features si hay selector
             if self.feature_selector is not None:
                 X_processed = self.feature_selector.transform(X_processed)
-                # Asegurar que mantenga los feature names si están disponibles
-                if hasattr(self.model, 'feature_names_in_') and len(self.model.feature_names_in_) == X_processed.shape[1]:
+                # Convertir a np.ndarray si es una lista para acceder a .shape
+                if isinstance(X_processed, list):
+                    X_processed = np.array(X_processed)
+                if self.model is not None and hasattr(self.model, 'feature_names_in_') and len(self.model.feature_names_in_) == X_processed.shape[1]:
                     feature_names = list(self.model.feature_names_in_)
                     X_processed = pd.DataFrame(
-                        X_processed, 
-                        columns=feature_names,
+                        X_processed,
+                        columns=pd.Index(feature_names),
                         index=X.index
                     )
             
@@ -633,9 +634,9 @@ class ISATrainingEnhanced:
         info = {
             "model_type": self.config.model_type,
             "target_column": self.config.target_column,
-            "model_params": self.model.get_params(),
-            "feature_names": list(self.model.feature_names_in_) if hasattr(self.model, 'feature_names_in_') else [],
-            "n_features": len(self.model.feature_names_in_) if hasattr(self.model, 'feature_names_in_') else 0
+            "model_params": self.model.get_params() if self.model is not None else {},
+            "feature_names": list(self.model.feature_names_in_) if self.model is not None and hasattr(self.model, 'feature_names_in_') else [],
+            "n_features": len(self.model.feature_names_in_) if self.model is not None and hasattr(self.model, 'feature_names_in_') else 0
         }
         
         if self.training_result:
