@@ -1,492 +1,404 @@
-# 👤 GUÍA DE USUARIO - KFORCEVSQVARATIOS v2.0
+# Guía de Usuario - QVA Strategy Studio
 
-## 🎯 Introducción
+## 📋 Resumen Ejecutivo
 
-**KFORCEVSQVARATIOS v2.0** es un sistema avanzado de análisis y ranking de estrategias de trading diseñado para profesionales que requieren máxima precisión y robustez en la evaluación de estrategias.
+QVA Strategy Studio es una aplicación profesional para el análisis cuantitativo de estrategias de trading. Esta guía proporciona instrucciones detalladas para utilizar todas las funcionalidades del sistema.
 
-### Características Principales
-- ✅ **Análisis Científico**: Métricas científicas avanzadas para evaluación precisa
-- ✅ **Asesor Inteligente**: Análisis automático con recomendaciones personalizadas
-- ✅ **Interfaz Intuitiva**: GUI moderna y fácil de usar
-- ✅ **Validación Robusta**: Sistema de validación automática de datos
-- ✅ **Exportación Flexible**: Múltiples formatos de exportación
+## 🚀 Instalación y Configuración
 
----
+### Requisitos del Sistema
+- **Python**: 3.11 o superior
+- **Sistema Operativo**: Windows 10/11, macOS 10.15+, Linux
+- **Memoria RAM**: Mínimo 4GB, recomendado 8GB
+- **Espacio en Disco**: 500MB disponibles
 
-## 🚀 Primeros Pasos
+### Instalación
 
-### 1. Iniciar el Sistema
+1. **Clonar el repositorio**:
+   ```bash
+   git clone https://github.com/usuario/qva-strategy-studio.git
+   cd qva-strategy-studio
+   ```
 
-#### 1.1 Ejecución Básica
-```bash
-# Ejecutar desde línea de comandos
-python src/gui_enhanced_rank.py
-```
+2. **Instalar dependencias**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-#### 1.2 Verificar Inicialización
-- ✅ Ventana principal se abre correctamente
-- ✅ Título: "KFORCEVSQVARATIOS v2.0 - Ranking Robusto con DataManager"
-- ✅ Tamaño: 1200x800 píxeles
-- ✅ Componentes visibles: botones, campos de entrada, pestañas
+3. **Ejecutar la aplicación**:
+   ```bash
+   python run_gui.py
+   ```
 
-### 2. Preparar Datos
+## 🎯 Funcionalidades Principales
 
-#### 2.1 Estructura de Archivos Requerida
-```
-📁 Directorio de Datos/
-├── 📄 DatabankExport_M1.csv    # Archivo de KPIs de estrategias
-└── 📄 DATOSMQL5.csv            # Archivo de datos de mercado
-```
+### 1. Carga de Datos
 
-#### 2.2 Formato del Archivo de KPIs
-```csv
-Strategy_Name,timeframe,total_data_months,#_of_trades,net_profit_is,net_profit_oos,
-sharpe_ratio_is,sharpe_ratio_oos,profit_factor_is,profit_factor_oos,
-max_drawdown_is,max_drawdown_oos,cagr_is,cagr_oos,winning_percent_is,
-winning_percent_oos,calmarratio_is,calmarratio_oos
-```
+#### Cargar Estrategias CSV
+1. Hacer clic en **"📁 Cargar Datos"** en la barra de herramientas
+2. Seleccionar archivo CSV con datos de estrategias
+3. El sistema validará automáticamente el formato
+4. Se mostrarán estadísticas de carga en la barra de estado
 
-#### 2.3 Formato del Archivo de Mercado
-```csv
-Date,Open,High,Low,Close,Volume
-```
+**Formato CSV Requerido**:
+- Delimitador: `;` (punto y coma)
+- Decimal: `,` (coma)
+- Columnas obligatorias: `Strategy_Name`, `Factor_K`, `CAGR_IS`, `Sharpe_Ratio_IS`, `Max_Drawdown_IS`
 
----
+#### Cargar Portafolios PDF
+1. Hacer clic en **"📁 Importar Portafolios PDF"**
+2. Seleccionar archivos PDF de portafolios
+3. El sistema extraerá automáticamente las tablas
+4. Se alinearán las métricas con el formato del CSV
 
-## 📊 Flujo de Trabajo Básico
+### 2. Análisis Científico
 
-### Paso 1: Cargar Datos
+#### Pipeline DarwinEX
+1. Ir a la pestaña **"🧪 Análisis Científico"**
+2. Hacer clic en **"Ejecutar Pipeline DarwinEX"**
+3. El sistema aplicará 6 filtros automáticamente:
+   - **Gold Access** (D-Score ≥ 70)
+   - **Track Record** (≥ 8 meses)
+   - **LEA/OS Positive** (Corta pérdidas, deja correr ganancias)
+   - **Correlation 6m** (≤ 0.25 vs índices)
+   - **Discipline** (Estabilidad de frecuencia)
+   - **DD Correlation** (< 0.6 con drawdowns)
 
-#### 1.1 Seleccionar Archivos
-1. **Hacer clic** en "Cargar Archivos"
-2. **Navegar** al directorio con los archivos de datos
-3. **Seleccionar** `DatabankExport_M1.csv` (KPIs)
-4. **Seleccionar** `DATOSMQL5.csv` (datos de mercado)
-5. **Confirmar** la carga
+#### Visualización de Resultados
+- **Estadísticas generales**: Total, aprobadas, rechazadas, tasa de éxito
+- **Distribución de tickets**: Gold, Silver, Bronze
+- **Top 5 estrategias**: Con scores y tickets
+- **Alertas de riesgo**: Identificadas automáticamente
 
-#### 1.2 Verificar Carga
-- ✅ Mensaje: "Archivos cargados correctamente"
-- ✅ Contador de estrategias visible
-- ✅ Información de datos mostrada en la interfaz
+### 3. Filtros Avanzados
 
-### Paso 2: Configurar Análisis
+#### Filtros Rápidos
+En el panel izquierdo:
+- **Factor K mínimo**: Deslizar para establecer umbral
+- **Sharpe Ratio mínimo**: Deslizar para establecer umbral
+- **Drawdown máximo**: Deslizar para establecer umbral
 
-#### 2.1 Estilo de Trading
-- **CONSERVADOR**: Preservación de capital (recomendado para principiantes)
-- **MODERADO**: Balance riesgo/retorno (recomendado para intermedios)
-- **AGRESIVO**: Maximización de retornos (solo para expertos)
+#### Filtros Avanzados
+1. Hacer clic en **"🔍 Filtros Avanzados"**
+2. Configurar rangos para cada métrica
+3. Aplicar filtros de categoría
+4. Revisar resultados filtrados
+5. Guardar configuración de filtros
 
-#### 2.2 Parámetros de Análisis
-- **Percentil**: 20 (recomendado) - Filtra las mejores estrategias
-- **Top N**: 10 (recomendado) - Número de estrategias a seleccionar
-- **KPIs Seleccionados**: 5 (recomendado) - Métricas principales
+### 4. Interpretación de Métricas
 
-#### 2.3 Configuración Avanzada
-- **Métricas Científicas**: Habilitado (recomendado)
-- **Validación Estricta**: Habilitado (recomendado)
-- **Cache**: Habilitado (mejora rendimiento)
+#### Factor K Elite 9.6
+- **🥇 Elite (≥9.2)**: Estrategias excepcionales
+- **🥈 Excellent (≥8.2)**: Estrategias muy buenas
+- **🥉 Very Good (≥7.2)**: Estrategias buenas
+- **⭐ Good (≥6.2)**: Estrategias aceptables
+- **⚠️ Poor (≥3.1)**: Estrategias con problemas
+- **❌ Very Poor (<3.1)**: Estrategias no recomendadas
 
-### Paso 3: Ejecutar Análisis
+#### Predictibilidad
+- **🎯 Excelente (≥85%)**: Alta confiabilidad
+- **🎯 Buena (70-84%)**: Buena estabilidad
+- **🎯 Aceptable (60-69%)**: Estabilidad moderada
+- **🎯 Baja (<60%)**: Alto riesgo
 
-#### 3.1 Iniciar Proceso
-1. **Hacer clic** en "Ejecutar Análisis"
-2. **Esperar** el procesamiento (2-3 minutos típicamente)
-3. **Verificar** progreso en la barra de estado
+#### Sharpe Ratio
+- **≥2.0**: Excelente rendimiento
+- **1.5-2.0**: Muy bueno
+- **1.0-1.5**: Bueno
+- **0.5-1.0**: Aceptable
+- **<0.5**: Pobre
 
-#### 3.2 Verificar Resultados
-- ✅ Mensaje: "Análisis completado exitosamente"
-- ✅ Tabla de resultados visible
-- ✅ Métricas calculadas mostradas
-- ✅ Categorías de calidad asignadas
+#### Máximo Drawdown
+- **<10%**: Excelente (bajo riesgo)
+- **10-20%**: Bueno
+- **20-30%**: Aceptable
+- **30-50%**: Alto riesgo
+- **>50%**: Muy alto riesgo
 
-### Paso 4: Revisar Resultados
+### 5. Tooltips Informativos
 
-#### 4.1 Tabla Principal
-- **Estrategias ordenadas** por score científico
-- **Métricas detalladas** para cada estrategia
-- **Categorías de calidad** (Excelente, Muy Bueno, Bueno, etc.)
+#### Uso de Tooltips
+- **Pasar el mouse** sobre cualquier métrica para ver información detallada
+- **Tooltips automáticos** aparecen después de 2 segundos
+- **Información contextual** según la métrica seleccionada
 
-#### 4.2 Información de Métricas
-- **Unified_Score_Scientific**: Score principal de evaluación
-- **IS_OOS_Predictivity**: Capacidad predictiva
-- **Temporal_Stability**: Estabilidad temporal
-- **Métricas tradicionales**: Sharpe, Profit Factor, etc.
+#### Contenido de Tooltips
+- **Factor K**: Componentes, categorías, pesos por régimen
+- **Predictibilidad**: Escalas, factores, recomendaciones
+- **Sharpe Ratio**: Interpretación, fórmula, importancia
+- **Drawdown**: Interpretación, importancia, recuperación
+- **CAGR**: Interpretación, fórmula, consideraciones
 
-### Paso 5: Transferir al Asesor
+### 6. Panel de Ayuda Contextual
 
-#### 5.1 Seleccionar Estrategias
-1. **Revisar** resultados del análisis
-2. **Identificar** estrategias de interés
-3. **Seleccionar** estrategias deseadas
-4. **Hacer clic** en "Transferir al Asesor"
+#### Acceso al Panel
+1. Hacer clic en **"❓ Ayuda"** en el menú
+2. Se abrirá el panel de ayuda con 4 secciones
 
-#### 5.2 Verificar Transferencia
-- ✅ Mensaje: "Estrategias transferidas al asesor"
-- ✅ Pestañas del asesor disponibles
-- ✅ Análisis detallado visible
+#### Secciones Disponibles
 
----
+**📊 Métricas y KPIs**
+- Explicación detallada de cada métrica
+- Fórmulas y cálculos
+- Interpretación profesional
 
-## 🧠 Uso del Asesor Financiero
+**🔍 Guías de Interpretación**
+- Sistema de badges visuales
+- Fila sticky y criterios
+- Esquema de colores
 
-### Pestaña Científica
+**📚 Tutoriales Paso a Paso**
+- Carga de datos
+- Filtros avanzados
+- Análisis científico
+- Exportación
 
-#### Información Disponible
-- **Métricas Científicas Detalladas**
-  - Unified_Score_Scientific
-  - IS_OOS_Predictivity
-  - Temporal_Stability
-  - Análisis de predictibilidad
+**❓ Preguntas Frecuentes**
+- Cómo identificar la mejor estrategia
+- Interpretación de predictibilidad
+- Filtros más eficientes
+- Exportación de resultados
+- Optimización de rendimiento
 
-#### Interpretación
-- **Score > 0.8**: Excelente calidad científica
-- **Score 0.6-0.8**: Muy buena calidad científica
-- **Score 0.4-0.6**: Buena calidad científica
-- **Score < 0.4**: Calidad científica limitada
+### 7. Guías de Interpretación Automática
 
-### Pestaña Empírica
+#### Interpretación Automática
+El sistema interpreta automáticamente cada estrategia y proporciona:
+- **Categorización visual** con badges y colores
+- **Recomendaciones contextuales** basadas en métricas
+- **Score general** calculado con pesos optimizados
+- **Recomendación general** para la estrategia
 
-#### Información Disponible
-- **Estadísticas Empíricas**
-  - Sharpe Ratio (IS/OOS)
-  - Profit Factor (IS/OOS)
-  - Maximum Drawdown (IS/OOS)
-  - CAGR (IS/OOS)
-  - Winning Percentage (IS/OOS)
-  - Calmar Ratio (IS/OOS)
+#### Score General
+Calculado con los siguientes pesos:
+- **Factor K**: 35%
+- **Predictibilidad**: 25%
+- **Sharpe Ratio**: 20%
+- **Drawdown**: 15%
+- **CAGR**: 5%
 
-#### Interpretación
-- **Sharpe > 1.5**: Excelente retorno ajustado por riesgo
-- **Profit Factor > 2.0**: Excelente ratio de ganancias
-- **Max Drawdown < 10%**: Riesgo controlado
-- **CAGR > 15%**: Excelente crecimiento anual
+#### Recomendaciones Automáticas
+- **🏆 ESTRATEGIA EXCEPCIONAL**: Múltiples métricas excelentes
+- **🥈 ESTRATEGIA MUY BUENA**: Mayoría de métricas excelentes o buenas
+- **🥉 ESTRATEGIA BUENA**: Buen balance de métricas
+- **⭐ ESTRATEGIA ACEPTABLE**: Métricas moderadas
+- **⚠️ ESTRATEGIA CON RIESGO**: Múltiples métricas pobres
+- **❓ ESTRATEGIA MIXTA**: Métricas variadas
 
-### Pestaña de Estrategias Seleccionadas
+### 8. Fila Sticky
 
-#### Funcionalidades
-- **Lista Detallada** de estrategias seleccionadas
-- **Métricas Individuales** por estrategia
-- **Opciones de Exportación**
-- **Análisis Comparativo**
+#### Funcionalidad
+- **Mejor estrategia** se mantiene visible en la parte superior
+- **Criterios de selección**:
+  - Factor K más alto (prioridad principal)
+  - Predictibilidad excelente (≥85%)
+  - Sharpe Ratio superior (≥2.0)
+  - Drawdown bajo (<10%)
 
-#### Acciones Disponibles
-- **Exportar Resultados**: Guardar análisis en CSV/Excel
-- **Ver Detalles**: Hacer doble clic para detalles completos
-- **Comparar Estrategias**: Análisis comparativo
-- **Generar Reporte**: Reporte completo en PDF
+#### Características Visuales
+- **Fondo destacado** con color diferente
+- **Borde especial** más grueso
+- **Icono de estrella** ⭐ para indicar mejor estrategia
+- **Tooltip informativo** explicando la selección
 
----
+### 9. Exportación Avanzada
 
-## 📈 Casos de Uso Avanzados
+#### Exportación Excel
+1. Hacer clic en **"📤 Exportación Avanzada"**
+2. Seleccionar **"Excel"** como formato
+3. Se generarán 7 hojas automáticamente:
+   - **Ranking**: Estrategias ordenadas por Factor K
+   - **Por Régimen**: Análisis por régimen de mercado
+   - **Componentes FK96**: Desglose de componentes del Factor K
+   - **Métricas Derivadas**: Métricas calculadas adicionales
+   - **IS-OOS**: Análisis In-Sample vs Out-of-Sample
+   - **Categorías**: Distribución por categorías
+   - **Datos Completos**: Todos los datos sin procesar
 
-### Caso 1: Análisis Conservador
+#### Exportación HTML
+1. Seleccionar **"HTML"** como formato
+2. Se generará un dashboard interactivo con:
+   - Gráficos de Factor K
+   - Scatter plots de CAGR vs Sharpe
+   - Distribución por categorías
+   - Top 10 estrategias
 
-#### Objetivo
-Preservar capital mientras se obtienen retornos moderados.
+#### Exportación .SQX
+1. Hacer clic en **"📁 Exportar .SQX"**
+2. Seleccionar directorio de salida
+3. Se exportarán archivos .sqx para las estrategias seleccionadas
 
-#### Configuración
-```python
-style = "CONSERVADOR"
-percentil = 10  # Solo las mejores 10%
-top_n = 5       # Seleccionar solo 5 estrategias
-```
+## 🎨 Interfaz de Usuario
 
-#### Interpretación de Resultados
-- **Enfoque**: Estrategias con bajo drawdown
-- **Prioridad**: Sharpe Ratio y Calmar Ratio
-- **Riesgo**: Máximo drawdown < 15%
+### Barra de Herramientas
+- **📁 Cargar Datos**: Cargar archivos CSV
+- **🔍 Filtros Avanzados**: Configurar filtros
+- **📊 Gráficos Interactivos**: Visualizar datos
+- **⚖️ Comparar Estrategias**: Comparar seleccionadas
+- **📤 Exportación Avanzada**: Exportar resultados
+- **🧪 Análisis Científico**: Ejecutar análisis
+- **📈 Tail Risk Analysis**: Análisis de riesgo
+- **🎯 AXISelect Analysis**: Análisis de selección
+- **❓ Ayuda**: Abrir panel de ayuda
 
-### Caso 2: Análisis Agresivo
+### Panel Izquierdo
+- **📋 Navegación**: Pasos del análisis
+- **Filtros Rápidos**: Controles deslizantes
+- **Estadísticas**: Resumen de datos cargados
 
-#### Objetivo
-Maximizar retornos asumiendo mayor riesgo.
+### Panel Central
+- **Tabla de Datos**: Estrategias con métricas
+- **Fila Sticky**: Mejor estrategia destacada
+- **Badges Visuales**: Categorización automática
+- **Colores Automáticos**: Codificación por calidad
 
-#### Configuración
-```python
-style = "AGRESIVO"
-percentil = 30  # Top 30% de estrategias
-top_n = 15      # Seleccionar 15 estrategias
-```
-
-#### Interpretación de Resultados
-- **Enfoque**: Estrategias con alto retorno
-- **Prioridad**: CAGR y Profit Factor
-- **Riesgo**: Drawdown aceptable hasta 25%
-
-### Caso 3: Análisis de Diversificación
-
-#### Objetivo
-Crear un portafolio diversificado de estrategias.
-
-#### Configuración
-```python
-style = "MODERADO"
-percentil = 20
-top_n = 10
-# Habilitar análisis de correlación
-```
-
-#### Interpretación de Resultados
-- **Correlación Baja**: < 0.3 entre estrategias
-- **Diversificación Efectiva**: > 0.7
-- **Riesgo de Concentración**: < 0.2
-
----
+### Panel Derecho
+- **Detalles de Estrategia**: Información seleccionada
+- **Gráficos**: Visualizaciones específicas
+- **Controles**: Opciones adicionales
 
 ## 🔧 Configuración Avanzada
 
-### Configuración de Rendimiento
-
-#### Optimizar Memoria
+### Personalización de Criterios
 ```python
-# En config_produccion.py
-BATCH_SIZE = 50  # Reducir para menor uso de memoria
-MAX_MEMORY_USAGE = 512  # MB
+# Criterios personalizables para fila sticky
+STICKY_CRITERIA = {
+    "factor_k_weight": 0.35,
+    "predictability_weight": 0.25,
+    "sharpe_weight": 0.20,
+    "drawdown_weight": 0.15,
+    "cagr_weight": 0.05
+}
 ```
 
-#### Optimizar Velocidad
+### Configuración de Badges
 ```python
-# Habilitar cache
-ENABLE_CACHE = True
-CACHE_EXPIRY = 3600  # 1 hora
-
-# Habilitar procesamiento paralelo
-ENABLE_PARALLEL_PROCESSING = True
+# Configuración de badges
+BADGE_CONFIG = {
+    "show_badges": True,
+    "badge_size": "medium",
+    "badge_position": "left",
+    "show_tooltips": True
+}
 ```
 
-### Configuración de Validación
-
-#### Validación Estricta
+### Configuración de Fila Sticky
 ```python
-STRICT_VALIDATION = True
-ALLOW_MISSING_VALUES = False
-MAX_DRAWDOWN_THRESHOLD = 0.15
-MIN_SHARPE_RATIO = 0.5
+# Configuración de fila sticky
+STICKY_CONFIG = {
+    "enabled": True,
+    "highlight_color": "#E6F3FF",
+    "border_style": "solid",
+    "border_width": 2,
+    "show_indicator": True
+}
 ```
 
-#### Validación Flexible
+## 🚨 Troubleshooting
+
+### Problemas Comunes
+
+#### 1. Error al Cargar Datos
+**Síntomas**: Mensaje de error al cargar CSV
+**Solución**:
+- Verificar formato del archivo (delimitador `;`, decimal `,`)
+- Comprobar que las columnas obligatorias estén presentes
+- Revisar que no haya caracteres especiales en los datos
+
+#### 2. Badges No Se Muestran
+**Síntomas**: No aparecen badges en la tabla
+**Solución**:
+- Verificar configuración `show_badges: True`
+- Comprobar que los datos tengan valores válidos
+- Reiniciar la aplicación
+
+#### 3. Fila Sticky No Funciona
+**Síntomas**: No se destaca la mejor estrategia
+**Solución**:
+- Verificar que haya datos cargados
+- Comprobar criterios de selección
+- Revisar configuración de tabla
+
+#### 4. Tooltips No Aparecen
+**Síntomas**: No se muestran tooltips al pasar el mouse
+**Solución**:
+- Verificar configuración `show_tooltips: True`
+- Comprobar que el mouse esté sobre la métrica
+- Esperar 2 segundos para que aparezca
+
+#### 5. Error en Análisis Científico
+**Síntomas**: Error al ejecutar pipeline DarwinEX
+**Solución**:
+- Verificar que haya datos cargados
+- Comprobar que las columnas requeridas estén presentes
+- Revisar logs de error en la consola
+
+### Logs de Debug
+
+#### Habilitar Logs Detallados
 ```python
-STRICT_VALIDATION = False
-ALLOW_MISSING_VALUES = True
-MAX_DRAWDOWN_THRESHOLD = 0.25
-MIN_SHARPE_RATIO = 0.0
+import logging
+logging.basicConfig(level=logging.DEBUG)
 ```
 
-### Configuración de Logging
-
-#### Logging Detallado
+#### Verificar Estado del Sistema
 ```python
-LOG_LEVEL = logging.DEBUG
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# En la consola de Python
+from src.gui.main_window import MainWindow
+app = MainWindow()
+app.debug_system_status()
 ```
 
-#### Logging de Producción
-```python
-LOG_LEVEL = logging.INFO
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
-```
+## 📊 Métricas de Rendimiento
+
+### Tiempos de Respuesta Esperados
+- **Carga de datos**: <5 segundos para 1000 estrategias
+- **Aplicación de filtros**: <1 segundo
+- **Análisis científico**: <30 segundos
+- **Exportación Excel**: <10 segundos
+- **Exportación HTML**: <15 segundos
+
+### Uso de Recursos
+- **Memoria RAM**: <500MB para datasets normales
+- **CPU**: <20% durante operaciones normales
+- **Disco**: <100MB para archivos temporales
+
+## 🔄 Actualizaciones
+
+### Versión Actual
+- **Versión**: 2.0
+- **Fecha**: 2025-01-15
+- **Nuevas Funcionalidades**:
+  - Tooltips informativos
+  - Panel de ayuda contextual
+  - Guías de interpretación automática
+  - Sistema de badges visuales
+  - Fila sticky mejorada
+
+### Próximas Actualizaciones
+- **Versión 2.1**: Badges dinámicos
+- **Versión 2.2**: Filtros visuales
+- **Versión 2.3**: Temas personalizables
+- **Versión 2.4**: Animaciones y transiciones
+
+## 📞 Soporte
+
+### Contacto
+- **Email**: soporte@qvastrategystudio.com
+- **Documentación**: https://docs.qvastrategystudio.com
+- **GitHub**: https://github.com/usuario/qva-strategy-studio
+
+### Reportar Problemas
+1. Revisar esta guía de troubleshooting
+2. Verificar logs de error
+3. Crear issue en GitHub con:
+   - Descripción del problema
+   - Pasos para reproducir
+   - Logs de error
+   - Configuración del sistema
 
 ---
 
-## 📊 Interpretación de Métricas
-
-### Métricas Científicas
-
-#### Unified_Score_Scientific
-- **Rango**: 0.0 - 1.0
-- **Excelente**: > 0.8
-- **Muy Bueno**: 0.6 - 0.8
-- **Bueno**: 0.4 - 0.6
-- **Regular**: 0.2 - 0.4
-- **Pobre**: < 0.2
-
-#### IS_OOS_Predictivity
-- **Rango**: 0.0 - 1.0
-- **Excelente**: > 0.7 (alta predictibilidad)
-- **Bueno**: 0.5 - 0.7
-- **Regular**: 0.3 - 0.5
-- **Pobre**: < 0.3 (baja predictibilidad)
-
-#### Temporal_Stability
-- **Rango**: 0.0 - 1.0
-- **Excelente**: > 0.8 (muy estable)
-- **Bueno**: 0.6 - 0.8
-- **Regular**: 0.4 - 0.6
-- **Pobre**: < 0.4 (inestable)
-
-### Métricas Empíricas
-
-#### Sharpe Ratio
-- **Excelente**: > 1.5
-- **Muy Bueno**: 1.0 - 1.5
-- **Bueno**: 0.5 - 1.0
-- **Regular**: 0.0 - 0.5
-- **Pobre**: < 0.0
-
-#### Profit Factor
-- **Excelente**: > 2.0
-- **Muy Bueno**: 1.5 - 2.0
-- **Bueno**: 1.2 - 1.5
-- **Regular**: 1.0 - 1.2
-- **Pobre**: < 1.0
-
-#### Maximum Drawdown
-- **Excelente**: < 5%
-- **Muy Bueno**: 5% - 10%
-- **Bueno**: 10% - 15%
-- **Regular**: 15% - 20%
-- **Pobre**: > 20%
-
-#### CAGR (Compound Annual Growth Rate)
-- **Excelente**: > 20%
-- **Muy Bueno**: 15% - 20%
-- **Bueno**: 10% - 15%
-- **Regular**: 5% - 10%
-- **Pobre**: < 5%
-
----
-
-## 🔍 Solución de Problemas
-
-### Problema: "Error al cargar archivos"
-
-#### Causas Comunes
-1. **Formato incorrecto**: Verificar estructura CSV
-2. **Columnas faltantes**: Verificar nombres de columnas
-3. **Datos corruptos**: Verificar integridad del archivo
-4. **Permisos**: Verificar permisos de lectura
-
-#### Soluciones
-```bash
-# Verificar formato del archivo
-head -5 DatabankExport_M1.csv
-
-# Verificar columnas requeridas
-python -c "
-import pandas as pd
-df = pd.read_csv('DatabankExport_M1.csv')
-print('Columnas disponibles:', df.columns.tolist())
-"
-```
-
-### Problema: "Análisis no completa"
-
-#### Causas Comunes
-1. **Memoria insuficiente**: Reducir batch_size
-2. **Timeout**: Aumentar timeout_analysis
-3. **Datos muy grandes**: Procesar en lotes
-4. **Error en datos**: Verificar integridad
-
-#### Soluciones
-```python
-# Reducir uso de memoria
-BATCH_SIZE = 25  # Reducir de 100 a 25
-
-# Aumentar timeout
-TIMEOUT_ANALYSIS = 600  # 10 minutos
-
-# Habilitar procesamiento por lotes
-ENABLE_BATCH_PROCESSING = True
-```
-
-### Problema: "Resultados no aparecen"
-
-#### Causas Comunes
-1. **Filtros muy estrictos**: Ajustar percentil
-2. **Datos insuficientes**: Verificar cantidad de datos
-3. **Validación fallida**: Revisar logs de error
-4. **Configuración incorrecta**: Verificar parámetros
-
-#### Soluciones
-```python
-# Ajustar filtros
-percentil = 50  # Aumentar de 20 a 50
-top_n = 20      # Aumentar de 10 a 20
-
-# Verificar datos
-print(f"Estrategias disponibles: {len(df)}")
-print(f"Estrategias después de filtro: {len(df_filtered)}")
-```
-
----
-
-## 📝 Mejores Prácticas
-
-### 1. Preparación de Datos
-- ✅ **Validar formato**: Verificar estructura CSV antes de cargar
-- ✅ **Limpiar datos**: Eliminar valores extremos o corruptos
-- ✅ **Verificar integridad**: Asegurar que no hay datos faltantes críticos
-- ✅ **Documentar origen**: Mantener registro del origen de los datos
-
-### 2. Configuración de Análisis
-- ✅ **Comenzar conservador**: Usar configuración conservadora inicialmente
-- ✅ **Ajustar gradualmente**: Modificar parámetros basado en resultados
-- ✅ **Documentar cambios**: Mantener registro de configuraciones usadas
-- ✅ **Validar resultados**: Verificar que los resultados tienen sentido
-
-### 3. Interpretación de Resultados
-- ✅ **Revisar múltiples métricas**: No basarse solo en una métrica
-- ✅ **Considerar contexto**: Evaluar resultados en contexto del mercado
-- ✅ **Validar con datos históricos**: Comparar con análisis previos
-- ✅ **Documentar decisiones**: Mantener registro de decisiones tomadas
-
-### 4. Uso del Asesor
-- ✅ **Revisar todas las pestañas**: No ignorar ninguna sección
-- ✅ **Considerar recomendaciones**: Evaluar sugerencias del asesor
-- ✅ **Exportar resultados**: Guardar análisis importantes
-- ✅ **Actualizar regularmente**: Revisar análisis periódicamente
-
----
-
-## 📞 Soporte y Recursos
-
-### Documentación Adicional
-- **Documentación Técnica**: `DOCUMENTACION_FLUJO_TRABAJO.md`
-- **Guía de Instalación**: `GUIA_INSTALACION.md`
-- **Roadmap del Proyecto**: `ROADMAP_PROGRESO.md`
-
-### Recursos de Aprendizaje
-- **Tutoriales**: Disponibles en la documentación
-- **Casos de Uso**: Ejemplos prácticos incluidos
-- **Videos**: Tutoriales en video (si están disponibles)
-
-### Soporte Técnico
-- **Email**: soporte@kforcevsqvaratios.com
-- **Documentación**: [URL_DOCUMENTACION]
-- **Issues**: [URL_GITHUB_ISSUES]
-- **FAQ**: Preguntas frecuentes en la documentación
-
----
-
-## ✅ Checklist de Uso
-
-### Configuración Inicial
-- [ ] Sistema instalado correctamente
-- [ ] Datos preparados en formato correcto
-- [ ] Configuración inicial aplicada
-- [ ] Test de funcionamiento ejecutado
-
-### Análisis Básico
-- [ ] Datos cargados exitosamente
-- [ ] Configuración de análisis aplicada
-- [ ] Análisis ejecutado sin errores
-- [ ] Resultados revisados e interpretados
-- [ ] Estrategias seleccionadas para asesor
-
-### Uso del Asesor
-- [ ] Pestaña científica revisada
-- [ ] Pestaña empírica revisada
-- [ ] Pestaña de estrategias seleccionadas revisada
-- [ ] Recomendaciones consideradas
-- [ ] Resultados exportados (si es necesario)
-
-### Configuración Avanzada
-- [ ] Configuración de rendimiento optimizada
-- [ ] Configuración de validación ajustada
-- [ ] Logging configurado apropiadamente
-- [ ] Backup de configuración creado
-
----
-
-*Guía de usuario v2.0 - KFORCEVSQVARATIOS*
-*Fecha: 2025-07-11* 
+**Última actualización**: 2025-01-15  
+**Versión**: 2.0  
+**Autor**: QVA Strategy Studio Development Team 

@@ -13,8 +13,29 @@ from pathlib import Path
 import json
 import csv
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.chart import BarChart, LineChart, ScatterChart, Reference
+from openpyxl.chart.series import DataPoint
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.offline as pyo
+import webbrowser
+import os
+import time
+from datetime import datetime
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Para evitar problemas con GUI
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+import io
+from PIL import Image as PILImage
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +44,12 @@ class AdvancedExportManager:
     Gestor de exportación avanzada con múltiples formatos.
     
     Características:
-    - Exportación a Excel con múltiples hojas
-    - Exportación a CSV con opciones avanzadas
-    - Exportación a JSON con estructura personalizada
-    - Exportación a HTML con estilos
-    - Exportación a PDF con gráficos
-    - Filtros de exportación
-    - Formateo automático
+    - Exportación a Excel con múltiples hojas y gráficos
+    - Dashboard HTML interactivo con Plotly
+    - Reportes PDF profesionales
+    - Exportación por lotes y selección de columnas
+    - Filtros de exportación avanzados
+    - Formateo automático y personalizable
     """
     
     def __init__(self, parent: tk.Tk):
@@ -42,6 +62,7 @@ class AdvancedExportManager:
         self.parent = parent
         self.data = None
         self.export_config = {}
+        self.charts_data = {}
         
         logger.info("✅ AdvancedExportManager inicializado")
     
@@ -54,6 +75,16 @@ class AdvancedExportManager:
         """
         self.data = data.copy()
         logger.info(f"✅ Datos establecidos para exportación: {len(data)} filas")
+    
+    def set_charts_data(self, charts_data: Dict[str, Any]):
+        """
+        Establece datos de gráficos para exportación.
+        
+        Args:
+            charts_data: Diccionario con datos de gráficos
+        """
+        self.charts_data = charts_data
+        logger.info(f"✅ Datos de gráficos establecidos: {len(charts_data)} gráficos")
     
     def export_to_excel_advanced(self, filename: str, sheets_config: Optional[Dict[str, Any]] = None) -> bool:
         """
@@ -71,25 +102,56 @@ class AdvancedExportManager:
                 logger.error("No hay datos para exportar")
                 return False
             
-            # Configuración por defecto
+            # Configuración por defecto con 7 hojas según especificación
             if sheets_config is None:
                 sheets_config = {
                     "ranking": {
-                        "columns": ["Strategy_Name", "Factor_K", "CAGR_IS", "Sharpe_Ratio_IS", "Max_Drawdown_IS"],
+                        "columns": ["Strategy_Name", "Factor_K", "Categoria", "CAGR_IS", "Sharpe_Ratio_IS", "Max_Drawdown_IS", "Trades_IS"],
                         "title": "Ranking de Estrategias",
                         "sort_by": "Factor_K",
-                        "sort_ascending": False
+                        "sort_ascending": False,
+                        "add_chart": True
                     },
-                    "detailed_analysis": {
-                        "columns": None,  # Todas las columnas
-                        "title": "Análisis Detallado",
-                        "sort_by": None
+                    "por_regimen": {
+                        "columns": ["Strategy_Name", "Factor_K", "Bull_Score", "Bear_Score", "Sideways_Score", "Crisis_Score"],
+                        "title": "Análisis por Régimen de Mercado",
+                        "sort_by": "Factor_K",
+                        "sort_ascending": False,
+                        "add_chart": True
                     },
-                    "summary_stats": {
-                        "columns": ["Strategy_Name", "CAGR_IS", "Sharpe_Ratio_IS", "Max_Drawdown_IS", "Profit_Factor_IS"],
-                        "title": "Estadísticas Resumidas",
+                    "componentes_fk96": {
+                        "columns": ["Strategy_Name", "Factor_K", "S_Score", "G_Score", "E_Score", "C_Score", "ML_Score", "T_Score", "P_Score"],
+                        "title": "Componentes Factor K 9.6",
+                        "sort_by": "Factor_K",
+                        "sort_ascending": False,
+                        "add_chart": True
+                    },
+                    "metricas_derivadas": {
+                        "columns": ["Strategy_Name", "Calmar_Ratio", "Profit_Factor", "Recovery_Factor", "Risk_Reward_Ratio"],
+                        "title": "Métricas Derivadas",
+                        "sort_by": "Calmar_Ratio",
+                        "sort_ascending": False,
+                        "add_chart": True
+                    },
+                    "is_oos": {
+                        "columns": ["Strategy_Name", "CAGR_IS", "CAGR_OOS", "Sharpe_IS", "Sharpe_OOS", "Drawdown_IS", "Drawdown_OOS"],
+                        "title": "Análisis IS/OOS",
                         "sort_by": "CAGR_IS",
-                        "sort_ascending": False
+                        "sort_ascending": False,
+                        "add_chart": True
+                    },
+                    "categorias": {
+                        "columns": ["Strategy_Name", "Categoria", "Factor_K", "Predictibilidad", "Recomendacion"],
+                        "title": "Categorización y Recomendaciones",
+                        "sort_by": "Factor_K",
+                        "sort_ascending": False,
+                        "add_chart": True
+                    },
+                    "datos_completos": {
+                        "columns": None,  # Todas las columnas
+                        "title": "Datos Completos",
+                        "sort_by": None,
+                        "add_chart": False
                     }
                 }
             
@@ -114,7 +176,7 @@ class AdvancedExportManager:
     
     def _create_excel_sheet(self, workbook: openpyxl.Workbook, sheet_name: str, config: Dict[str, Any]):
         """
-        Crea una hoja de Excel con formateo.
+        Crea una hoja de Excel con formateo avanzado y gráficos.
         
         Args:
             workbook: Workbook de Excel
@@ -145,33 +207,611 @@ class AdvancedExportManager:
                 worksheet.append(r)
             
             # Formatear encabezados
-            header_font = Font(bold=True, color="FFFFFF")
-            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-            header_alignment = Alignment(horizontal="center", vertical="center")
-            
-            for cell in worksheet[1]:
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = header_alignment
+            self._format_excel_headers(worksheet)
             
             # Ajustar ancho de columnas
-            for column in worksheet.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                worksheet.column_dimensions[column_letter].width = adjusted_width
+            self._adjust_excel_column_widths(worksheet)
             
             # Agregar filtros
             worksheet.auto_filter.ref = worksheet.dimensions
             
+            # Agregar gráfico si se especifica
+            if config.get("add_chart", False):
+                self._add_excel_chart(worksheet, data, sheet_name)
+            
+            # Agregar bordes y formato adicional
+            self._add_excel_borders(worksheet)
+            
         except Exception as e:
             logger.error(f"Error creando hoja Excel {sheet_name}: {e}")
+    
+    def _format_excel_headers(self, worksheet):
+        """Formatea los encabezados de Excel."""
+        header_font = Font(bold=True, color="FFFFFF", size=12)
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        for cell in worksheet[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+    
+    def _adjust_excel_column_widths(self, worksheet):
+        """Ajusta el ancho de las columnas de Excel."""
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            worksheet.column_dimensions[column_letter].width = adjusted_width
+    
+    def _add_excel_chart(self, worksheet, data: pd.DataFrame, sheet_name: str):
+        """Añade gráficos a la hoja de Excel."""
+        try:
+            if len(data) == 0:
+                return
+            
+            # Crear gráfico de barras para las primeras 10 filas
+            chart = BarChart()
+            chart.title = f"Top 10 - {sheet_name.replace('_', ' ').title()}"
+            chart.style = 10
+            chart.x_axis.title = "Estrategia"
+            chart.y_axis.title = "Valor"
+            
+            # Seleccionar datos para el gráfico
+            if "Factor_K" in data.columns:
+                top_data = data.head(10)
+                data_ref = Reference(worksheet, min_col=2, min_row=2, max_row=11, max_col=2)
+                categories_ref = Reference(worksheet, min_col=1, min_row=2, max_row=11)
+                
+                chart.add_data(data_ref, titles_from_data=True)
+                chart.set_categories(categories_ref)
+                
+                # Insertar gráfico
+                worksheet.add_chart(chart, "H2")
+                
+        except Exception as e:
+            logger.warning(f"No se pudo añadir gráfico a {sheet_name}: {e}")
+    
+    def _add_excel_borders(self, worksheet):
+        """Añade bordes a la hoja de Excel."""
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.border = thin_border
+    
+    def export_to_html_dashboard(self, filename: str, config: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Exporta datos a dashboard HTML interactivo con Plotly.
+        
+        Args:
+            filename: Nombre del archivo
+            config: Configuración del dashboard (opcional)
+            
+        Returns:
+            True si se exportó correctamente
+        """
+        try:
+            if self.data is None or len(self.data) == 0:
+                logger.error("No hay datos para exportar")
+                return False
+            
+            # Configuración por defecto
+            if config is None:
+                config = {
+                    "title": "Dashboard de Análisis de Estrategias",
+                    "theme": "plotly_white",
+                    "include_charts": True,
+                    "include_filters": True,
+                    "include_summary": True
+                }
+            
+            # Crear dashboard HTML
+            html_content = self._generate_html_dashboard(config)
+            
+            # Guardar archivo
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            logger.info(f"✅ Dashboard HTML exportado: {filename}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error exportando dashboard HTML: {e}")
+            return False
+    
+    def _generate_html_dashboard(self, config: Dict[str, Any]) -> str:
+        """Genera el contenido HTML del dashboard."""
+        try:
+            # Crear gráficos con Plotly
+            charts_html = self._create_plotly_charts()
+            
+            # Crear tabla interactiva
+            table_html = self._create_interactive_table()
+            
+            # Crear filtros
+            filters_html = self._create_html_filters()
+            
+            # Crear resumen
+            summary_html = self._create_html_summary()
+            
+            # Template HTML completo
+            html_template = f"""
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>{config.get('title', 'Dashboard de Estrategias')}</title>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+                <style>
+                    body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }}
+                    .chart-container {{ margin: 20px 0; }}
+                    .filter-section {{ background-color: #f8f9fa; padding: 15px; margin: 10px 0; }}
+                    .summary-card {{ background-color: #e3f2fd; padding: 15px; margin: 10px 0; }}
+                </style>
+            </head>
+            <body>
+                <div class="container-fluid">
+                    <h1 class="text-center mb-4">{config.get('title', 'Dashboard de Estrategias')}</h1>
+                    
+                    {filters_html if config.get('include_filters', True) else ''}
+                    
+                    {summary_html if config.get('include_summary', True) else ''}
+                    
+                    {charts_html if config.get('include_charts', True) else ''}
+                    
+                    {table_html}
+                </div>
+                
+                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+            </body>
+            </html>
+            """
+            
+            return html_template
+            
+        except Exception as e:
+            logger.error(f"Error generando dashboard HTML: {e}")
+            return f"<html><body><h1>Error generando dashboard: {e}</h1></body></html>"
+    
+    def _create_plotly_charts(self) -> str:
+        """Crea gráficos interactivos con Plotly."""
+        try:
+            charts_html = ""
+            
+            # Gráfico 1: Factor K por estrategia (Top 10)
+            if "Factor_K" in self.data.columns:
+                fig1 = go.Figure(data=[
+                    go.Bar(
+                        x=self.data.head(10)["Strategy_Name"],
+                        y=self.data.head(10)["Factor_K"],
+                        marker_color='rgb(55, 83, 109)'
+                    )
+                ])
+                fig1.update_layout(
+                    title="Top 10 Estrategias por Factor K",
+                    xaxis_title="Estrategia",
+                    yaxis_title="Factor K",
+                    height=400
+                )
+                charts_html += f'<div class="chart-container">{fig1.to_html(full_html=False)}</div>'
+            
+            # Gráfico 2: Scatter CAGR vs Sharpe
+            if "CAGR_IS" in self.data.columns and "Sharpe_Ratio_IS" in self.data.columns:
+                fig2 = go.Figure(data=[
+                    go.Scatter(
+                        x=self.data["CAGR_IS"],
+                        y=self.data["Sharpe_Ratio_IS"],
+                        mode='markers',
+                        marker=dict(
+                            size=8,
+                            color=self.data.get("Factor_K", [0]*len(self.data)),
+                            colorscale='Viridis',
+                            showscale=True
+                        ),
+                        text=self.data["Strategy_Name"],
+                        hovertemplate='<b>%{text}</b><br>CAGR: %{x}<br>Sharpe: %{y}<extra></extra>'
+                    )
+                ])
+                fig2.update_layout(
+                    title="CAGR vs Sharpe Ratio",
+                    xaxis_title="CAGR (%)",
+                    yaxis_title="Sharpe Ratio",
+                    height=400
+                )
+                charts_html += f'<div class="chart-container">{fig2.to_html(full_html=False)}</div>'
+            
+            # Gráfico 3: Distribución por categoría
+            if "Categoria" in self.data.columns:
+                category_counts = self.data["Categoria"].value_counts()
+                fig3 = go.Figure(data=[
+                    go.Pie(
+                        labels=category_counts.index,
+                        values=category_counts.values,
+                        hole=0.3
+                    )
+                ])
+                fig3.update_layout(
+                    title="Distribución por Categoría",
+                    height=400
+                )
+                charts_html += f'<div class="chart-container">{fig3.to_html(full_html=False)}</div>'
+            
+            return charts_html
+            
+        except Exception as e:
+            logger.error(f"Error creando gráficos Plotly: {e}")
+            return f'<div class="alert alert-warning">Error creando gráficos: {e}</div>'
+    
+    def _create_interactive_table(self) -> str:
+        """Crea tabla interactiva HTML."""
+        try:
+            # Preparar datos para tabla
+            table_data = self.data.head(50)  # Mostrar solo las primeras 50 filas
+            
+            # Crear tabla HTML
+            table_html = """
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+            """
+            
+            # Encabezados
+            for col in table_data.columns:
+                table_html += f'<th>{col}</th>'
+            
+            table_html += """
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            
+            # Filas de datos
+            for _, row in table_data.iterrows():
+                table_html += '<tr>'
+                for value in row:
+                    if pd.isna(value):
+                        table_html += '<td>-</td>'
+                    else:
+                        table_html += f'<td>{value}</td>'
+                table_html += '</tr>'
+            
+            table_html += """
+                    </tbody>
+                </table>
+            </div>
+            """
+            
+            return table_html
+            
+        except Exception as e:
+            logger.error(f"Error creando tabla interactiva: {e}")
+            return f'<div class="alert alert-warning">Error creando tabla: {e}</div>'
+    
+    def _create_html_filters(self) -> str:
+        """Crea filtros HTML interactivos."""
+        try:
+            filters_html = """
+            <div class="filter-section">
+                <h4>Filtros</h4>
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="minFactorK">Factor K Mínimo:</label>
+                        <input type="number" id="minFactorK" class="form-control" min="0" max="10" step="0.1">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="minCAGR">CAGR Mínimo (%):</label>
+                        <input type="number" id="minCAGR" class="form-control" min="-100" max="1000" step="0.1">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="maxDrawdown">Drawdown Máximo (%):</label>
+                        <input type="number" id="maxDrawdown" class="form-control" min="0" max="100" step="0.1">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="categoryFilter">Categoría:</label>
+                        <select id="categoryFilter" class="form-control">
+                            <option value="">Todas</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-2" onclick="applyFilters()">Aplicar Filtros</button>
+            </div>
+            """
+            
+            return filters_html
+            
+        except Exception as e:
+            logger.error(f"Error creando filtros HTML: {e}")
+            return f'<div class="alert alert-warning">Error creando filtros: {e}</div>'
+    
+    def _create_html_summary(self) -> str:
+        """Crea resumen HTML."""
+        try:
+            total_strategies = len(self.data)
+            avg_factor_k = self.data.get("Factor_K", pd.Series([0])).mean()
+            avg_cagr = self.data.get("CAGR_IS", pd.Series([0])).mean()
+            avg_sharpe = self.data.get("Sharpe_Ratio_IS", pd.Series([0])).mean()
+            
+            summary_html = f"""
+            <div class="summary-card">
+                <h4>Resumen</h4>
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>Total Estrategias:</strong> {total_strategies}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Factor K Promedio:</strong> {avg_factor_k:.2f}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>CAGR Promedio:</strong> {avg_cagr:.2f}%
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Sharpe Promedio:</strong> {avg_sharpe:.2f}
+                    </div>
+                </div>
+            </div>
+            """
+            
+            return summary_html
+            
+        except Exception as e:
+            logger.error(f"Error creando resumen HTML: {e}")
+            return f'<div class="alert alert-warning">Error creando resumen: {e}</div>'
+    
+    def export_to_pdf_report(self, filename: str, config: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Exporta datos a reporte PDF profesional.
+        
+        Args:
+            filename: Nombre del archivo
+            config: Configuración del reporte (opcional)
+            
+        Returns:
+            True si se exportó correctamente
+        """
+        try:
+            if self.data is None or len(self.data) == 0:
+                logger.error("No hay datos para exportar")
+                return False
+            
+            # Configuración por defecto
+            if config is None:
+                config = {
+                    "title": "Reporte de Análisis de Estrategias",
+                    "author": "QVA Strategy Studio",
+                    "include_charts": True,
+                    "include_summary": True,
+                    "include_details": True
+                }
+            
+            # Crear documento PDF
+            doc = SimpleDocTemplate(filename, pagesize=A4)
+            story = []
+            
+            # Estilos
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                spaceAfter=30,
+                alignment=TA_CENTER
+            )
+            
+            # Título
+            story.append(Paragraph(config.get("title", "Reporte de Análisis"), title_style))
+            story.append(Spacer(1, 20))
+            
+            # Resumen
+            if config.get("include_summary", True):
+                story.extend(self._create_pdf_summary(styles))
+            
+            # Tabla de datos
+            if config.get("include_details", True):
+                story.extend(self._create_pdf_table(styles))
+            
+            # Gráficos
+            if config.get("include_charts", True):
+                story.extend(self._create_pdf_charts())
+            
+            # Construir PDF
+            doc.build(story)
+            
+            logger.info(f"✅ Reporte PDF exportado: {filename}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error exportando PDF: {e}")
+            return False
+    
+    def _create_pdf_summary(self, styles) -> List:
+        """Crea sección de resumen para PDF."""
+        elements = []
+        
+        # Título de sección
+        elements.append(Paragraph("Resumen Ejecutivo", styles['Heading2']))
+        elements.append(Spacer(1, 12))
+        
+        # Estadísticas básicas
+        total_strategies = len(self.data)
+        avg_factor_k = self.data.get("Factor_K", pd.Series([0])).mean()
+        avg_cagr = self.data.get("CAGR_IS", pd.Series([0])).mean()
+        
+        summary_text = f"""
+        <b>Total de Estrategias Analizadas:</b> {total_strategies}<br/>
+        <b>Factor K Promedio:</b> {avg_factor_k:.2f}<br/>
+        <b>CAGR Promedio:</b> {avg_cagr:.2f}%<br/>
+        """
+        
+        elements.append(Paragraph(summary_text, styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        return elements
+    
+    def _create_pdf_table(self, styles) -> List:
+        """Crea tabla de datos para PDF."""
+        elements = []
+        
+        # Título de sección
+        elements.append(Paragraph("Top 20 Estrategias", styles['Heading2']))
+        elements.append(Spacer(1, 12))
+        
+        # Preparar datos para tabla
+        top_data = self.data.head(20)
+        columns_to_show = ["Strategy_Name", "Factor_K", "CAGR_IS", "Sharpe_Ratio_IS", "Max_Drawdown_IS"]
+        available_columns = [col for col in columns_to_show if col in top_data.columns]
+        
+        if available_columns:
+            # Crear tabla
+            table_data = [available_columns]  # Encabezados
+            
+            for _, row in top_data.iterrows():
+                table_row = []
+                for col in available_columns:
+                    value = row[col]
+                    if pd.isna(value):
+                        table_row.append("-")
+                    else:
+                        table_row.append(str(value))
+                table_data.append(table_row)
+            
+            # Crear tabla con estilo
+            table = Table(table_data)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            elements.append(table)
+            elements.append(Spacer(1, 20))
+        
+        return elements
+    
+    def _create_pdf_charts(self) -> List:
+        """Crea gráficos para PDF."""
+        elements = []
+        
+        try:
+            # Título de sección
+            elements.append(Paragraph("Gráficos de Análisis", styles['Heading2']))
+            elements.append(Spacer(1, 12))
+            
+            # Crear gráfico de barras
+            if "Factor_K" in self.data.columns:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                top_data = self.data.head(10)
+                ax.bar(range(len(top_data)), top_data["Factor_K"])
+                ax.set_title("Top 10 Estrategias por Factor K")
+                ax.set_xlabel("Estrategia")
+                ax.set_ylabel("Factor K")
+                ax.set_xticks(range(len(top_data)))
+                ax.set_xticklabels(top_data["Strategy_Name"], rotation=45, ha='right')
+                
+                # Guardar gráfico en buffer
+                img_buffer = io.BytesIO()
+                plt.tight_layout()
+                plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+                img_buffer.seek(0)
+                
+                # Añadir imagen al PDF
+                img = Image(img_buffer)
+                img.drawHeight = 4*inch
+                img.drawWidth = 6*inch
+                elements.append(img)
+                elements.append(Spacer(1, 20))
+                
+                plt.close()
+            
+        except Exception as e:
+            logger.error(f"Error creando gráficos PDF: {e}")
+            elements.append(Paragraph(f"Error creando gráficos: {e}", styles['Normal']))
+        
+        return elements
+    
+    def export_batch(self, output_dir: str, formats: List[str] = None) -> bool:
+        """
+        Exporta datos en múltiples formatos por lotes.
+        
+        Args:
+            output_dir: Directorio de salida
+            formats: Lista de formatos a exportar
+            
+        Returns:
+            True si se exportó correctamente
+        """
+        try:
+            if self.data is None or len(self.data) == 0:
+                logger.error("No hay datos para exportar")
+                return False
+            
+            # Formatos por defecto
+            if formats is None:
+                formats = ["excel", "html", "pdf", "csv", "json"]
+            
+            # Crear directorio si no existe
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            
+            # Timestamp para nombres de archivo
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            success_count = 0
+            
+            for format_type in formats:
+                try:
+                    if format_type == "excel":
+                        filename = os.path.join(output_dir, f"estrategias_analisis_{timestamp}.xlsx")
+                        if self.export_to_excel_advanced(filename):
+                            success_count += 1
+                    
+                    elif format_type == "html":
+                        filename = os.path.join(output_dir, f"dashboard_estrategias_{timestamp}.html")
+                        if self.export_to_html_dashboard(filename):
+                            success_count += 1
+                    
+                    elif format_type == "pdf":
+                        filename = os.path.join(output_dir, f"reporte_estrategias_{timestamp}.pdf")
+                        if self.export_to_pdf_report(filename):
+                            success_count += 1
+                    
+                    elif format_type == "csv":
+                        filename = os.path.join(output_dir, f"estrategias_{timestamp}.csv")
+                        if self.export_to_csv_advanced(filename):
+                            success_count += 1
+                    
+                    elif format_type == "json":
+                        filename = os.path.join(output_dir, f"estrategias_{timestamp}.json")
+                        if self.export_to_json_advanced(filename):
+                            success_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error exportando {format_type}: {e}")
+            
+            logger.info(f"✅ Exportación por lotes completada: {success_count}/{len(formats)} formatos exitosos")
+            return success_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error en exportación por lotes: {e}")
+            return False
     
     def export_to_csv_advanced(self, filename: str, config: Optional[Dict[str, Any]] = None) -> bool:
         """

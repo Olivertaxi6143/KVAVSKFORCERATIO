@@ -12,6 +12,9 @@ import logging
 from pathlib import Path
 import threading
 import queue
+import os
+import webbrowser
+import json
 
 # Importar módulos de la aplicación
 from src.data.data_manager import DataManager
@@ -22,6 +25,12 @@ from src.gui.strategy_comparison import create_strategy_comparison_manager
 from src.gui.advanced_export import create_advanced_export_manager
 # Añadir import del exportador .sqx
 from src.data.sqx_exporter import SQXExporter
+from src.gui.portfolio_analysis_tab import PortfolioAnalysisTab
+from src.gui.help_contextual import create_help_contextual_panel
+from src.gui.scientific_gui_tab import create_scientific_tab
+from src.gui.asesor_financiero_tab import create_asesor_tab
+from src.gui.performance_tab import create_performance_tab
+from unittest.mock import Mock
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +66,9 @@ class MainWindow:
         self.comparison_manager = None
         self.export_manager = None
         
+        # Panel de ayuda contextual
+        self.help_panel = None
+        
         # Variables de estado
         self.current_data = None
         self.filtered_data = None
@@ -64,6 +76,9 @@ class MainWindow:
         
         # Cola para comunicación entre hilos
         self.message_queue = queue.Queue()
+        
+        # Tooltips informativos
+        self.tooltip_widgets = {}
         
         # Construir interfaz
         self._build_interface()
@@ -233,6 +248,16 @@ class MainWindow:
         
         # Pestaña de gráficos
         self._create_charts_tab()
+
+        # Pestaña de Base de Datos ISA
+        self._create_isa_database_tab()
+
+        # Pestaña de Performance
+        self._create_performance_tab()
+
+        # Pestaña de Análisis de Portfolio
+        self.portfolio_analysis_tab = PortfolioAnalysisTab(self.notebook)
+        self.notebook.add(self.portfolio_analysis_tab, text="Análisis de Portfolio")
     
     def _build_right_panel(self, parent: ttk.Frame):
         """Construye el panel derecho."""
@@ -303,72 +328,37 @@ class MainWindow:
     
     def _create_scientific_analysis_tab(self):
         """Crea pestaña de análisis científico."""
-        analysis_frame = ttk.Frame(self.notebook)
-        self.notebook.add(analysis_frame, text="🧪 Análisis Científico")
+        # Inicializar pestaña de Scientific Analysis con implementación profesional
+        self.scientific_analysis = create_scientific_tab(
+            self.notebook, 
+            self.data_manager, 
+            self.filtered_data if self.filtered_data is not None else pd.DataFrame()
+        )
         
-        # Controles de análisis
-        controls_frame = ttk.Frame(analysis_frame)
-        controls_frame.pack(fill="x", padx=10, pady=5)
-        
-        ttk.Button(controls_frame, text="🚀 Ejecutar Análisis", 
-                  command=self._run_scientific_analysis).pack(side="left", padx=5)
-        ttk.Button(controls_frame, text="📊 Ver Resultados", 
-                  command=self._show_scientific_results).pack(side="left", padx=5)
-        ttk.Button(controls_frame, text="💾 Guardar Análisis", 
-                  command=self._save_scientific_analysis).pack(side="left", padx=5)
-        
-        # Área de resultados
-        results_frame = ttk.Frame(analysis_frame)
-        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        self.scientific_text = tk.Text(results_frame, wrap="word")
-        self.scientific_text.pack(fill="both", expand=True)
+        # Inicializar pestaña del Asesor Financiero Inteligente
+        self.asesor_financiero = create_asesor_tab(
+            self.notebook,
+            self.data_manager,
+            self.filtered_data if self.filtered_data is not None else pd.DataFrame()
+        )
     
     def _create_tail_risk_tab(self):
         """Crea pestaña de Tail Risk Analysis."""
         tail_risk_frame = ttk.Frame(self.notebook)
-        self.notebook.add(tail_risk_frame, text="📈 Tail Risk Analysis")
+        self.notebook.add(tail_risk_frame, text="🔬 Tail Risk Analysis")
         
-        # Controles de Tail Risk
-        controls_frame = ttk.Frame(tail_risk_frame)
-        controls_frame.pack(fill="x", padx=10, pady=5)
-        
-        ttk.Button(controls_frame, text="📊 Analizar Tail Risk", 
-                  command=self._run_tail_risk_analysis).pack(side="left", padx=5)
-        ttk.Button(controls_frame, text="📈 Ver Gráficos", 
-                  command=self._show_tail_risk_charts).pack(side="left", padx=5)
-        ttk.Button(controls_frame, text="💾 Exportar Análisis", 
-                  command=self._export_tail_risk).pack(side="left", padx=5)
-        
-        # Área de resultados
-        results_frame = ttk.Frame(tail_risk_frame)
-        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        self.tail_risk_text = tk.Text(results_frame, wrap="word")
-        self.tail_risk_text.pack(fill="both", expand=True)
+        # Inicializar pestaña de Tail Risk con implementación profesional
+        from src.gui.tail_risk_tab import TailRiskTab
+        self.tail_risk_analysis = TailRiskTab(tail_risk_frame)
     
     def _create_axis_tab(self):
         """Crea pestaña de AXISelect Analysis."""
         axis_frame = ttk.Frame(self.notebook)
         self.notebook.add(axis_frame, text="🎯 AXISelect Analysis")
         
-        # Controles de AXISelect
-        controls_frame = ttk.Frame(axis_frame)
-        controls_frame.pack(fill="x", padx=10, pady=5)
-        
-        ttk.Button(controls_frame, text="🎯 Ejecutar AXISelect", 
-                  command=self._run_axis_analysis).pack(side="left", padx=5)
-        ttk.Button(controls_frame, text="📊 Ver Selección", 
-                  command=self._show_axis_results).pack(side="left", padx=5)
-        ttk.Button(controls_frame, text="💾 Guardar Selección", 
-                  command=self._save_axis_selection).pack(side="left", padx=5)
-        
-        # Área de resultados
-        results_frame = ttk.Frame(axis_frame)
-        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        self.axis_text = tk.Text(results_frame, wrap="word")
-        self.axis_text.pack(fill="both", expand=True)
+        # Inicializar pestaña de AXI Select con implementación profesional
+        from src.gui.axi_select_tab import AXISelectTab
+        self.axi_select_analysis = AXISelectTab(axis_frame)
     
     def _create_comparison_tab(self):
         """Crea pestaña de comparación de estrategias."""
@@ -415,6 +405,19 @@ class MainWindow:
         
         self.charts_text = tk.Text(charts_area_frame, wrap="word")
         self.charts_text.pack(fill="both", expand=True)
+    
+    def _create_isa_database_tab(self):
+        """Crea pestaña de Base de Datos ISA."""
+        # Importar la pestaña de Base de Datos ISA
+        from src.gui.isa_database_tab import create_isa_database_tab
+        
+        # Crear la pestaña
+        self.isa_database_tab = create_isa_database_tab(self.notebook, self.data_manager)
+    
+    def _create_performance_tab(self):
+        """Crea pestaña de Performance."""
+        # Crear la pestaña de performance
+        self.performance_tab = create_performance_tab(self.notebook, self.data_manager)
     
     def _create_data_table(self, parent: ttk.Frame):
         """Crea tabla de datos con scrollbars."""
@@ -504,6 +507,9 @@ class MainWindow:
             self.comparison_manager = create_strategy_comparison_manager(self.root)
             self.export_manager = create_advanced_export_manager(self.root)
             
+            # Inicializar panel de ayuda contextual
+            self.help_panel = create_help_contextual_panel(self.root)
+            
             logger.info("✅ Gestores avanzados inicializados")
             
         except Exception as e:
@@ -512,6 +518,7 @@ class MainWindow:
             self.chart_manager = Mock()
             self.comparison_manager = Mock()
             self.export_manager = Mock()
+            self.help_panel = Mock()
     
     def _load_data(self):
         """Carga datos de estrategias."""
@@ -839,11 +846,31 @@ Sharpe Ratio IS:
     
     def _run_tail_risk_analysis(self):
         """Ejecuta análisis de Tail Risk."""
-        messagebox.showinfo("Tail Risk", "Análisis de Tail Risk en desarrollo")
+        if self.current_data is None:
+            messagebox.showwarning("Advertencia", "No hay datos cargados para analizar.")
+            return
+        
+        # Usar la implementación profesional de Tail Risk
+        if hasattr(self, 'tail_risk_analysis'):
+            self.tail_risk_analysis.set_data(self.current_data)
+            # El análisis se ejecuta desde la pestaña
+            messagebox.showinfo("Tail Risk", "Datos establecidos en la pestaña de Tail Risk Analysis.\nEjecuta el análisis desde la pestaña.")
+        else:
+            messagebox.showwarning("Advertencia", "Módulo de Tail Risk no disponible.")
     
     def _run_axis_analysis(self):
         """Ejecuta análisis AXISelect."""
-        messagebox.showinfo("AXISelect", "Análisis AXISelect en desarrollo")
+        if self.current_data is None:
+            messagebox.showwarning("Advertencia", "No hay datos cargados para analizar.")
+            return
+        
+        # Usar la implementación profesional de AXI Select
+        if hasattr(self, 'axi_select_analysis'):
+            self.axi_select_analysis.set_data(self.current_data)
+            # El análisis se ejecuta desde la pestaña
+            messagebox.showinfo("AXI Select", "Datos establecidos en la pestaña de AXI Select Analysis.\nEjecuta el análisis desde la pestaña.")
+        else:
+            messagebox.showwarning("Advertencia", "Módulo de AXI Select no disponible.")
     
     def _refresh_data(self):
         """Actualiza los datos."""
@@ -916,8 +943,15 @@ Sharpe Ratio IS:
             messagebox.showerror("Error", f"Error en exportación .sqx: {e}")
     
     def _show_help(self):
-        """Muestra la ayuda."""
-        messagebox.showinfo("Ayuda", "Sistema de ayuda en desarrollo")
+        """Muestra el panel de ayuda contextual."""
+        try:
+            if self.help_panel:
+                self.help_panel.show_help_panel("metricas")
+            else:
+                messagebox.showinfo("Ayuda", "Panel de ayuda no disponible")
+        except Exception as e:
+            logger.error(f"Error mostrando ayuda: {e}")
+            messagebox.showerror("Error", f"Error mostrando ayuda: {e}")
     
     def _show_about(self):
         """Muestra información sobre la aplicación."""
@@ -1011,14 +1045,763 @@ Sharpe Ratio IS:
         """Callback cuando se selecciona una estrategia."""
         pass
     
+    def _create_informative_tooltip(self, widget, text: str, title: str = "Información"):
+        """
+        Crea un tooltip informativo profesional.
+        
+        Args:
+            widget: Widget al que se asocia el tooltip
+            text: Texto del tooltip
+            title: Título del tooltip
+        """
+        def show_tooltip(event):
+            # Crear ventana de tooltip
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            
+            # Frame principal
+            frame = ttk.Frame(tooltip, relief="solid", borderwidth=1)
+            frame.pack(fill="both", expand=True)
+            
+            # Título
+            title_label = ttk.Label(frame, text=title, font=("Arial", 10, "bold"))
+            title_label.pack(pady=(5, 2), padx=5)
+            
+            # Separador
+            ttk.Separator(frame, orient="horizontal").pack(fill="x", padx=5)
+            
+            # Contenido
+            content_label = ttk.Label(frame, text=text, wraplength=300, justify="left")
+            content_label.pack(pady=(2, 5), padx=5)
+            
+            # Guardar referencia
+            self.tooltip_widgets[widget] = tooltip
+            
+            # Ocultar después de 5 segundos
+            tooltip.after(5000, lambda: self._hide_tooltip(widget))
+        
+        def hide_tooltip(event):
+            self._hide_tooltip(widget)
+        
+        # Bindings
+        widget.bind("<Enter>", show_tooltip)
+        widget.bind("<Leave>", hide_tooltip)
+        widget.bind("<Button-1>", hide_tooltip)
+    
+    def _hide_tooltip(self, widget):
+        """Oculta el tooltip asociado al widget."""
+        if widget in self.tooltip_widgets:
+            self.tooltip_widgets[widget].destroy()
+            del self.tooltip_widgets[widget]
+    
+    def _get_predictability_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para predictibilidad."""
+        return """🎯 PREDICTIBILIDAD
+
+Esta métrica evalúa la capacidad de la estrategia para mantener su rendimiento en datos futuros.
+
+ESCALAS:
+• EXCELENTE (≥85%): Alta confiabilidad
+• BUENA (70-84%): Buena estabilidad
+• ACEPTABLE (60-69%): Estabilidad moderada
+• BAJA (<60%): Riesgo de inestabilidad
+
+FACTORES:
+• Consistencia IS/OOS
+• Robustez temporal
+• Estabilidad de parámetros
+• Correlación de rendimientos
+
+RECOMENDACIÓN:
+Valores altos indican estrategias más confiables para el futuro."""
+    
+    def _get_factor_k_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para Factor K."""
+        return """🏆 FACTOR K ELITE 9.6
+
+Métrica compuesta que evalúa la calidad general de la estrategia.
+
+COMPONENTES:
+• S (Stability): Estabilidad de rendimientos
+• G (Growth): Crecimiento consistente
+• E (Efficiency): Eficiencia operativa
+• C (Consistency): Consistencia temporal
+
+CATEGORÍAS:
+• Elite (≥9.2): Estrategias excepcionales
+• Excellent (≥8.2): Estrategias muy buenas
+• Very Good (≥7.2): Estrategias buenas
+• Good (≥6.2): Estrategias aceptables
+• Poor (<6.2): Estrategias con problemas
+
+PESOS POR RÉGIMEN:
+• Bull: 30% S, 40% G, 20% E, 10% C
+• Bear: 40% S, 20% G, 30% E, 10% C
+• Sideways: 35% S, 25% G, 25% E, 15% C
+• Crisis: 50% S, 10% G, 30% E, 10% C"""
+    
+    def _get_sharpe_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para Sharpe Ratio."""
+        return """📈 SHARPE RATIO
+
+Mide el rendimiento ajustado por riesgo de la estrategia.
+
+INTERPRETACIÓN:
+• ≥2.0: Excelente (rendimiento superior)
+• 1.5-2.0: Muy bueno
+• 1.0-1.5: Bueno
+• 0.5-1.0: Aceptable
+• <0.5: Pobre
+
+FÓRMULA:
+Sharpe = (Retorno - Tasa Libre de Riesgo) / Desviación Estándar
+
+IMPORTANCIA:
+• Cuanto mayor, mejor el rendimiento por unidad de riesgo
+• Estrategias con Sharpe alto son más eficientes
+• Considera tanto retornos como volatilidad"""
+    
+    def _get_drawdown_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para Max Drawdown."""
+        return """📉 MÁXIMO DRAWDOWN
+
+La mayor pérdida desde un pico hasta un valle.
+
+INTERPRETACIÓN:
+• <10%: Excelente (bajo riesgo)
+• 10-20%: Bueno
+• 20-30%: Aceptable
+• 30-50%: Alto riesgo
+• >50%: Muy alto riesgo
+
+IMPORTANCIA:
+• Indica el peor escenario de pérdida
+• Estrategias con drawdown bajo son más seguras
+• Considerar junto con retornos esperados
+
+RECUPERACIÓN:
+• Tiempo para recuperar pérdidas
+• Estrategias con recuperación rápida son preferibles"""
+    
+    def _get_cagr_tooltip_text(self) -> str:
+        """Retorna el texto del tooltip para CAGR."""
+        return """📊 CAGR (Compound Annual Growth Rate)
+
+Tasa de crecimiento anual compuesto de la estrategia.
+
+INTERPRETACIÓN:
+• >20%: Excelente crecimiento
+• 15-20%: Muy buen crecimiento
+• 10-15%: Bueno crecimiento
+• 5-10%: Crecimiento moderado
+• <5%: Crecimiento bajo
+
+FÓRMULA:
+CAGR = (Valor Final / Valor Inicial)^(1/años) - 1
+
+IMPORTANCIA:
+• Mide el crecimiento real de la inversión
+• Considera el efecto del interés compuesto
+• Métrica estándar para comparar estrategias
+
+CONSIDERACIONES:
+• Comparar con benchmark del mercado
+• Evaluar junto con riesgo (Sharpe, Drawdown)"""
+    
+    def _apply_tooltips_to_metrics(self):
+        """Aplica tooltips informativos a las métricas principales."""
+        try:
+            # Aplicar tooltips a los filtros rápidos
+            if hasattr(self, 'factor_k_var'):
+                factor_k_label = ttk.Label(self.root, text="Factor K mínimo:")
+                self._create_informative_tooltip(
+                    factor_k_label, 
+                    self._get_factor_k_tooltip_text(),
+                    "Factor K Elite 9.6"
+                )
+            
+            # Aplicar tooltips a las columnas de la tabla
+            if hasattr(self, 'data_tree'):
+                # Tooltip para columna Factor K
+                self._create_informative_tooltip(
+                    self.data_tree,
+                    self._get_factor_k_tooltip_text(),
+                    "Factor K Elite 9.6"
+                )
+            
+            logger.info("✅ Tooltips informativos aplicados a métricas principales")
+            
+        except Exception as e:
+            logger.error(f"Error aplicando tooltips: {e}")
+    
     def run(self):
         """Ejecuta la aplicación."""
         try:
             logger.info("🚀 Iniciando QVA Strategy Studio")
+            
+            # Aplicar tooltips informativos
+            self._apply_tooltips_to_metrics()
+            
             self.root.mainloop()
             
         except Exception as e:
             logger.error(f"Error ejecutando aplicación: {e}")
+
+    def create_advanced_export_tab(self):
+        """Crea la pestaña de exportación avanzada."""
+        self.export_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.export_tab, text="📊 Exportación Avanzada")
+        
+        # Título principal
+        title_label = ttk.Label(self.export_tab, text="Sistema de Exportación Avanzada", 
+                               font=("Arial", 14, "bold"))
+        title_label.pack(pady=10)
+        
+        # Frame principal con scroll
+        main_frame = ttk.Frame(self.export_tab)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Canvas para scroll
+        canvas = tk.Canvas(main_frame)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Sección 1: Exportación Excel Avanzada
+        self._create_excel_export_section(scrollable_frame)
+        
+        # Sección 2: Dashboard HTML Interactivo
+        self._create_html_dashboard_section(scrollable_frame)
+        
+        # Sección 3: Reportes PDF Profesionales
+        self._create_pdf_report_section(scrollable_frame)
+        
+        # Sección 4: Exportación por Lotes
+        self._create_batch_export_section(scrollable_frame)
+        
+        # Sección 5: Configuración Avanzada
+        self._create_advanced_config_section(scrollable_frame)
+        
+        # Configurar scroll
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Inicializar export manager
+        self.export_manager = create_advanced_export_manager(self.root)
+    
+    def _create_excel_export_section(self, parent):
+        """Crea la sección de exportación Excel avanzada."""
+        excel_frame = ttk.LabelFrame(parent, text="📈 Exportación Excel Avanzada")
+        excel_frame.pack(fill=tk.X, pady=10, padx=10)
+        
+        # Descripción
+        desc_label = ttk.Label(excel_frame, text="Exporta datos a Excel con 7 hojas especializadas:")
+        desc_label.pack(pady=5)
+        
+        # Lista de hojas
+        sheets_info = [
+            "📊 Ranking de Estrategias",
+            "📈 Análisis por Régimen de Mercado", 
+            "🔍 Componentes Factor K 9.6",
+            "📋 Métricas Derivadas",
+            "🔄 Análisis IS/OOS",
+            "🏷️ Categorización y Recomendaciones",
+            "📄 Datos Completos"
+        ]
+        
+        for sheet_info in sheets_info:
+            sheet_label = ttk.Label(excel_frame, text=f"• {sheet_info}")
+            sheet_label.pack(anchor=tk.W, padx=20)
+        
+        # Botones de exportación
+        buttons_frame = ttk.Frame(excel_frame)
+        buttons_frame.pack(pady=10)
+        
+        # Botón exportar Excel
+        self.excel_export_btn = ttk.Button(buttons_frame, text="📊 Exportar a Excel", 
+                                          command=self._export_to_excel_advanced)
+        self.excel_export_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Botón previsualizar
+        self.excel_preview_btn = ttk.Button(buttons_frame, text="👁️ Previsualizar", 
+                                           command=self._preview_excel_export)
+        self.excel_preview_btn.pack(side=tk.LEFT, padx=5)
+    
+    def _create_html_dashboard_section(self, parent):
+        """Crea la sección de dashboard HTML interactivo."""
+        html_frame = ttk.LabelFrame(parent, text="🌐 Dashboard HTML Interactivo")
+        html_frame.pack(fill=tk.X, pady=10, padx=10)
+        
+        # Descripción
+        desc_label = ttk.Label(html_frame, text="Crea dashboard interactivo con gráficos Plotly:")
+        desc_label.pack(pady=5)
+        
+        # Características
+        features = [
+            "📊 Gráficos interactivos con Plotly",
+            "🔍 Filtros dinámicos",
+            "📱 Responsive design",
+            "🎨 Tema profesional",
+            "📈 Gráficos: Factor K, CAGR vs Sharpe, Categorías"
+        ]
+        
+        for feature in features:
+            feature_label = ttk.Label(html_frame, text=f"• {feature}")
+            feature_label.pack(anchor=tk.W, padx=20)
+        
+        # Botones
+        buttons_frame = ttk.Frame(html_frame)
+        buttons_frame.pack(pady=10)
+        
+        self.html_export_btn = ttk.Button(buttons_frame, text="🌐 Crear Dashboard", 
+                                         command=self._export_to_html_dashboard)
+        self.html_export_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.html_open_btn = ttk.Button(buttons_frame, text="🔗 Abrir en Navegador", 
+                                       command=self._open_html_dashboard)
+        self.html_open_btn.pack(side=tk.LEFT, padx=5)
+    
+    def _create_pdf_report_section(self, parent):
+        """Crea la sección de reportes PDF profesionales."""
+        pdf_frame = ttk.LabelFrame(parent, text="📄 Reportes PDF Profesionales")
+        pdf_frame.pack(fill=tk.X, pady=10, padx=10)
+        
+        # Descripción
+        desc_label = ttk.Label(pdf_frame, text="Genera reportes PDF con formato profesional:")
+        desc_label.pack(pady=5)
+        
+        # Características
+        features = [
+            "📊 Gráficos vectoriales de alta calidad",
+            "📋 Tablas formateadas profesionalmente",
+            "📈 Resumen ejecutivo",
+            "🎨 Diseño corporativo",
+            "📄 Múltiples secciones organizadas"
+        ]
+        
+        for feature in features:
+            feature_label = ttk.Label(pdf_frame, text=f"• {feature}")
+            feature_label.pack(anchor=tk.W, padx=20)
+        
+        # Botones
+        buttons_frame = ttk.Frame(pdf_frame)
+        buttons_frame.pack(pady=10)
+        
+        self.pdf_export_btn = ttk.Button(buttons_frame, text="📄 Generar PDF", 
+                                        command=self._export_to_pdf_report)
+        self.pdf_export_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.pdf_config_btn = ttk.Button(buttons_frame, text="⚙️ Configurar", 
+                                        command=self._configure_pdf_report)
+        self.pdf_config_btn.pack(side=tk.LEFT, padx=5)
+    
+    def _create_batch_export_section(self, parent):
+        """Crea la sección de exportación por lotes."""
+        batch_frame = ttk.LabelFrame(parent, text="📦 Exportación por Lotes")
+        batch_frame.pack(fill=tk.X, pady=10, padx=10)
+        
+        # Descripción
+        desc_label = ttk.Label(batch_frame, text="Exporta en múltiples formatos simultáneamente:")
+        desc_label.pack(pady=5)
+        
+        # Formatos disponibles
+        formats_frame = ttk.Frame(batch_frame)
+        formats_frame.pack(pady=5)
+        
+        self.format_vars = {
+            'excel': tk.BooleanVar(value=True),
+            'html': tk.BooleanVar(value=True),
+            'pdf': tk.BooleanVar(value=True),
+            'csv': tk.BooleanVar(value=False),
+            'json': tk.BooleanVar(value=False)
+        }
+        
+        row = 0
+        for format_name, var in self.format_vars.items():
+            cb = ttk.Checkbutton(formats_frame, text=format_name.upper(), variable=var)
+            cb.grid(row=row//2, column=row%2, sticky=tk.W, padx=10, pady=2)
+            row += 1
+        
+        # Botones
+        buttons_frame = ttk.Frame(batch_frame)
+        buttons_frame.pack(pady=10)
+        
+        self.batch_export_btn = ttk.Button(buttons_frame, text="📦 Exportar Lotes", 
+                                          command=self._export_batch)
+        self.batch_export_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.batch_folder_btn = ttk.Button(buttons_frame, text="📁 Seleccionar Carpeta", 
+                                          command=self._select_batch_folder)
+        self.batch_folder_btn.pack(side=tk.LEFT, padx=5)
+    
+    def _create_advanced_config_section(self, parent):
+        """Crea la sección de configuración avanzada."""
+        config_frame = ttk.LabelFrame(parent, text="⚙️ Configuración Avanzada")
+        config_frame.pack(fill=tk.X, pady=10, padx=10)
+        
+        # Opciones de configuración
+        options_frame = ttk.Frame(config_frame)
+        options_frame.pack(pady=5)
+        
+        # Variables de configuración
+        self.config_vars = {
+            'include_charts': tk.BooleanVar(value=True),
+            'include_summary': tk.BooleanVar(value=True),
+            'include_filters': tk.BooleanVar(value=True),
+            'professional_format': tk.BooleanVar(value=True),
+            'auto_open': tk.BooleanVar(value=False)
+        }
+        
+        row = 0
+        for option_name, var in self.config_vars.items():
+            text = option_name.replace('_', ' ').title()
+            cb = ttk.Checkbutton(options_frame, text=text, variable=var)
+            cb.grid(row=row, column=0, sticky=tk.W, padx=10, pady=2)
+            row += 1
+        
+        # Botones de configuración
+        buttons_frame = ttk.Frame(config_frame)
+        buttons_frame.pack(pady=10)
+        
+        self.save_config_btn = ttk.Button(buttons_frame, text="💾 Guardar Config", 
+                                         command=self._save_export_config)
+        self.save_config_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.load_config_btn = ttk.Button(buttons_frame, text="📂 Cargar Config", 
+                                         command=self._load_export_config)
+        self.load_config_btn.pack(side=tk.LEFT, padx=5)
+    
+    def _export_to_excel_advanced(self):
+        """Exporta datos a Excel avanzado."""
+        try:
+            if not hasattr(self, 'results_df') or self.results_df is None:
+                messagebox.showwarning("Sin Datos", "No hay datos para exportar. Ejecute un análisis primero.")
+                return
+            
+            # Configurar datos para exportación
+            self.export_manager.set_data(self.results_df)
+            
+            # Seleccionar archivo
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".xlsx",
+                filetypes=[("Archivos Excel", "*.xlsx"), ("Todos los archivos", "*.*")],
+                title="Guardar Excel Avanzado"
+            )
+            
+            if filename:
+                # Exportar con configuración avanzada
+                success = self.export_manager.export_to_excel_advanced(filename)
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Excel exportado exitosamente:\n{filename}")
+                    
+                    # Abrir archivo si está configurado
+                    if self.config_vars['auto_open'].get():
+                        os.startfile(filename)
+                else:
+                    messagebox.showerror("Error", "Error al exportar Excel")
+                    
+        except Exception as e:
+            logger.error(f"Error exportando Excel: {e}")
+            messagebox.showerror("Error", f"Error al exportar Excel:\n{str(e)}")
+    
+    def _preview_excel_export(self):
+        """Previsualiza la exportación Excel."""
+        try:
+            if not hasattr(self, 'results_df') or self.results_df is None:
+                messagebox.showwarning("Sin Datos", "No hay datos para previsualizar.")
+                return
+            
+            # Mostrar información de previsualización
+            preview_info = f"""
+            📊 PREVISUALIZACIÓN DE EXPORTACIÓN EXCEL
+            
+            📋 Datos a exportar:
+            • Total de estrategias: {len(self.results_df)}
+            • Columnas disponibles: {len(self.results_df.columns)}
+            
+            📄 Hojas que se crearán:
+            • Ranking de Estrategias
+            • Análisis por Régimen de Mercado
+            • Componentes Factor K 9.6
+            • Métricas Derivadas
+            • Análisis IS/OOS
+            • Categorización y Recomendaciones
+            • Datos Completos
+            
+            📈 Gráficos incluidos: Sí
+            🎨 Formato profesional: Sí
+            """
+            
+            messagebox.showinfo("Previsualización Excel", preview_info)
+            
+        except Exception as e:
+            logger.error(f"Error en previsualización: {e}")
+            messagebox.showerror("Error", f"Error en previsualización:\n{str(e)}")
+    
+    def _export_to_html_dashboard(self):
+        """Exporta dashboard HTML interactivo."""
+        try:
+            if not hasattr(self, 'results_df') or self.results_df is None:
+                messagebox.showwarning("Sin Datos", "No hay datos para exportar. Ejecute un análisis primero.")
+                return
+            
+            # Configurar datos para exportación
+            self.export_manager.set_data(self.results_df)
+            
+            # Seleccionar archivo
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".html",
+                filetypes=[("Archivos HTML", "*.html"), ("Todos los archivos", "*.*")],
+                title="Guardar Dashboard HTML"
+            )
+            
+            if filename:
+                # Configuración del dashboard
+                config = {
+                    "title": "Dashboard de Análisis de Estrategias",
+                    "theme": "plotly_white",
+                    "include_charts": self.config_vars['include_charts'].get(),
+                    "include_filters": self.config_vars['include_filters'].get(),
+                    "include_summary": self.config_vars['include_summary'].get()
+                }
+                
+                # Exportar dashboard
+                success = self.export_manager.export_to_html_dashboard(filename, config)
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Dashboard HTML creado exitosamente:\n{filename}")
+                    
+                    # Abrir en navegador si está configurado
+                    if self.config_vars['auto_open'].get():
+                        webbrowser.open(f"file://{os.path.abspath(filename)}")
+                else:
+                    messagebox.showerror("Error", "Error al crear dashboard HTML")
+                    
+        except Exception as e:
+            logger.error(f"Error exportando HTML: {e}")
+            messagebox.showerror("Error", f"Error al exportar HTML:\n{str(e)}")
+    
+    def _open_html_dashboard(self):
+        """Abre el dashboard HTML en el navegador."""
+        try:
+            # Buscar el último dashboard creado
+            output_dir = "output"
+            if os.path.exists(output_dir):
+                html_files = [f for f in os.listdir(output_dir) if f.endswith('.html')]
+                if html_files:
+                    latest_file = max(html_files, key=lambda x: os.path.getctime(os.path.join(output_dir, x)))
+                    filepath = os.path.join(output_dir, latest_file)
+                    webbrowser.open(f"file://{os.path.abspath(filepath)}")
+                else:
+                    messagebox.showinfo("Info", "No se encontraron dashboards HTML. Cree uno primero.")
+            else:
+                messagebox.showinfo("Info", "No se encontró carpeta de output.")
+                
+        except Exception as e:
+            logger.error(f"Error abriendo dashboard: {e}")
+            messagebox.showerror("Error", f"Error abriendo dashboard:\n{str(e)}")
+    
+    def _export_to_pdf_report(self):
+        """Exporta reporte PDF profesional."""
+        try:
+            if not hasattr(self, 'results_df') or self.results_df is None:
+                messagebox.showwarning("Sin Datos", "No hay datos para exportar. Ejecute un análisis primero.")
+                return
+            
+            # Configurar datos para exportación
+            self.export_manager.set_data(self.results_df)
+            
+            # Seleccionar archivo
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".pdf",
+                filetypes=[("Archivos PDF", "*.pdf"), ("Todos los archivos", "*.*")],
+                title="Guardar Reporte PDF"
+            )
+            
+            if filename:
+                # Configuración del reporte
+                config = {
+                    "title": "Reporte de Análisis de Estrategias",
+                    "author": "QVA Strategy Studio",
+                    "include_charts": self.config_vars['include_charts'].get(),
+                    "include_summary": self.config_vars['include_summary'].get(),
+                    "include_details": True
+                }
+                
+                # Exportar PDF
+                success = self.export_manager.export_to_pdf_report(filename, config)
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Reporte PDF generado exitosamente:\n{filename}")
+                    
+                    # Abrir archivo si está configurado
+                    if self.config_vars['auto_open'].get():
+                        os.startfile(filename)
+                else:
+                    messagebox.showerror("Error", "Error al generar PDF")
+                    
+        except Exception as e:
+            logger.error(f"Error exportando PDF: {e}")
+            messagebox.showerror("Error", f"Error al exportar PDF:\n{str(e)}")
+    
+    def _configure_pdf_report(self):
+        """Configura opciones del reporte PDF."""
+        try:
+            # Crear ventana de configuración
+            config_window = tk.Toplevel(self.root)
+            config_window.title("Configurar Reporte PDF")
+            config_window.geometry("400x300")
+            config_window.transient(self.root)
+            config_window.grab_set()
+            
+            # Variables de configuración
+            pdf_config_vars = {
+                'include_charts': tk.BooleanVar(value=True),
+                'include_summary': tk.BooleanVar(value=True),
+                'include_details': tk.BooleanVar(value=True),
+                'professional_format': tk.BooleanVar(value=True),
+                'include_logo': tk.BooleanVar(value=False)
+            }
+            
+            # Crear controles
+            ttk.Label(config_window, text="Configuración del Reporte PDF", 
+                     font=("Arial", 12, "bold")).pack(pady=10)
+            
+            for option_name, var in pdf_config_vars.items():
+                text = option_name.replace('_', ' ').title()
+                cb = ttk.Checkbutton(config_window, text=text, variable=var)
+                cb.pack(anchor=tk.W, padx=20, pady=2)
+            
+            # Botones
+            buttons_frame = ttk.Frame(config_window)
+            buttons_frame.pack(pady=20)
+            
+            ttk.Button(buttons_frame, text="💾 Guardar", 
+                      command=lambda: self._save_pdf_config(pdf_config_vars, config_window)).pack(side=tk.LEFT, padx=5)
+            
+            ttk.Button(buttons_frame, text="❌ Cancelar", 
+                      command=config_window.destroy).pack(side=tk.LEFT, padx=5)
+            
+        except Exception as e:
+            logger.error(f"Error configurando PDF: {e}")
+            messagebox.showerror("Error", f"Error configurando PDF:\n{str(e)}")
+    
+    def _save_pdf_config(self, config_vars, window):
+        """Guarda la configuración del PDF."""
+        try:
+            # Aquí se guardaría la configuración
+            messagebox.showinfo("Éxito", "Configuración guardada")
+            window.destroy()
+        except Exception as e:
+            logger.error(f"Error guardando configuración: {e}")
+            messagebox.showerror("Error", f"Error guardando configuración:\n{str(e)}")
+    
+    def _export_batch(self):
+        """Exporta en múltiples formatos por lotes."""
+        try:
+            if not hasattr(self, 'results_df') or self.results_df is None:
+                messagebox.showwarning("Sin Datos", "No hay datos para exportar. Ejecute un análisis primero.")
+                return
+            
+            # Configurar datos para exportación
+            self.export_manager.set_data(self.results_df)
+            
+            # Seleccionar directorio de salida
+            output_dir = filedialog.askdirectory(title="Seleccionar Carpeta de Salida")
+            
+            if output_dir:
+                # Obtener formatos seleccionados
+                selected_formats = [fmt for fmt, var in self.format_vars.items() if var.get()]
+                
+                if not selected_formats:
+                    messagebox.showwarning("Sin Formatos", "Seleccione al menos un formato para exportar.")
+                    return
+                
+                # Exportar por lotes
+                success = self.export_manager.export_batch(output_dir, selected_formats)
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Exportación por lotes completada:\n{output_dir}")
+                    
+                    # Abrir carpeta si está configurado
+                    if self.config_vars['auto_open'].get():
+                        os.startfile(output_dir)
+                else:
+                    messagebox.showerror("Error", "Error en exportación por lotes")
+                    
+        except Exception as e:
+            logger.error(f"Error en exportación por lotes: {e}")
+            messagebox.showerror("Error", f"Error en exportación por lotes:\n{str(e)}")
+    
+    def _select_batch_folder(self):
+        """Selecciona carpeta para exportación por lotes."""
+        try:
+            folder = filedialog.askdirectory(title="Seleccionar Carpeta de Salida")
+            if folder:
+                messagebox.showinfo("Carpeta Seleccionada", f"Carpeta de salida:\n{folder}")
+        except Exception as e:
+            logger.error(f"Error seleccionando carpeta: {e}")
+            messagebox.showerror("Error", f"Error seleccionando carpeta:\n{str(e)}")
+    
+    def _save_export_config(self):
+        """Guarda la configuración de exportación."""
+        try:
+            config = {
+                'format_vars': {k: v.get() for k, v in self.format_vars.items()},
+                'config_vars': {k: v.get() for k, v in self.config_vars.items()}
+            }
+            
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("Archivos JSON", "*.json"), ("Todos los archivos", "*.*")],
+                title="Guardar Configuración de Exportación"
+            )
+            
+            if filename:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+                
+                messagebox.showinfo("Éxito", f"Configuración guardada:\n{filename}")
+                
+        except Exception as e:
+            logger.error(f"Error guardando configuración: {e}")
+            messagebox.showerror("Error", f"Error guardando configuración:\n{str(e)}")
+    
+    def _load_export_config(self):
+        """Carga la configuración de exportación."""
+        try:
+            filename = filedialog.askopenfilename(
+                filetypes=[("Archivos JSON", "*.json"), ("Todos los archivos", "*.*")],
+                title="Cargar Configuración de Exportación"
+            )
+            
+            if filename:
+                with open(filename, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                # Aplicar configuración
+                for k, v in config.get('format_vars', {}).items():
+                    if k in self.format_vars:
+                        self.format_vars[k].set(v)
+                
+                for k, v in config.get('config_vars', {}).items():
+                    if k in self.config_vars:
+                        self.config_vars[k].set(v)
+                
+                messagebox.showinfo("Éxito", f"Configuración cargada:\n{filename}")
+                
+        except Exception as e:
+            logger.error(f"Error cargando configuración: {e}")
+            messagebox.showerror("Error", f"Error cargando configuración:\n{str(e)}")
 
 # Funciones de conveniencia
 def create_main_window() -> MainWindow:

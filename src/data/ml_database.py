@@ -279,6 +279,8 @@ class MLDatabase:
     def _extract_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """Extrae features de los datos."""
         available_features = [col for col in self.config.feature_columns if col in data.columns]
+        if not available_features:
+            return pd.DataFrame()
         features = data[available_features].copy()
         
         # Limpiar datos
@@ -290,6 +292,8 @@ class MLDatabase:
     def _extract_targets(self, data: pd.DataFrame) -> pd.DataFrame:
         """Extrae targets de los datos."""
         available_targets = [col for col in self.config.target_columns if col in data.columns]
+        if not available_targets:
+            return pd.DataFrame()
         targets = data[available_targets].copy()
         
         # Limpiar datos
@@ -308,7 +312,7 @@ class MLDatabase:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM isa_data WHERE data_hash = ?", (data_hash,))
+                cursor.execute("SELECT COUNT(*) FROM ml_data WHERE data_hash = ?", (data_hash,))
                 return cursor.fetchone()[0] > 0
         except Exception as e:
             logger.error(f"❌ Error verificando existencia de datos: {e}")
@@ -624,6 +628,9 @@ class MLDatabase:
                 cursor.execute("SELECT COUNT(*) FROM validation_metrics")
                 metrics_count = cursor.fetchone()[0]
                 
+                cursor.execute("SELECT COUNT(*) FROM ml_validation_results")
+                ml_results_count = cursor.fetchone()[0]
+                
                 # Estadísticas por tipo de activo
                 cursor.execute("""
                     SELECT asset_type, COUNT(*) as count 
@@ -635,12 +642,21 @@ class MLDatabase:
                 # Tamaño de la base de datos
                 db_size = self.db_path.stat().st_size / (1024 * 1024)  # MB
                 
+                # Última actualización
+                cursor.execute("SELECT MAX(created_at) FROM ml_data")
+                last_update = cursor.fetchone()[0] or "N/A"
+                
                 return {
+                    'total_records': ml_count,
                     'ml_records': ml_count,
                     'ml_datasets': dataset_count,
                     'validation_metrics': metrics_count,
+                    'ml_results': ml_results_count,
                     'asset_type_stats': asset_type_stats,
+                    'database_size_mb': round(db_size, 2),
                     'db_size_mb': round(db_size, 2),
+                    'last_update': last_update,
+                    'cached_datasets': dataset_count,
                     'cache_dir': str(self.cache_dir),
                     'config': asdict(self.config)
                 }
