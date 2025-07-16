@@ -63,6 +63,14 @@ class Step2ConfigureFrame(ttk.Frame):
         self.percentile_var = tk.IntVar(value=80)
         self.top_n_var = tk.IntVar(value=20)
         
+        # Diccionario de variables de configuración
+        self.config_vars = {
+            'trading_style': self.trading_style_var,
+            'alpha': self.alpha_var,
+            'percentile': self.percentile_var,
+            'top_n': self.top_n_var
+        }
+        
         # Lista de KPIs seleccionados
         self.selected_kpis = []
         
@@ -510,6 +518,99 @@ class Step2ConfigureFrame(ttk.Frame):
             
         except Exception as e:
             logger.error(f"❌ Error reiniciando paso: {e}")
+    
+    def _build_configuration_section(self, parent):
+        """Construye la sección de configuración."""
+        try:
+            config_frame = ttk.LabelFrame(parent, text="⚙️ Configuración", padding=10)
+            config_frame.pack(fill="x", pady=(0, 10))
+            
+            # Configuración básica
+            basic_frame = ttk.Frame(config_frame)
+            basic_frame.pack(fill="x")
+            
+            # Estilo de trading
+            style_frame = ttk.Frame(basic_frame)
+            style_frame.pack(fill="x", pady=2)
+            ttk.Label(style_frame, text="Estilo:").pack(side="left")
+            ttk.Combobox(style_frame, textvariable=self.trading_style_var, 
+                        values=["Swing", "Day Trading", "Scalping"], 
+                        state="readonly", width=15).pack(side="left", padx=5)
+            
+            # Alpha
+            alpha_frame = ttk.Frame(basic_frame)
+            alpha_frame.pack(fill="x", pady=2)
+            ttk.Label(alpha_frame, text="Alpha:").pack(side="left")
+            ttk.Scale(alpha_frame, from_=0.1, to=1.0, variable=self.alpha_var, 
+                     orient="horizontal", length=150).pack(side="left", padx=5)
+            ttk.Label(alpha_frame, textvariable=self.alpha_var).pack(side="left")
+            
+            logger.info("✅ Sección de configuración construida")
+            
+        except Exception as e:
+            logger.error(f"Error construyendo sección de configuración: {e}")
+    
+    def _build_validation_section(self, parent):
+        """Construye la sección de validación."""
+        try:
+            validation_frame = ttk.LabelFrame(parent, text="✅ Validación", padding=10)
+            validation_frame.pack(fill="x", pady=(0, 10))
+            
+            # Validación de parámetros
+            validation_label = ttk.Label(validation_frame, 
+                                       text="Los parámetros serán validados antes de continuar")
+            validation_label.pack()
+            
+            logger.info("✅ Sección de validación construida")
+            
+        except Exception as e:
+            logger.error(f"Error construyendo sección de validación: {e}")
+    
+    def _apply_configuration(self):
+        """Aplica la configuración actual."""
+        try:
+            config = self.get_configuration()
+            if self.on_config_changed:
+                self.on_config_changed(config)
+            logger.info("✅ Configuración aplicada")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error aplicando configuración: {e}")
+            return False
+    
+    def _validate_configuration(self) -> bool:
+        """Valida la configuración actual."""
+        try:
+            # Validar que se seleccionó un estilo
+            if not self.trading_style_var.get():
+                return False
+            
+            # Validar que alpha está en rango
+            alpha = self.alpha_var.get()
+            if alpha < 0.1 or alpha > 1.0:
+                return False
+            
+            # Validar que se seleccionaron KPIs
+            if len(self.selected_kpis) == 0:
+                return False
+            
+            logger.info("✅ Configuración validada correctamente")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validando configuración: {e}")
+            return False
+    
+    def _show_validation_errors(self, errors: List[str]):
+        """Muestra errores de validación."""
+        try:
+            error_message = "Errores de validación:\n" + "\n".join(errors)
+            show_error_message("Errores de Validación", error_message)
+            logger.warning(f"Errores de validación mostrados: {errors}")
+            
+        except Exception as e:
+            logger.error(f"Error mostrando errores de validación: {e}")
 
 
 def create_step2_configure_frame(parent, **kwargs):

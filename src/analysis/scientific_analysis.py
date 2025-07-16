@@ -24,6 +24,18 @@ from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
 
+# Lazy loading de librerías pesadas para optimización de performance
+try:
+    from src.core.utils.lazy_loader import lazy_loader
+    from src.core.utils.cache_manager import cache_manager
+    from src.core.utils.memory_manager import memory_manager
+    PERFORMANCE_OPTIMIZATIONS_AVAILABLE = True
+except ImportError:
+    PERFORMANCE_OPTIMIZATIONS_AVAILABLE = False
+    cache_manager = None
+    memory_manager = None
+    lazy_loader = None
+
 # Importar implementaciones reales del core
 from src.core.predictability_analyzer import PredictabilityAnalyzer as CorePredictabilityAnalyzer
 from src.core.predictability_analyzer import WalkForwardAnalyzer as CoreWalkForwardAnalyzer
