@@ -35,6 +35,10 @@ from src.data.data_manager import DataManager
 from src.data.data_utils import ensure_numeric_columns
 from src.core.config.progress_callback import ProgressCallback
 from src.gui.utils import GUIAnalysisError
+from src.core.logger_config import setup_logger
+
+# Importar el nuevo módulo de inteligencia ML
+from src.core.analysis.ml_intelligence_enhancer import MLIntelligenceEnhancer, MLIntelligenceType, enhance_core_analysis_with_ml
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -97,6 +101,207 @@ class ExtraKPIManager:
 # ============================================================================
 # CLASES PRINCIPALES (reemplazan las de core_engine_enhanced.py)
 # ============================================================================
+
+class CoreEngine:
+    """
+    Motor principal del sistema de análisis cuantitativo.
+    
+    Integra todos los componentes de análisis:
+    - Factor K Enhanced
+    - QVA Analyzer
+    - Market Regime Analyzer
+    - Predictability Analyzer
+    - Robustness Analyzer
+    - ML Intelligence Enhancer (NUEVO)
+    """
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Inicializa el core engine con todos los componentes.
+        
+        Args:
+            config: Configuración opcional
+        """
+        self.config = config or {}
+        self.logger = setup_logger("core_engine")
+        
+        # Componentes existentes
+        self.factor_k_analyzer = FactorKAnalyzer()
+        self.qva_analyzer = QVAScorerEnhanced(ConfigManagerEnhanced(), progress_callback=None)
+        self.market_regime_analyzer = MarketRegimeDetector()
+        self.predictability_analyzer = PredictabilityAnalyzer()
+        self.robustness_analyzer = RobustnessAnalyzer()
+        
+        # NUEVO: Componente de inteligencia ML
+        self.ml_intelligence_enhancer = MLIntelligenceEnhancer(
+            config=self.config.get('ml_intelligence', {}),
+            enable_shap=True,
+            enable_confidence_scores=True
+        )
+        
+        # Configuración de análisis ML
+        self.ml_analysis_types = [
+            MLIntelligenceType.PERFORMANCE_PREDICTOR,
+            MLIntelligenceType.QUALITY_CLASSIFIER,
+            MLIntelligenceType.RISK_PROFILE_ANALYZER,
+            MLIntelligenceType.CONSISTENCY_VALIDATOR,
+            MLIntelligenceType.ADAPTIVE_THRESHOLD_OPTIMIZER
+        ]
+        
+        self.logger.info("🚀 Core Engine inicializado con ML Intelligence Enhancer")
+
+    def run_comprehensive_analysis(self, 
+                                 df: pd.DataFrame,
+                                 enable_ml_intelligence: bool = True,
+                                 ml_analysis_types: Optional[List[MLIntelligenceType]] = None) -> Dict[str, Any]:
+        """
+        Ejecuta análisis completo incluyendo inteligencia ML.
+        
+        Args:
+            df: DataFrame con estrategias
+            enable_ml_intelligence: Si habilitar análisis ML
+            ml_analysis_types: Tipos específicos de análisis ML
+            
+        Returns:
+            Diccionario con todos los resultados
+        """
+        try:
+            self.logger.info("🔍 Iniciando análisis completo con ML Intelligence...")
+            
+            # Análisis tradicional
+            results = {
+                'factor_k': self.factor_k_analyzer.evaluate_strategies(df),
+                'qva': self.qva_analyzer.calculate_qva_score(df),
+                'market_regime': self.market_regime_analyzer.detect_regimes(df),
+                'predictability': self.predictability_analyzer.analyze_is_oos_correlations(df),
+                'robustness': self.robustness_analyzer.analyze_robustness(df)
+            }
+            
+            # NUEVO: Análisis de inteligencia ML
+            if enable_ml_intelligence:
+                ml_results = self.ml_intelligence_enhancer.enhance_analysis(
+                    df, 
+                    analysis_types=ml_analysis_types or self.ml_analysis_types
+                )
+                results['ml_intelligence'] = ml_results
+                
+                # Integrar insights de ML en el análisis principal
+                self._integrate_ml_insights(results, ml_results)
+            
+            # Generar resumen unificado
+            results['summary'] = self._generate_unified_summary(results)
+            
+            self.logger.info("✅ Análisis completo finalizado")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error en análisis completo: {e}")
+            raise
+    
+    def _integrate_ml_insights(self, results: Dict[str, Any], ml_results: Dict[str, Any]):
+        """
+        Integra insights de ML en el análisis principal.
+        
+        Args:
+            results: Resultados del análisis principal
+            ml_results: Resultados de ML Intelligence
+        """
+        try:
+            # Integrar predicciones de rendimiento
+            if 'performance_predictor' in ml_results:
+                predictor_result = ml_results['performance_predictor']
+                if predictor_result.predictions is not None:
+                    if isinstance(results['factor_k'], pd.DataFrame):
+                        results['factor_k']['Predicted_OOS_Performance'] = predictor_result.predictions
+                    elif isinstance(results['factor_k'], dict):
+                        results['factor_k']['data'] = results['factor_k'].get('data', {})
+                        results['factor_k']['data']['Predicted_OOS_Performance'] = predictor_result.predictions
+            
+            # Integrar clasificaciones de calidad
+            if 'quality_classifier' in ml_results:
+                classifier_result = ml_results['quality_classifier']
+                if classifier_result.classifications is not None:
+                    if isinstance(results['qva'], pd.DataFrame):
+                        results['qva']['ML_Quality_Classification'] = classifier_result.classifications
+                    elif isinstance(results['qva'], dict):
+                        results['qva']['data'] = results['qva'].get('data', {})
+                        results['qva']['data']['ML_Quality_Classification'] = classifier_result.classifications
+            
+            # Integrar perfiles de riesgo
+            if 'risk_profile_analyzer' in ml_results:
+                risk_result = ml_results['risk_profile_analyzer']
+                if risk_result.risk_profiles:
+                    if isinstance(results['market_regime'], dict):
+                        results['market_regime']['data'] = results['market_regime'].get('data', {})
+                        results['market_regime']['data']['Risk_Profiles'] = risk_result.risk_profiles
+            
+            # Integrar scores de consistencia
+            if 'consistency_validator' in ml_results:
+                consistency_result = ml_results['consistency_validator']
+                if consistency_result.consistency_scores is not None:
+                    if isinstance(results['robustness'], dict):
+                        results['robustness']['data'] = results['robustness'].get('data', {})
+                        results['robustness']['data']['ML_Consistency_Scores'] = consistency_result.consistency_scores
+            
+            # Integrar umbrales optimizados
+            if 'adaptive_threshold_optimizer' in ml_results:
+                threshold_result = ml_results['adaptive_threshold_optimizer']
+                if threshold_result.optimized_thresholds:
+                    if 'summary' not in results:
+                        results['summary'] = {}
+                    results['summary']['optimized_thresholds'] = threshold_result.optimized_thresholds
+            
+            self.logger.info("🔗 Insights de ML integrados en análisis principal")
+            
+        except Exception as e:
+            self.logger.warning(f"Error integrando insights de ML: {e}")
+    
+    def _generate_unified_summary(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Genera resumen unificado incluyendo ML Intelligence.
+        
+        Args:
+            results: Todos los resultados de análisis
+            
+        Returns:
+            Resumen unificado
+        """
+        try:
+            summary = {
+                'timestamp': datetime.now().isoformat(),
+                'analysis_components': list(results.keys()),
+                'insights': [],
+                'recommendations': [],
+                'ml_intelligence_summary': {}
+            }
+            
+            # Recopilar insights de todos los componentes
+            for component, result in results.items():
+                if isinstance(result, dict) and 'insights' in result:
+                    summary['insights'].extend(result['insights'])
+                if isinstance(result, dict) and 'recommendations' in result:
+                    summary['recommendations'].extend(result['recommendations'])
+            
+            # Resumen específico de ML Intelligence
+            if 'ml_intelligence' in results:
+                ml_summary = self.ml_intelligence_enhancer.get_summary()
+                summary['ml_intelligence_summary'] = ml_summary
+                
+                # Agregar insights clave de ML
+                for analysis_type, result in results['ml_intelligence'].items():
+                    if hasattr(result, 'insights') and result.insights:
+                        summary['insights'].extend(result.insights[:1])  # Top insight por tipo
+            
+            # Limitar número de insights y recomendaciones
+            summary['insights'] = summary['insights'][:10]
+            summary['recommendations'] = summary['recommendations'][:5]
+            
+            return summary
+            
+        except Exception as e:
+            self.logger.error(f"Error generando resumen unificado: {e}")
+            return {'error': str(e)}
+
 
 class FactorKElite96Enhanced:
     """

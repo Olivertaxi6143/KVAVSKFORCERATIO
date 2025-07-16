@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 from pathlib import Path
+from src.data.ml_database import MLDatabase
 
 # Configurar warnings
 warnings.filterwarnings("ignore")
@@ -110,7 +111,8 @@ class AdvancedMLValidator:
                  drift_threshold: float = 0.1,
                  walk_forward_folds: int = 5,
                  config: Optional[WalkForwardConfig] = None,
-                 model: Optional[Any] = None):
+                 model: Optional[Any] = None,
+                 ml_database: Optional[MLDatabase] = None):
         """
         Inicializa el validador ML avanzado.
         
@@ -126,6 +128,7 @@ class AdvancedMLValidator:
         self.walk_forward_folds = walk_forward_folds
         self.config = config or WalkForwardConfig()
         self.model = model
+        self.ml_database = ml_database
         self.logger = logging.getLogger(__name__)
         
         # Inicializar modelos
@@ -155,6 +158,28 @@ class AdvancedMLValidator:
             n_jobs=-1
         )
     
+    def _save_result(self, analysis_type: str, parameters: dict, results: dict, asset_type: str = "unknown", description: str = "", tags: str = ""):
+        """
+        Guarda resultados en la base de datos ISA.
+        
+        Args:
+            analysis_type: Tipo de análisis
+            parameters: Parámetros del análisis
+            results: Resultados del análisis
+            asset_type: Tipo de activo (indices, forex, commodities, crypto, unknown)
+            description: Descripción opcional
+            tags: Tags opcionales
+        """
+        if self.ml_database is not None:
+            self.ml_database.store_ml_validation_result(
+                analysis_type=analysis_type,
+                parameters=parameters,
+                results=results,
+                asset_type=asset_type,
+                description=description,
+                tags=tags
+            )
+
     def detect_market_regimes(self, 
                             data: pd.DataFrame,
                             feature_columns: Optional[List[str]] = None) -> RegimeDetectionResult:
@@ -209,6 +234,21 @@ class AdvancedMLValidator:
             )
             
             self.logger.info(f"✅ Regímenes detectados: {self.n_regimes} clusters")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="regime_detection",
+                parameters={"feature_columns": feature_columns, "n_regimes": self.n_regimes},
+                results={
+                    "regime_labels": regime_labels.tolist() if hasattr(regime_labels, 'tolist') else list(regime_labels),
+                    "regime_centers": regime_centers.tolist() if hasattr(regime_centers, 'tolist') else list(regime_centers),
+                    "regime_characteristics": regime_characteristics,
+                    "quality_metrics": quality_metrics,
+                    "feature_importance": feature_importance
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Detección de regímenes de mercado",
+                tags="clustering,regimes"
+            )
             return result
             
         except Exception as e:
@@ -280,13 +320,28 @@ class AdvancedMLValidator:
             
             result = DataDriftResult(
                 drift_scores=drift_scores,
-                overall_drift=float(overall_drift) if overall_drift is not None else 0.0 if overall_drift is not None else 0.0,
+                overall_drift=float(overall_drift) if overall_drift is not None else 0.0,
                 drift_detected=bool(drift_detected),
                 affected_features=affected_features,
-                confidence_level=float(confidence_level) if confidence_level is not None else 0.0 if confidence_level is not None else 0.0
+                confidence_level=float(confidence_level) if confidence_level is not None else 0.0
             )
             
             self.logger.info(f"✅ Data drift detectado: {drift_detected}")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="data_drift",
+                parameters={"feature_columns": feature_columns},
+                results={
+                    "drift_scores": drift_scores,
+                    "overall_drift": float(overall_drift) if overall_drift is not None else 0.0,
+                    "drift_detected": bool(drift_detected),
+                    "affected_features": affected_features,
+                    "confidence_level": float(confidence_level) if confidence_level is not None else 0.0
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Detección de data drift",
+                tags="drift,anomaly"
+            )
             return result
             
         except Exception as e:
@@ -379,6 +434,21 @@ class AdvancedMLValidator:
             )
             
             self.logger.info("✅ Validación walk-forward completada")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="walk_forward_validation",
+                parameters={"target_column": target_column, "feature_columns": feature_columns, "walk_forward_folds": self.walk_forward_folds},
+                results={
+                    "fold_results": fold_results,
+                    "overall_metrics": overall_metrics,
+                    "stability_score": stability_score,
+                    "degradation_score": degradation_score,
+                    "predictability_score": predictability_score
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Validación walk-forward temporal",
+                tags="walkforward,validation"
+            )
             return result
             
         except Exception as e:
@@ -828,6 +898,22 @@ class AdvancedMLValidator:
             )
             
             self.logger.info("✅ Validación temporal avanzada completada")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="advanced_temporal_validation",
+                parameters={"target_column": target_column, "feature_columns": feature_columns},
+                results={
+                    "fold_results": fold_results,
+                    "overall_metrics": overall_metrics,
+                    "stability_analysis": stability_analysis,
+                    "degradation_analysis": degradation_analysis,
+                    "robustness_score": robustness_score,
+                    "temporal_consistency": temporal_consistency
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Validación temporal avanzada",
+                tags="temporal,validation"
+            )
             return result
             
         except Exception as e:
