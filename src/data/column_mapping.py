@@ -1,7 +1,12 @@
 import pandas as pd
 
 def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Normaliza nombres de columnas según el estándar único del sistema."""
+    """
+    Normaliza nombres de columnas según el estándar único del sistema.
+    Esta función debe ser la única fuente de normalización de columnas en el flujo de datos.
+    Ejemplo de uso:
+        df = normalize_column_names(df)
+    """
     column_mapping = {
         # Integrales
         'Strategy Name': 'Strategy_Name',
@@ -11,8 +16,10 @@ def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
         'CalmarRatio': 'CalmarRatio',
         'Max DD %': 'Max_DD_%',
         'Drawdown': 'Max_DD_%',
-        'Stagnation (Trades)': 'Stagnation_Trades',
-        'Avg. Stagnation Trades': 'Stagnation_Trades',
+        'Stagnation (Trades)': 'Stagnation',
+        'Avg. Stagnation Trades': 'Stagnation',
+        'Max Stagnation Trades': 'Stagnation_Trades',
+        'Stagnation_Trades': 'Stagnation_Trades',
         '# of trades': '#_of_trades',
         'Avg. Bars in Trade': 'Avg_Bars_in_Trade',
         'Ulcer Index %': 'Ulcer_Index_%',

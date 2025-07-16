@@ -1,3 +1,4 @@
+from typing import Optional, Any, Union
 #!/usr/bin/env python3
 """
 Módulo de Machine Learning Avanzado para Validación de Estrategias
@@ -33,6 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 from pathlib import Path
+from src.data.ml_database import MLDatabase
 
 # Configurar warnings
 warnings.filterwarnings("ignore")
@@ -71,6 +73,28 @@ class WalkForwardResult:
     predictability_score: float
 
 
+@dataclass
+class TemporalValidationResult:
+    """Resultado de validación temporal avanzada."""
+    fold_results: List[Dict[str, Any]]
+    overall_metrics: Dict[str, float]
+    stability_analysis: Dict[str, float]
+    degradation_analysis: Dict[str, float]
+    robustness_score: float
+    temporal_consistency: float
+
+
+@dataclass
+class WalkForwardConfig:
+    """Configuración para walk-forward validation."""
+    n_splits: int = 5
+    test_size: float = 0.2
+    min_train_size: int = 30
+    target_column: str = "Unified_Score"
+    feature_columns: Optional[List[str]] = None
+    model_type: str = "random_forest"
+
+
 class AdvancedMLValidator:
     """
     Validador avanzado de ML para estrategias de trading.
@@ -85,19 +109,27 @@ class AdvancedMLValidator:
     def __init__(self, 
                  n_regimes: int = 3,
                  drift_threshold: float = 0.1,
-                 walk_forward_folds: int = 5):
+                 walk_forward_folds: int = 5,
+                 config: Optional[WalkForwardConfig] = None,
+                 model: Optional[Any] = None,
+                 ml_database: Optional[MLDatabase] = None):
         """
-        Inicializa el validador avanzado de ML.
+        Inicializa el validador ML avanzado.
         
         Args:
-            n_regimes: Número de regímenes a detectar
-            drift_threshold: Umbral para detectar data drift
-            walk_forward_folds: Número de folds para walk-forward
+            n_regimes: Número de regímenes de mercado a detectar
+            drift_threshold: Umbral para detección de data drift
+            walk_forward_folds: Número de folds para walk-forward validation
+            config: Configuración para walk-forward validation
+            model: Modelo ML a usar (opcional)
         """
         self.n_regimes = n_regimes
         self.drift_threshold = drift_threshold
         self.walk_forward_folds = walk_forward_folds
-        self.logger = logger
+        self.config = config or WalkForwardConfig()
+        self.model = model
+        self.ml_database = ml_database
+        self.logger = logging.getLogger(__name__)
         
         # Inicializar modelos
         self._initialize_models()
@@ -126,6 +158,28 @@ class AdvancedMLValidator:
             n_jobs=-1
         )
     
+    def _save_result(self, analysis_type: str, parameters: dict, results: dict, asset_type: str = "unknown", description: str = "", tags: str = ""):
+        """
+        Guarda resultados en la base de datos ISA.
+        
+        Args:
+            analysis_type: Tipo de análisis
+            parameters: Parámetros del análisis
+            results: Resultados del análisis
+            asset_type: Tipo de activo (indices, forex, commodities, crypto, unknown)
+            description: Descripción opcional
+            tags: Tags opcionales
+        """
+        if self.ml_database is not None:
+            self.ml_database.store_ml_validation_result(
+                analysis_type=analysis_type,
+                parameters=parameters,
+                results=results,
+                asset_type=asset_type,
+                description=description,
+                tags=tags
+            )
+
     def detect_market_regimes(self, 
                             data: pd.DataFrame,
                             feature_columns: Optional[List[str]] = None) -> RegimeDetectionResult:
@@ -180,6 +234,21 @@ class AdvancedMLValidator:
             )
             
             self.logger.info(f"✅ Regímenes detectados: {self.n_regimes} clusters")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="regime_detection",
+                parameters={"feature_columns": feature_columns, "n_regimes": self.n_regimes},
+                results={
+                    "regime_labels": regime_labels.tolist() if hasattr(regime_labels, 'tolist') else list(regime_labels),
+                    "regime_centers": regime_centers.tolist() if hasattr(regime_centers, 'tolist') else list(regime_centers),
+                    "regime_characteristics": regime_characteristics,
+                    "quality_metrics": quality_metrics,
+                    "feature_importance": feature_importance
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Detección de regímenes de mercado",
+                tags="clustering,regimes"
+            )
             return result
             
         except Exception as e:
@@ -251,13 +320,28 @@ class AdvancedMLValidator:
             
             result = DataDriftResult(
                 drift_scores=drift_scores,
-                overall_drift=float(overall_drift),
+                overall_drift=float(overall_drift) if overall_drift is not None else 0.0,
                 drift_detected=bool(drift_detected),
                 affected_features=affected_features,
-                confidence_level=float(confidence_level)
+                confidence_level=float(confidence_level) if confidence_level is not None else 0.0
             )
             
             self.logger.info(f"✅ Data drift detectado: {drift_detected}")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="data_drift",
+                parameters={"feature_columns": feature_columns},
+                results={
+                    "drift_scores": drift_scores,
+                    "overall_drift": float(overall_drift) if overall_drift is not None else 0.0,
+                    "drift_detected": bool(drift_detected),
+                    "affected_features": affected_features,
+                    "confidence_level": float(confidence_level) if confidence_level is not None else 0.0
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Detección de data drift",
+                tags="drift,anomaly"
+            )
             return result
             
         except Exception as e:
@@ -327,8 +411,8 @@ class AdvancedMLValidator:
                     'train_size': len(X_train),
                     'test_size': len(X_test),
                     'metrics': fold_metrics,
-                    'predictions': y_pred.tolist(),
-                    'actuals': y_test.tolist()
+                    'predictions': ((y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred)) if hasattr(y_pred, 'tolist') else list(y_pred)),
+                    'actuals': ((y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test)) if hasattr(y_test, 'tolist') else list(y_test))
                 }
                 
                 fold_results.append(fold_result)
@@ -350,6 +434,21 @@ class AdvancedMLValidator:
             )
             
             self.logger.info("✅ Validación walk-forward completada")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="walk_forward_validation",
+                parameters={"target_column": target_column, "feature_columns": feature_columns, "walk_forward_folds": self.walk_forward_folds},
+                results={
+                    "fold_results": fold_results,
+                    "overall_metrics": overall_metrics,
+                    "stability_score": stability_score,
+                    "degradation_score": degradation_score,
+                    "predictability_score": predictability_score
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Validación walk-forward temporal",
+                tags="walkforward,validation"
+            )
             return result
             
         except Exception as e:
@@ -540,7 +639,7 @@ class AdvancedMLValidator:
                     curr_percentiles = np.percentile(curr_data, [25, 50, 75])
                     
                     drift_score = np.mean(np.abs(curr_percentiles - ref_percentiles))
-                    drift_scores[col] = float(drift_score)
+                    drift_scores[col] = float(drift_score) if drift_score is not None else 0.0 if drift_score is not None else 0.0
         
         return drift_scores
     
@@ -561,7 +660,7 @@ class AdvancedMLValidator:
             normalized_scores = [(s - mean_score) / std_score for s in scores]
             confidence = 1.0 - np.mean([abs(s) for s in normalized_scores])
         
-        return max(0.0, min(1.0, float(confidence)))
+        return max(0.0, min(1.0, float(confidence) if confidence is not None else 0.0 if confidence is not None else 0.0))
     
     def _clean_walk_forward_data(self, X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
         """Limpia datos para walk-forward."""
@@ -590,9 +689,9 @@ class AdvancedMLValidator:
             mae = mean_absolute_error(y_true, y_pred)
             
             return {
-                'r2_score': float(r2),
-                'rmse': float(rmse),
-                'mae': float(mae)
+                'r2_score': float(r2) if r2 is not None else 0.0 if r2 is not None else 0.0,
+                'rmse': float(rmse) if rmse is not None else 0.0 if rmse is not None else 0.0,
+                'mae': float(mae) if mae is not None else 0.0 if mae is not None else 0.0
             }
         except Exception as e:
             self.logger.warning(f"Error calculando métricas de fold: {e}")
@@ -621,7 +720,7 @@ class AdvancedMLValidator:
         r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
         stability = 1.0 - np.std(r2_scores)  # Menor std = mayor estabilidad
         
-        return max(0.0, min(1.0, float(stability)))
+        return max(0.0, min(1.0, float(stability) if stability is not None else 0.0 if stability is not None else 0.0))
     
     def _calculate_degradation_score(self, fold_results: List[Dict[str, Any]]) -> float:
         """Calcula score de degradación."""
@@ -679,6 +778,355 @@ class AdvancedMLValidator:
             stability_score=0.0,
             degradation_score=0.0,
             predictability_score=0.0
+        )
+    
+    def perform_advanced_temporal_validation(self, 
+                                          data: pd.DataFrame,
+                                          target_column: Optional[str] = None,
+                                          feature_columns: Optional[List[str]] = None) -> TemporalValidationResult:
+        """
+        Realiza validación temporal avanzada con análisis de estabilidad y degradación.
+        
+        Args:
+            data: DataFrame con datos de estrategias
+            target_column: Columna objetivo para validación
+            feature_columns: Columnas de características (opcional)
+            
+        Returns:
+            TemporalValidationResult con análisis temporal completo
+        """
+        try:
+            self.logger.info("🔬 Iniciando validación temporal avanzada...")
+            
+            # Configuración por defecto
+            if target_column is None:
+                target_column = self.config.target_column
+            
+            # Asegurar que target_column no sea None
+            if target_column is None:
+                target_column = "Unified_Score"
+            
+            if feature_columns is None:
+                feature_columns = self._select_temporal_features(data, target_column)
+            
+            # Preparar datos
+            X, y = self._prepare_temporal_data(data, feature_columns, target_column)
+            
+            if len(X) < self.config.min_train_size:
+                self.logger.warning(f"⚠️ Datos insuficientes para validación temporal: {len(X)} < {self.config.min_train_size}")
+                return self._create_empty_temporal_result()
+            
+            # Realizar walk-forward validation
+            fold_results = []
+            all_predictions = []
+            all_actuals = []
+            
+            # Configurar TimeSeriesSplit para validación temporal
+            from sklearn.model_selection import TimeSeriesSplit
+            tscv = TimeSeriesSplit(n_splits=self.config.n_splits)
+            
+            for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(X)):
+                try:
+                    # Dividir datos temporalmente
+                    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+                    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+                    
+                    # Entrenar modelo
+                    model = getattr(self, 'model', None)
+                    if model is not None:
+                        model.fit(X_train, y_train)
+                        
+                        # Predecir
+                        y_pred = model.predict(X_test)
+                    else:
+                        # Usar modelo por defecto si no hay uno configurado
+                        from sklearn.ensemble import RandomForestRegressor
+                        default_model = RandomForestRegressor(n_estimators=100, random_state=42)
+                        default_model.fit(X_train, y_train)
+                        y_pred = default_model.predict(X_test)
+                    
+                    # Calcular métricas
+                    metrics = self._calculate_temporal_metrics(y_test, y_pred)
+                    
+                    # Calcular importancia de características
+                    feature_importance = self._calculate_feature_importance(X_train, y_train)
+                    
+                    fold_result = {
+                        'fold': fold_idx + 1,
+                        'train_size': len(X_train),
+                        'test_size': len(X_test),
+                        'metrics': metrics,
+                        'feature_importance': feature_importance,
+                        'predictions': ((y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred)) if hasattr(y_pred, 'tolist') else list(y_pred)),
+                        'actuals': ((y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test)) if hasattr(y_test, 'tolist') else list(y_test))
+                    }
+                    
+                    fold_results.append(fold_result)
+                    all_predictions.extend(((y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred)) if hasattr(y_pred, 'tolist') else list(y_pred)))
+                    all_actuals.extend(((y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test)) if hasattr(y_test, 'tolist') else list(y_test)))
+                    
+                except Exception as e:
+                    self.logger.warning(f"Error en fold {fold_idx + 1}: {e}")
+                    continue
+            
+            if not fold_results:
+                self.logger.error("❌ No se pudo completar ningún fold de validación temporal")
+                return self._create_empty_temporal_result()
+            
+            # Calcular métricas generales
+            overall_metrics = self._calculate_overall_temporal_metrics(fold_results)
+            
+            # Análisis de estabilidad temporal
+            stability_analysis = self._analyze_temporal_stability(fold_results)
+            
+            # Análisis de degradación temporal
+            degradation_analysis = self._analyze_temporal_degradation(fold_results)
+            
+            # Calcular robustez temporal
+            robustness_score = self._calculate_temporal_robustness(fold_results)
+            
+            # Calcular consistencia temporal
+            temporal_consistency = self._calculate_temporal_consistency(all_predictions, all_actuals)
+            
+            result = TemporalValidationResult(
+                fold_results=fold_results,
+                overall_metrics=overall_metrics,
+                stability_analysis=stability_analysis,
+                degradation_analysis=degradation_analysis,
+                robustness_score=robustness_score,
+                temporal_consistency=temporal_consistency
+            )
+            
+            self.logger.info("✅ Validación temporal avanzada completada")
+            # Guardar resultado en la base de datos ISA
+            self._save_result(
+                analysis_type="advanced_temporal_validation",
+                parameters={"target_column": target_column, "feature_columns": feature_columns},
+                results={
+                    "fold_results": fold_results,
+                    "overall_metrics": overall_metrics,
+                    "stability_analysis": stability_analysis,
+                    "degradation_analysis": degradation_analysis,
+                    "robustness_score": robustness_score,
+                    "temporal_consistency": temporal_consistency
+                },
+                asset_type="unknown",  # Se puede configurar desde la GUI
+                description="Validación temporal avanzada",
+                tags="temporal,validation"
+            )
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en validación temporal: {e}")
+            return self._create_empty_temporal_result()
+    
+    def _select_temporal_features(self, data: pd.DataFrame, target_column: str) -> List[str]:
+        """Selecciona características para validación temporal."""
+        # Excluir la columna objetivo y columnas no numéricas
+        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if target_column in numeric_cols:
+            numeric_cols.remove(target_column)
+        
+        # Priorizar características relevantes para validación temporal
+        priority_features = [
+            'Profit_factor', 'Sharpe_Ratio', 'Max_DD_%',
+            'Win_Rate_%', 'Total_Trades', 'CAGR',
+            'FK96_Elite_Enhanced', 'QVA_Score', 'Unified_Score'
+        ]
+        
+        selected_features = []
+        for feature in priority_features:
+            if feature in numeric_cols:
+                selected_features.append(feature)
+                numeric_cols.remove(feature)
+        
+        # Agregar otras características numéricas
+        selected_features.extend(numeric_cols[:5])
+        
+        return selected_features[:10]  # Máximo 10 características
+    
+    def _prepare_temporal_data(self, 
+                              data: pd.DataFrame, 
+                              feature_columns: List[str], 
+                              target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
+        """Prepara datos para validación temporal."""
+        # Verificar que las columnas existen
+        available_features = [col for col in feature_columns if col in data.columns]
+        
+        if len(available_features) < 2:
+            self.logger.warning("⚠️ Pocas características disponibles para validación temporal")
+            # Usar columnas numéricas como fallback
+            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+            if target_column in numeric_cols:
+                numeric_cols.remove(target_column)
+            available_features = numeric_cols[:5]
+        
+        if target_column not in data.columns:
+            raise ValueError(f"Columna objetivo '{target_column}' no encontrada en los datos")
+        
+        # Preparar X e y
+        X = data[available_features].copy()
+        y = data[target_column]
+        
+        # Limpiar datos
+        X = X.replace([np.inf, -np.inf], np.nan)
+        X = X.fillna(X.median())
+        
+        y = y.replace([np.inf, -np.inf], np.nan)
+        y = y.dropna()
+        
+        # Alinear índices
+        common_index = X.index.intersection(y.index)
+        X = X.loc[common_index]
+        y = y.loc[common_index]
+        
+        return X, y
+    
+    def _calculate_temporal_metrics(self, y_true: pd.Series, y_pred: np.ndarray) -> Dict[str, float]:
+        """Calcula métricas para un fold temporal."""
+        try:
+            from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+            
+            r2 = r2_score(y_true, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+            mae = mean_absolute_error(y_true, y_pred)
+            
+            # Métricas adicionales para validación temporal
+            correlation = np.corrcoef(y_true, y_pred)[0, 1] if len(y_true) > 1 else 0.0
+            bias = np.mean(y_pred - y_true)
+            
+            return {
+                'r2_score': float(r2) if r2 is not None else 0.0 if r2 is not None else 0.0,
+                'rmse': float(rmse) if rmse is not None else 0.0 if rmse is not None else 0.0,
+                'mae': float(mae) if mae is not None else 0.0 if mae is not None else 0.0,
+                'correlation': float(correlation) if correlation is not None else 0.0 if correlation is not None else 0.0,
+                'bias': float(bias) if bias is not None else 0.0 if bias is not None else 0.0
+            }
+        except Exception as e:
+            self.logger.warning(f"Error calculando métricas temporales: {e}")
+            return {
+                'r2_score': 0.0, 'rmse': 0.0, 'mae': 0.0,
+                'correlation': 0.0, 'bias': 0.0
+            }
+    
+    def _calculate_overall_temporal_metrics(self, fold_results: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Calcula métricas generales de validación temporal."""
+        if not fold_results:
+            return {}
+        
+        # Extraer métricas de todos los folds
+        r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
+        rmse_scores = [fold['metrics']['rmse'] for fold in fold_results]
+        correlation_scores = [fold['metrics']['correlation'] for fold in fold_results]
+        bias_scores = [fold['metrics']['bias'] for fold in fold_results]
+        
+        return {
+            'mean_r2': float(np.mean(r2_scores)),
+            'std_r2': float(np.std(r2_scores)),
+            'mean_rmse': float(np.mean(rmse_scores)),
+            'std_rmse': float(np.std(rmse_scores)),
+            'mean_correlation': float(np.mean(correlation_scores)),
+            'std_correlation': float(np.std(correlation_scores)),
+            'mean_bias': float(np.mean(bias_scores)),
+            'std_bias': float(np.std(bias_scores))
+        }
+    
+    def _analyze_temporal_stability(self, fold_results: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Analiza estabilidad temporal."""
+        if len(fold_results) < 2:
+            return {'stability_score': 0.0, 'consistency': 0.0, 'volatility': 0.0}
+        
+        # Calcular estabilidad basada en R²
+        r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
+        stability_score = 1.0 - np.std(r2_scores)
+        
+        # Calcular consistencia (cuánto se mantienen las métricas)
+        consistency = 1.0 - np.std([fold['metrics']['correlation'] for fold in fold_results])
+        
+        # Calcular volatilidad de las métricas
+        volatility = np.std([fold['metrics']['rmse'] for fold in fold_results])
+        
+        return {
+            'stability_score': float(max(0.0, min(1.0, float(stability_score) if stability_score is not None else 0.0 if stability_score is not None else 0.0))),
+            'consistency': float(max(0.0, min(1.0, float(consistency) if consistency is not None else 0.0 if consistency is not None else 0.0))),
+            'volatility': float(volatility) if volatility is not None else 0.0 if volatility is not None else 0.0
+        }
+    
+    def _analyze_temporal_degradation(self, fold_results: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Analiza degradación temporal."""
+        if len(fold_results) < 2:
+            return {'degradation_score': 0.0, 'trend': 0.0, 'acceleration': 0.0}
+        
+        # Calcular degradación entre folds consecutivos
+        degradations = []
+        for i in range(1, len(fold_results)):
+            prev_r2 = fold_results[i-1]['metrics']['r2_score']
+            curr_r2 = fold_results[i]['metrics']['r2_score']
+            
+            if prev_r2 > 0:
+                degradation = (prev_r2 - curr_r2) / prev_r2
+                degradations.append(degradation)
+        
+        degradation_score = float(np.mean(degradations)) if degradations else 0.0
+        
+        # Calcular tendencia de degradación
+        if len(degradations) > 1:
+            trend = np.polyfit(range(len(degradations)), degradations, 1)[0]
+            acceleration = np.polyfit(range(len(degradations)), degradations, 2)[0] if len(degradations) > 2 else 0.0
+        else:
+            trend = 0.0
+            acceleration = 0.0
+        
+        return {
+            'degradation_score': degradation_score,
+            'trend': float(trend) if trend is not None else 0.0 if trend is not None else 0.0,
+            'acceleration': float(acceleration) if acceleration is not None else 0.0 if acceleration is not None else 0.0
+        }
+    
+    def _calculate_temporal_robustness(self, fold_results: List[Dict[str, Any]]) -> float:
+        """Calcula score de robustez temporal."""
+        if not fold_results:
+            return 0.0
+        
+        # Robustez basada en estabilidad y consistencia
+        r2_scores = [fold['metrics']['r2_score'] for fold in fold_results]
+        correlation_scores = [fold['metrics']['correlation'] for fold in fold_results]
+        
+        # Calcular robustez como combinación de estabilidad y predictibilidad
+        stability = 1.0 - np.std(r2_scores)
+        predictability = np.mean([abs(corr) for corr in correlation_scores])
+        
+        robustness = (stability + predictability) / 2.0
+        
+        return max(0.0, min(1.0, float(robustness) if robustness is not None else 0.0 if robustness is not None else 0.0))
+    
+    def _calculate_temporal_consistency(self, predictions: List[float], actuals: List[float]) -> float:
+        """Calcula consistencia temporal entre predicciones y valores reales."""
+        if len(predictions) != len(actuals) or len(predictions) < 2:
+            return 0.0
+        
+        try:
+            # Calcular correlación entre predicciones y valores reales
+            correlation = np.corrcoef(predictions, actuals)[0, 1]
+            
+            # Calcular consistencia como medida de estabilidad temporal
+            consistency = max(0.0, min(1.0, abs(correlation)))
+            
+            return float(consistency) if consistency is not None else 0.0 if consistency is not None else 0.0
+        except Exception as e:
+            self.logger.warning(f"Error calculando consistencia temporal: {e}")
+            return 0.0
+    
+    def _create_empty_temporal_result(self) -> TemporalValidationResult:
+        """Crea resultado vacío para validación temporal."""
+        return TemporalValidationResult(
+            fold_results=[],
+            overall_metrics={},
+            stability_analysis={'stability_score': 0.0, 'consistency': 0.0, 'volatility': 0.0},
+            degradation_analysis={'degradation_score': 0.0, 'trend': 0.0, 'acceleration': 0.0},
+            robustness_score=0.0,
+            temporal_consistency=0.0
         )
 
 

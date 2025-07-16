@@ -346,17 +346,6 @@ LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 
 ---
 
-## 🟢 Nota importante sobre Drawdown (actualización 2025-07-12)
-
-- El sistema utiliza exclusivamente la columna **'Max DD %'** (porcentaje, admite formato europeo con coma decimal) para todos los análisis de drawdown, tanto en los módulos Darwinex como Axi Select.
-- No se debe usar la columna 'Drawdown' (valores monetarios) para análisis de riesgo ni scoring.
-- Los umbrales de interpretación son:
-    - **Axi Select**: 10% para cuarentena
-    - **Darwinex**: 20% para correlación DD
-- El sistema convierte automáticamente el formato y valida los valores para evitar errores de interpretación.
-
----
-
 ## 🔍 Solución de Problemas
 
 ### Problema: "Error al cargar archivos"

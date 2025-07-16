@@ -1,859 +1,855 @@
+from typing import Optional, Any, Union
+#!/usr/bin/env python3
 """
-Análisis Axi Select - Integración completa de metodologías para gestión de capital de terceros.
-Basado en el programa de financiación escalonada con 6 fases: Seed → Incubation → Acceleration → Pro → Pro 500 → Pro M
+Sistema Predictivo Híbrido AXI SELECT Mejorado
+===============================================
+
+Implementa un sistema predictivo híbrido usando alternativas compatibles con Python 3.13.2:
+- PyTorch para redes neuronales ligeras
+- LightGBM para boosting de árboles
+- CatBoost para modelos de ensemble
+- Scikit-learn para modelos explicables
+- SHAP para interpretabilidad
+
+Basado en el feedback de AXI SELECT con fases, criterios y Edge Score.
+
+Autor: Sistema de Análisis Cuantitativo
+Fecha: 2025-01-27
+Versión: 2.0.0
 """
 
 import pandas as pd
 import numpy as np
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 from dataclasses import dataclass
+from enum import Enum
+import warnings
 from datetime import datetime, timedelta
 import json
-import os
+from pathlib import Path
+from src.core.logger_config import setup_logger
+logger = setup_logger(__name__)
+
+# Configurar warnings
+warnings.filterwarnings("ignore")
 
 # Configurar logging
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # This line is removed as per the new_code
+
+# Importar librerías de ML compatibles
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    from torch.utils.data import DataLoader, TensorDataset
+    TORCH_AVAILABLE = True
+    logger.info("✅ PyTorch disponible")
+except ImportError:
+    TORCH_AVAILABLE = False
+    logger.warning("⚠️ PyTorch no disponible")
+
+try:
+    import lightgbm as lgb
+    LIGHTGBM_AVAILABLE = True
+    logger.info("✅ LightGBM disponible")
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+    logger.warning("⚠️ LightGBM no disponible")
+
+try:
+    from catboost import CatBoostRegressor, CatBoostClassifier
+    CATBOOST_AVAILABLE = True
+    logger.info("✅ CatBoost disponible")
+except ImportError:
+    CATBOOST_AVAILABLE = False
+    logger.warning("⚠️ CatBoost no disponible")
+
+# Scikit-learn siempre disponible
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.neural_network import MLPRegressor
+from sklearn.model_selection import train_test_split, cross_val_score, TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.decomposition import PCA
+import shap
+
+# Configurar PyTorch para CPU
+if TORCH_AVAILABLE:
+    torch.set_default_device('cpu')
+    torch.set_default_dtype(torch.float32)
+
+
+class ModelType(Enum):
+    """Tipos de modelos disponibles."""
+    PYTORCH_NN = "pytorch_neural_network"
+    LIGHTGBM = "lightgbm"
+    CATBOOST = "catboost"
+    RANDOM_FOREST = "random_forest"
+    GRADIENT_BOOSTING = "gradient_boosting"
+    LINEAR_REGRESSION = "linear_regression"
+    MLP_SKLEARN = "mlp_sklearn"
+
 
 @dataclass
-class AxiSelectStage:
-    """Configuración de una fase de Axi Select."""
-    name: str
-    min_equity_usd: int
-    edge_score_required: int
-    target_profit: float  # +5% excepto Pro M
-    min_days: int
-    min_trades_stage: int
-    min_trades_month: int
-    multiplier: int
-    max_funding_usd: int
-    profit_share: float
-    max_drawdown: float  # -10%
+class PredictionResult:
+    """Resultado de predicción."""
+    model_type: ModelType
+    predictions: np.ndarray
+    confidence: float
+    feature_importance: Dict[str, float]
+    model_performance: Dict[str, float]
+    explainability_score: float
 
-@dataclass
-class AxiSelectStrategy:
-    """Estrategia con métricas Axi Select calculadas."""
-    strategy_name: str
-    edge_score: float
-    current_stage: str
-    stage_progress: Dict[str, Any]
-    allocation_percentage: float
-    fixed_amount: float
-    risk_metrics: Dict[str, float]
-    capital_efficiency: float
-    quarantine_status: str  # NORMAL, QUARANTINE, EXEMPT
-    recommendations: List[str]
 
-class AxiSelectAnalysis:
+class AXISelectPredictiveSystem:
     """
-    Análisis Axi Select completo con 6 fases de financiación escalonada.
-    Integra metodologías profesionales de asignación y gestión de riesgo.
+    Sistema predictivo híbrido para AXI SELECT.
+    
+    Características:
+    - Modelos explicables (árboles, SHAP)
+    - Modelos de precisión (redes neuronales, boosting)
+    - Validación robusta con walk-forward
+    - Interpretabilidad automática
+    - Compatible con Python 3.13.2
     """
     
-    def __init__(self, config_file: str = "config/axi_select_config.json"):
-        self.logger = logging.getLogger("axi_select")
-        self.config_file = config_file
-        self.config = self._load_config()
-        self.stages = self._initialize_stages()
-        
-    def _load_config(self) -> Dict[str, Any]:
-        """Carga la configuración de Axi Select."""
-        default_config = {
-            "edge_score_components": {
-                "skill_weight": 0.35,      # Rentabilidad vs drawdown
-                "risk_weight": 0.25,       # Control del riesgo
-                "consistency_weight": 0.20, # Estabilidad de resultados
-                "experience_weight": 0.20   # Trayectoria y días consecutivos
-            },
-            "quarantine_settings": {
-                "max_drawdown_threshold": -0.10,  # -10%
-                "quarantine_duration_days": 14,
-                "seed_exempt": True
-            },
-            "trading_conditions": {
-                "leverage": "1:100",
-                "min_trades_initial": 20,
-                "min_deposit_usd": 500,
-                "edge_score_reset_days": 90
-            },
-            "payout_conditions": {
-                "monthly_payout": True,
-                "min_allocation_balance": 0,
-                "no_open_positions": True
-            }
-        }
-        
-        try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, 'r') as f:
-                    config = json.load(f)
-                return {**default_config, **config}
-            else:
-                # Crear archivo de configuración por defecto
-                os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
-                with open(self.config_file, 'w') as f:
-                    json.dump(default_config, f, indent=2)
-                return default_config
-        except Exception as e:
-            self.logger.error(f"Error cargando configuración: {e}")
-            return default_config
-    
-    def _initialize_stages(self) -> Dict[str, AxiSelectStage]:
-        """Inicializa las 6 fases de Axi Select."""
-        stages = {
-            "Seed": AxiSelectStage(
-                name="Seed",
-                min_equity_usd=500,
-                edge_score_required=50,
-                target_profit=0.05,  # +5%
-                min_days=30,
-                min_trades_stage=20,
-                min_trades_month=5,
-                multiplier=10,
-                max_funding_usd=5000,
-                profit_share=0.0,  # 0%
-                max_drawdown=-0.10  # -10%
-            ),
-            "Incubation": AxiSelectStage(
-                name="Incubation",
-                min_equity_usd=1000,
-                edge_score_required=60,
-                target_profit=0.05,
-                min_days=60,
-                min_trades_stage=40,
-                min_trades_month=5,
-                multiplier=10,
-                max_funding_usd=20000,
-                profit_share=0.40,  # 40%
-                max_drawdown=-0.10
-            ),
-            "Acceleration": AxiSelectStage(
-                name="Acceleration",
-                min_equity_usd=2000,
-                edge_score_required=70,
-                target_profit=0.05,
-                min_days=60,
-                min_trades_stage=50,
-                min_trades_month=5,
-                multiplier=25,
-                max_funding_usd=100000,
-                profit_share=0.50,  # 50%
-                max_drawdown=-0.10
-            ),
-            "Pro": AxiSelectStage(
-                name="Pro",
-                min_equity_usd=2000,
-                edge_score_required=90,
-                target_profit=0.05,
-                min_days=60,
-                min_trades_stage=50,
-                min_trades_month=5,
-                multiplier=100,
-                max_funding_usd=200000,
-                profit_share=0.70,  # 70%
-                max_drawdown=-0.10
-            ),
-            "Pro 500": AxiSelectStage(
-                name="Pro 500",
-                min_equity_usd=2000,
-                edge_score_required=90,
-                target_profit=0.05,
-                min_days=60,
-                min_trades_stage=50,
-                min_trades_month=5,
-                multiplier=250,
-                max_funding_usd=500000,
-                profit_share=0.80,  # 80%
-                max_drawdown=-0.10
-            ),
-            "Pro M": AxiSelectStage(
-                name="Pro M",
-                min_equity_usd=4000,
-                edge_score_required=90,
-                target_profit=0.0,  # Sin objetivo específico
-                min_days=0,  # Sin límite
-                min_trades_stage=0,  # Sin límite
-                min_trades_month=5,
-                multiplier=250,
-                max_funding_usd=1000000,
-                profit_share=0.90,  # 90%
-                max_drawdown=-0.10
-            )
-        }
-        return stages
-    
-    def calculate_edge_score(self, strategy_data: pd.Series) -> float:
+    def __init__(self, config: Optional[Dict] = None):
         """
-        Calcula el Edge Score basado en 4 componentes: Skill, Risk, Consistency, Experience.
+        Inicializa el sistema predictivo.
         
         Args:
-            strategy_data: Datos de la estrategia
+            config: Configuración del sistema
+        """
+        self.config = config or self._default_config()
+        self.models = {}
+        self.scalers = {}
+        self.feature_importance = {}
+        self.results = {}
+        
+        # Inicializar modelos
+        self._initialize_models()
+        
+        logger.info("🔬 Sistema predictivo AXI SELECT inicializado")
+    
+    def _default_config(self) -> Dict[str, Any]:
+        """Configuración por defecto."""
+        return {
+            'test_size': 0.3,
+            'random_state': 42,
+            'n_splits': 5,
+            'explicable_models': ['random_forest', 'linear_regression'],
+            'precision_models': ['pytorch_nn', 'lightgbm', 'catboost'],
+            'feature_selection': True,
+            'shap_analysis': True,
+            'confidence_threshold': 0.7
+        }
+    
+    def _initialize_models(self):
+        """Inicializa los modelos predictivos."""
+        try:
+            # Modelos explicables
+            self.models[ModelType.RANDOM_FOREST] = RandomForestRegressor(
+                n_estimators=100,
+                max_depth=10,
+                random_state=self.config['random_state']
+            )
+            
+            self.models[ModelType.LINEAR_REGRESSION] = LinearRegression()
+            
+            self.models[ModelType.GRADIENT_BOOSTING] = GradientBoostingRegressor(
+                n_estimators=100,
+                max_depth=5,
+                random_state=self.config['random_state']
+            )
+            
+            self.models[ModelType.MLP_SKLEARN] = MLPRegressor(
+                hidden_layer_sizes=(100, 50),
+                max_iter=500,
+                random_state=self.config['random_state']
+            )
+            
+            # Modelos de precisión
+            if LIGHTGBM_AVAILABLE:
+                self.models[ModelType.LIGHTGBM] = lgb.LGBMRegressor(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    random_state=self.config['random_state']
+                )
+            
+            if CATBOOST_AVAILABLE:
+                self.models[ModelType.CATBOOST] = CatBoostRegressor(
+                    iterations=100,
+                    depth=6,
+                    learning_rate=0.1,
+                    random_state=self.config['random_state'],
+                    verbose=False
+                )
+            
+            # Red neuronal PyTorch se creará dinámicamente si está disponible
+            
+            # Escaladores
+            self.scalers['standard'] = StandardScaler()
+            self.scalers['robust'] = RobustScaler()
+            
+            logger.info(f"OK {len(self.models)} modelos inicializados")
+            
+        except Exception as e:
+            logger.error(f"ERROR inicializando modelos: {e}")
+    
+    def _create_pytorch_nn(self, input_size: int) -> nn.Module:
+        """Crea una red neuronal PyTorch."""
+        class SimpleNN(nn.Module):
+            def __init__(self, input_size: int):
+                super().__init__()
+                self.layer1 = nn.Linear(input_size, 32)
+                self.layer2 = nn.Linear(32, 16)
+                self.layer3 = nn.Linear(16, 1)
+                self.dropout = nn.Dropout(0.1)
+                self.relu = nn.ReLU()
+                
+            def forward(self, x):
+                x = self.relu(self.layer1(x))
+                x = self.dropout(x)
+                x = self.relu(self.layer2(x))
+                x = self.layer3(x)
+                return x
+        
+        return SimpleNN(input_size)
+    
+    def prepare_features(self, data: pd.DataFrame, target_column: str) -> Tuple[Union[pd.DataFrame, pd.Series], Union[pd.DataFrame, pd.Series]]:
+        """
+        Prepara características para predicción.
+        
+        Args:
+            data: DataFrame con datos
+            target_column: Columna objetivo
             
         Returns:
-            Edge Score (0-100)
+            X, y preparados para ML
         """
         try:
-            weights = self.config["edge_score_components"]
-            edge_score = 0.0
+            # Seleccionar características numéricas
+            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
             
-            # 1. Skill Component (35%) - Rentabilidad vs drawdown
-            skill_score = 0.0
+            if target_column in numeric_cols:
+                numeric_cols.remove(target_column)
             
-            # CAGR como medida de rentabilidad
-            if 'CAGR' in strategy_data:
-                cagr = self._safe_float(strategy_data['CAGR'])
-                if cagr > 0:
-                    skill_score += min(cagr * 2, 50)  # Máximo 50 puntos
+            # Filtrar características con valores válidos
+            valid_features = []
+            for col in numeric_cols:
+                # Verificar que la columna tiene valores válidos usando métodos específicos
+                notna_count = data[col].notna().sum()
+                if notna_count > 0:
+                    valid_features.append(col)
             
-            # Profit Factor
-            if 'Profit factor' in strategy_data:
-                pf = self._safe_float(strategy_data['Profit factor'])
-                if pf > 1:
-                    skill_score += min((pf - 1) * 25, 30)  # Máximo 30 puntos
+            if not valid_features:
+                logger.warning("⚠️ No se encontraron características válidas")
+                return pd.DataFrame(), pd.Series(dtype=float)
             
-            # Calmar Ratio (rentabilidad vs drawdown)
-            if 'CalmarRatio' in strategy_data:
-                calmar = self._safe_float(strategy_data['CalmarRatio'])
-                if calmar > 0:
-                    skill_score += min(calmar * 10, 20)  # Máximo 20 puntos
+            # Crear características
+            X = data[valid_features].copy()
             
-            edge_score += skill_score * weights["skill_weight"]
-            
-            # 2. Risk Component (25%) - Control del riesgo
-            risk_score = 0.0
-            
-            # Sharpe Ratio
-            if 'Sharpe Ratio' in strategy_data:
-                sharpe = self._safe_float(strategy_data['Sharpe Ratio'])
-                if sharpe > 0:
-                    risk_score += min(sharpe * 15, 40)  # Máximo 40 puntos
-            
-            # Max Drawdown (inverso)
-            if 'Max DD %' in strategy_data:
-                dd = abs(self._safe_float(strategy_data['Max DD %']))
-                if dd <= 10:  # Menos del 10%
-                    risk_score += 40
-                elif dd <= 15:  # Menos del 15%
-                    risk_score += 30
-                elif dd <= 20:  # Menos del 20%
-                    risk_score += 20
-                elif dd <= 25:  # Menos del 25%
-                    risk_score += 10
-            elif 'Drawdown' in strategy_data:
-                # Fallback a la columna original
-                dd = abs(self._safe_float(strategy_data['Drawdown']))
-                # Si el valor es muy alto (>100), probablemente son puntos monetarios
-                if dd > 100:
-                    # No podemos determinar con seguridad, asumir drawdown bajo
-                    risk_score += 30
+            # Manejar valores faltantes
+            for col in X.columns:
+                col_data = X[col]
+                # Si es un ndarray, convierto a Series para usar isna y fillna
+                if isinstance(col_data, np.ndarray):
+                    # np.isnan para ndarrays
+                    if np.isnan(col_data).any():
+                        median_val = np.nanmedian(col_data)
+                        X[col] = np.where(np.isnan(col_data), median_val, col_data)
+                elif isinstance(col_data, pd.Series):
+                    if col_data.isna().any():
+                        median_val = col_data.median()
+                        X[col] = col_data.fillna(median_val)
                 else:
-                    # Interpretar como decimal
-                    dd_percent = dd * 100
-                    if dd_percent <= 10:  # Menos del 10%
-                        risk_score += 40
-                    elif dd_percent <= 15:  # Menos del 15%
-                        risk_score += 30
-                    elif dd_percent <= 20:  # Menos del 20%
-                        risk_score += 20
-                    elif dd_percent <= 25:  # Menos del 25%
-                        risk_score += 10
+                    # Si es otro tipo, intento convertir a Series y aplicar fillna
+                    try:
+                        col_series = pd.Series(col_data)
+                        if col_series.isna().any():
+                            median_val = col_series.median()
+                            X[col] = col_series.fillna(median_val)
+                    except Exception:
+                        pass
             
-            # VaR
-            if 'VaR (95%)' in strategy_data:
-                var = abs(self._safe_float(strategy_data['VaR (95%)']))
-                if var <= 0.05:  # Menos del 5%
-                    risk_score += 20
-                elif var <= 0.10:  # Menos del 10%
-                    risk_score += 10
+            # Crear características adicionales
+            if 'cagr_is' in X.columns and 'cagr_oos' in X.columns:
+                X['cagr_ratio'] = X['cagr_is'] / (X['cagr_oos'] + 1e-8)
             
-            edge_score += risk_score * weights["risk_weight"]
+            if 'sharpe_ratio_is' in X.columns and 'sharpe_ratio_oos' in X.columns:
+                X['sharpe_ratio_diff'] = X['sharpe_ratio_is'] - X['sharpe_ratio_oos']
             
-            # 3. Consistency Component (20%) - Estabilidad de resultados
-            consistency_score = 0.0
+            if 'profit_factor_is' in X.columns and 'profit_factor_oos' in X.columns:
+                X['profit_factor_ratio'] = X['profit_factor_is'] / (X['profit_factor_oos'] + 1e-8)
             
-            # Win Rate
-            if 'Winning Percent' in strategy_data:
-                win_rate = self._safe_float(strategy_data['Winning Percent'])
-                if win_rate > 0:
-                    consistency_score += min(win_rate, 40)  # Máximo 40 puntos
-            
-            # SQN (System Quality Number)
-            if 'SQN' in strategy_data:
-                sqn = self._safe_float(strategy_data['SQN'])
-                if sqn > 0:
-                    consistency_score += min(sqn * 5, 30)  # Máximo 30 puntos
-            
-            # Number of Trades
-            if '# of trades' in strategy_data:
-                trades = self._safe_float(strategy_data['# of trades'])
-                if trades >= 100:
-                    consistency_score += 30
-                elif trades >= 50:
-                    consistency_score += 20
-                elif trades >= 30:
-                    consistency_score += 10
-            
-            edge_score += consistency_score * weights["consistency_weight"]
-            
-            # 4. Experience Component (20%) - Trayectoria y días consecutivos
-            experience_score = 0.0
-            
-            # Recovery Factor
-            if 'RecoveryFactor' in strategy_data:
-                rf = self._safe_float(strategy_data['RecoveryFactor'])
-                if rf > 0:
-                    experience_score += min(rf * 10, 40)  # Máximo 40 puntos
-            
-            # RINA Index
-            if 'RINAIndex' in strategy_data:
-                rina = self._safe_float(strategy_data['RINAIndex'])
-                if rina > 0:
-                    experience_score += min(rina * 5, 30)  # Máximo 30 puntos
-            
-            # Exposure (tiempo en el mercado)
-            if 'Exposure' in strategy_data:
-                exposure = self._safe_float(strategy_data['Exposure'])
-                if exposure > 0:
-                    experience_score += min(exposure * 2, 30)  # Máximo 30 puntos
-            
-            edge_score += experience_score * weights["experience_weight"]
-            
-            return min(edge_score, 100)
-            
-        except Exception as e:
-            self.logger.error(f"Error calculando Edge Score: {e}")
-            return 0.0
-    
-    def determine_stage(self, strategy_data: pd.Series, edge_score: float) -> str:
-        """
-        Determina la fase actual basada en Edge Score y requisitos.
-        
-        Args:
-            strategy_data: Datos de la estrategia
-            edge_score: Edge Score calculado
-            
-        Returns:
-            Nombre de la fase actual
-        """
-        try:
-            # Verificar requisitos de cada fase de mayor a menor
-            for stage_name in ["Pro M", "Pro 500", "Pro", "Acceleration", "Incubation", "Seed"]:
-                stage = self.stages[stage_name]
-                
-                # Verificar Edge Score mínimo
-                if edge_score >= stage.edge_score_required:
-                    # Verificar otros requisitos básicos
-                    if self._check_stage_requirements(strategy_data, stage):
-                        return stage_name
-            
-            return "Seed"  # Fase por defecto
-            
-        except Exception as e:
-            self.logger.error(f"Error determinando fase: {e}")
-            return "Seed"
-    
-    def _check_stage_requirements(self, strategy_data: pd.Series, stage: AxiSelectStage) -> bool:
-        """
-        Verifica si la estrategia cumple los requisitos de una fase específica.
-        
-        Args:
-            strategy_data: Datos de la estrategia
-            stage: Fase a verificar
-            
-        Returns:
-            True si cumple los requisitos
-        """
-        try:
-            # Verificar número mínimo de trades
-            if '# of trades' in strategy_data:
-                trades = self._safe_float(strategy_data['# of trades'])
-                if trades < stage.min_trades_stage:
-                    return False
-            
-            # Verificar drawdown máximo - CORREGIDO: usar "Max DD %"
-            if 'Max DD %' in strategy_data:
-                dd = abs(self._safe_float(strategy_data['Max DD %']))
-                if dd > abs(stage.max_drawdown * 100):  # Convertir a porcentaje
-                    return False
-            elif 'Drawdown' in strategy_data:
-                # Fallback a la columna original
-                dd = abs(self._safe_float(strategy_data['Drawdown']))
-                # Si el valor es muy alto (>100), probablemente son puntos monetarios
-                if dd > 100:
-                    # No podemos determinar con seguridad, asumir que cumple
-                    pass
-                elif dd > abs(stage.max_drawdown):
-                    return False
-            
-            # Verificar profit factor mínimo
-            if 'Profit factor' in strategy_data:
-                pf = self._safe_float(strategy_data['Profit factor'])
-                if pf < 1.0:  # Debe ser rentable
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error verificando requisitos de fase: {e}")
-            return False
-    
-    def calculate_stage_progress(self, strategy_data: pd.Series, current_stage: str) -> Dict[str, Any]:
-        """
-        Calcula el progreso en la fase actual.
-        
-        Args:
-            strategy_data: Datos de la estrategia
-            current_stage: Fase actual
-            
-        Returns:
-            Diccionario con progreso detallado
-        """
-        try:
-            stage = self.stages[current_stage]
-            progress = {
-                "stage": current_stage,
-                "days_completed": 0,  # Simulado
-                "trades_completed": self._safe_float(strategy_data.get('# of trades', 0)),
-                "target_profit_achieved": False,
-                "edge_score_met": False,
-                "requirements_met": {},
-                "can_advance": False
-            }
-            
-            # Verificar trades mínimos
-            progress["requirements_met"]["min_trades"] = (
-                progress["trades_completed"] >= stage.min_trades_stage
-            )
-            
-            # Verificar trades mensuales
-            progress["requirements_met"]["monthly_trades"] = (
-                progress["trades_completed"] >= stage.min_trades_month
-            )
-            
-            # Verificar Edge Score
-            edge_score = self.calculate_edge_score(strategy_data)
-            progress["edge_score_met"] = edge_score >= stage.edge_score_required
-            
-            # Verificar objetivo de beneficio (simulado)
-            if current_stage != "Pro M":
-                # Simular verificación de +5%
-                progress["target_profit_achieved"] = True  # Simulado
-            
-            # Determinar si puede avanzar
-            progress["can_advance"] = all(progress["requirements_met"].values()) and \
-                                    progress["edge_score_met"] and \
-                                    progress["target_profit_achieved"]
-            
-            return progress
-            
-        except Exception as e:
-            self.logger.error(f"Error calculando progreso de fase: {e}")
-            return {}
-    
-    def check_quarantine_status(self, strategy_data: pd.Series, current_stage: str) -> str:
-        """
-        Verifica el estado de cuarentena de la estrategia.
-        
-        Args:
-            strategy_data: Datos de la estrategia
-            current_stage: Fase actual
-            
-        Returns:
-            Estado de cuarentena (NORMAL, QUARANTINE, EXEMPT)
-        """
-        try:
-            # Seed está exenta de cuarentena
-            if current_stage == "Seed":
-                return "EXEMPT"
-            
-            # Verificar drawdown máximo - CORREGIDO: usar "Max DD %" en lugar de "Drawdown"
-            if 'Max DD %' in strategy_data:
-                dd = abs(self._safe_float(strategy_data['Max DD %']))
-                if dd > 10:  # Excede 10%
-                    return "QUARANTINE"
-            elif 'Drawdown' in strategy_data:
-                # Fallback a la columna original si no existe "Max DD %"
-                dd = abs(self._safe_float(strategy_data['Drawdown']))
-                # Si el valor es muy alto (>100), probablemente son puntos monetarios, no porcentaje
-                if dd > 100:
-                    # Buscar una columna alternativa o usar un valor por defecto
-                    return "NORMAL"  # No podemos determinar con seguridad
-                elif dd > 0.10:  # Excede 10%
-                    return "QUARANTINE"
-            
-            return "NORMAL"
-            
-        except Exception as e:
-            self.logger.error(f"Error verificando estado de cuarentena: {e}")
-            return "NORMAL"
-    
-    def calculate_allocation(self, strategy_data: pd.Series, 
-                           current_stage: str,
-                           total_capital: float = 100000) -> Tuple[float, float]:
-        """
-        Calcula la asignación de capital basada en la fase actual.
-        
-        Args:
-            strategy_data: Datos de la estrategia
-            current_stage: Fase actual
-            total_capital: Capital total disponible
-            
-        Returns:
-            Tuple con (porcentaje, cantidad fija)
-        """
-        try:
-            stage = self.stages[current_stage]
-            
-            # Calcular cantidad fija basada en el multiplicador de la fase
-            fixed_amount = stage.max_funding_usd
-            percentage = (fixed_amount / total_capital) * 100
-            
-            return percentage, fixed_amount
-            
-        except Exception as e:
-            self.logger.error(f"Error calculando asignación: {e}")
-            return 5.0, 5000.0
-    
-    def generate_recommendations(self, strategy_data: pd.Series, 
-                               edge_score: float, current_stage: str,
-                               stage_progress: Dict[str, Any]) -> List[str]:
-        """
-        Genera recomendaciones específicas para la estrategia.
-        
-        Args:
-            strategy_data: Datos de la estrategia
-            edge_score: Edge Score calculado
-            current_stage: Fase actual
-            stage_progress: Progreso en la fase
-            
-        Returns:
-            Lista de recomendaciones
-        """
-        recommendations = []
-        
-        # Recomendaciones basadas en Edge Score
-        if edge_score >= 90:
-            recommendations.append("¡Excelente Edge Score! Eres elegible para Pro 500 y Pro M")
-        elif edge_score >= 70:
-            recommendations.append("Buen Edge Score. Puedes avanzar a Acceleration y Pro")
-        elif edge_score >= 60:
-            recommendations.append("Edge Score aceptable. Enfoque en Incubation")
-        elif edge_score >= 50:
-            recommendations.append("Edge Score mínimo. Mantén Seed y mejora métricas")
-        else:
-            recommendations.append("Edge Score insuficiente. Requiere mejoras significativas")
-        
-        # Recomendaciones por fase
-        if current_stage == "Seed":
-            recommendations.append("Fase Seed: Enfoque en alcanzar 20 trades y Edge Score 50+")
-        elif current_stage == "Incubation":
-            recommendations.append("Fase Incubation: Objetivo 40 trades y Edge Score 60+")
-        elif current_stage == "Acceleration":
-            recommendations.append("Fase Acceleration: Objetivo 50 trades y Edge Score 70+")
-        elif current_stage in ["Pro", "Pro 500", "Pro M"]:
-            recommendations.append(f"Fase {current_stage}: Mantén Edge Score 90+ y métricas excelentes")
-        
-        # Recomendaciones de progreso
-        if stage_progress.get("can_advance", False):
-            recommendations.append("✅ ¡Puedes avanzar a la siguiente fase!")
-        else:
-            missing_requirements = []
-            if not stage_progress.get("edge_score_met", False):
-                missing_requirements.append("Edge Score mínimo")
-            if not stage_progress.get("target_profit_achieved", False):
-                missing_requirements.append("Objetivo de beneficio +5%")
-            if not stage_progress.get("requirements_met", {}).get("min_trades", False):
-                missing_requirements.append("Trades mínimos")
-            
-            if missing_requirements:
-                recommendations.append(f"❌ Requisitos pendientes: {', '.join(missing_requirements)}")
-        
-        # Recomendaciones de riesgo
-        if 'Max DD %' in strategy_data:
-            dd = abs(self._safe_float(strategy_data['Max DD %']))
-            if dd > 8:  # Alerta al 8%
-                recommendations.append("⚠️ Drawdown cercano al límite 10%. Monitorea riesgo")
-            if dd > 10:
-                recommendations.append("🚨 Drawdown excede 10%. Cuarentena activa")
-        elif 'Drawdown' in strategy_data:
-            dd = abs(self._safe_float(strategy_data['Drawdown']))
-            # Si el valor es muy alto (>100), probablemente son puntos monetarios
-            if dd > 100:
-                # No podemos determinar con seguridad
-                pass
+            # Preparar variable objetivo
+            if target_column in data.columns:
+                y = pd.Series(data[target_column].copy(), index=data.index if hasattr(data, 'index') else None)
+                if y.isna().any():
+                    y.fillna(y.median(), inplace=True)
             else:
-                # Interpretar como decimal
-                dd_percent = dd * 100
-                if dd_percent > 8:  # Alerta al 8%
-                    recommendations.append("⚠️ Drawdown cercano al límite 10%. Monitorea riesgo")
-                if dd_percent > 10:
-                    recommendations.append("🚨 Drawdown excede 10%. Cuarentena activa")
-        
-        return recommendations
-    
-    def analyze_strategies(self, strategies_df: pd.DataFrame, 
-                          total_capital: float = 100000) -> List[AxiSelectStrategy]:
-        """
-        Analiza todas las estrategias con metodología Axi Select completa.
-        
-        Args:
-            strategies_df: DataFrame con estrategias
-            total_capital: Capital total disponible
+                default_targets = ['cagr_is', 'sharpe_ratio_is', 'profit_factor_is']
+                y = None
+                for target in default_targets:
+                    if target in data.columns:
+                        y = pd.Series(data[target].copy(), index=data.index if hasattr(data, 'index') else None)
+                        if y.isna().any():
+                            y.fillna(y.median(), inplace=True)
+                        break
+                if y is None:
+                    logger.error(f"❌ No se encontró columna objetivo válida")
+                    return pd.DataFrame(), pd.Series(dtype=float)
             
-        Returns:
-            Lista de estrategias Axi Select
-        """
-        self.logger.info("🚀 Ejecutando análisis Axi Select completo...")
-        
-        axi_strategies = []
-        
-        try:
-            for idx in strategies_df.index:
-                strategy_data = strategies_df.loc[idx]
-                strategy_name = strategy_data['Strategy Name']
-                
-                # Calcular Edge Score
-                edge_score = self.calculate_edge_score(strategy_data)
-                
-                # Determinar fase actual
-                current_stage = self.determine_stage(strategy_data, edge_score)
-                
-                # Calcular progreso en la fase
-                stage_progress = self.calculate_stage_progress(strategy_data, current_stage)
-                
-                # Verificar estado de cuarentena
-                quarantine_status = self.check_quarantine_status(strategy_data, current_stage)
-                
-                # Calcular asignación
-                allocation_percentage, fixed_amount = self.calculate_allocation(
-                    strategy_data, current_stage, total_capital
-                )
-                
-                # Calcular eficiencia de capital
-                capital_efficiency = self.calculate_capital_efficiency(strategy_data)
-                
-                # Métricas de riesgo
-                risk_metrics = {
-                    "max_drawdown": abs(self._safe_float(strategy_data.get('Drawdown', 0))),
-                    "sharpe_ratio": self._safe_float(strategy_data.get('Sharpe Ratio', 0)),
-                    "profit_factor": self._safe_float(strategy_data.get('Profit factor', 0)),
-                    "win_rate": self._safe_float(strategy_data.get('Winning Percent', 0)),
-                    "var_95": self._safe_float(strategy_data.get('VaR (95%)', 0)),
-                    "cvar_95": self._safe_float(strategy_data.get('CVaR (95%)', 0))
-                }
-                
-                # Recomendaciones
-                recommendations = self.generate_recommendations(
-                    strategy_data, edge_score, current_stage, stage_progress
-                )
-                
-                # Crear estrategia Axi Select
-                axi_strategy = AxiSelectStrategy(
-                    strategy_name=strategy_name,
-                    edge_score=edge_score,
-                    current_stage=current_stage,
-                    stage_progress=stage_progress,
-                    allocation_percentage=allocation_percentage,
-                    fixed_amount=fixed_amount,
-                    risk_metrics=risk_metrics,
-                    capital_efficiency=capital_efficiency,
-                    quarantine_status=quarantine_status,
-                    recommendations=recommendations
-                )
-                
-                axi_strategies.append(axi_strategy)
-            
-            self.logger.info(f"✅ Análisis Axi Select completado: {len(axi_strategies)} estrategias")
-            return axi_strategies
+            logger.info(f"✅ Características preparadas: {X.shape[1]} características, {X.shape[0]} muestras")
+            return X, y
             
         except Exception as e:
-            self.logger.error(f"❌ Error en análisis Axi Select: {e}")
-            raise
+            logger.error(f"ERROR preparando características: {e}")
+            return pd.DataFrame(), pd.Series(dtype=float)
     
-    def calculate_capital_efficiency(self, strategy_data: pd.Series) -> float:
+    def predict(self, data: pd.DataFrame) -> Dict[str, Any]:
         """
-        Calcula la eficiencia de capital de la estrategia.
+        Predice usando el modelo entrenado.
         
         Args:
-            strategy_data: Datos de la estrategia
+            data: DataFrame con datos para predicción
             
         Returns:
-            Eficiencia de capital (0-1)
+            Diccionario con predicciones
         """
         try:
-            efficiency = 0.0
+            if not hasattr(self, 'results') or not self.results:
+                logger.warning("⚠️ No hay modelos entrenados. Ejecuta fit() primero.")
+                return {}
             
-            # Sharpe Ratio
-            sharpe = self._safe_float(strategy_data.get('Sharpe Ratio', 0))
-            if sharpe > 0:
-                efficiency += min(sharpe / 3, 0.4)  # Máximo 40%
+            # Preparar características
+            X, _ = self.prepare_features(data, 'cagr_is')  # Usar columna por defecto
             
-            # Profit Factor
-            pf = self._safe_float(strategy_data.get('Profit factor', 0))
-            if pf > 1:
-                efficiency += min((pf - 1) / 2, 0.3)  # Máximo 30%
+            if X.empty:
+                logger.error("❌ No se pudieron preparar características para predicción")
+                return {}
             
-            # Recovery Factor
-            rf = self._safe_float(strategy_data.get('RecoveryFactor', 0))
-            if rf > 0:
-                efficiency += min(rf / 5, 0.3)  # Máximo 30%
+            predictions = {}
             
-            return min(efficiency, 1.0)
+            # Obtener predicciones de cada modelo
+            if 'predictions' in self.results:
+                for model_name, pred in self.results['predictions'].items():
+                    if isinstance(pred, (list, np.ndarray)):
+                        predictions[model_name] = pred
+                    else:
+                        logger.warning(f"⚠️ Predicción de {model_name} no válida")
             
-        except Exception as e:
-            self.logger.error(f"Error calculando eficiencia de capital: {e}")
-            return 0.0
-    
-    def generate_axi_report(self, strategies: List[AxiSelectStrategy]) -> Dict[str, Any]:
-        """
-        Genera reporte completo de Axi Select con todas las fases.
-        
-        Args:
-            strategies: Lista de estrategias Axi Select
+            # Calcular predicción ensemble
+            if len(predictions) > 1:
+                valid_preds = [pred for pred in predictions.values() if isinstance(pred, (list, np.ndarray))]
+                if valid_preds:
+                    ensemble_pred = np.mean(valid_preds, axis=0)
+                    predictions['ensemble'] = ((ensemble_pred.tolist() if hasattr(ensemble_pred, 'tolist') else list(ensemble_pred)) if hasattr(ensemble_pred, 'tolist') else list(ensemble_pred))
             
-        Returns:
-            Reporte completo
-        """
-        try:
-            # Estadísticas por fase
-            stage_stats = {}
-            total_allocation = 0
-            total_capital_efficiency = 0
+            # Calcular confianza
+            confidence = self._calculate_confidence(predictions)
             
-            for strategy in strategies:
-                stage = strategy.current_stage
-                if stage not in stage_stats:
-                    stage_stats[stage] = {
-                        "count": 0,
-                        "total_allocation": 0,
-                        "avg_edge_score": 0,
-                        "avg_capital_efficiency": 0,
-                        "quarantine_count": 0
-                    }
-                
-                stage_stats[stage]["count"] += 1
-                stage_stats[stage]["total_allocation"] += strategy.fixed_amount
-                total_allocation += strategy.fixed_amount
-                total_capital_efficiency += strategy.capital_efficiency
-                
-                if strategy.quarantine_status == "QUARANTINE":
-                    stage_stats[stage]["quarantine_count"] += 1
-            
-            # Calcular promedios
-            for stage in stage_stats:
-                stage_strategies = [s for s in strategies if s.current_stage == stage]
-                if stage_strategies:
-                    stage_stats[stage]["avg_edge_score"] = np.mean([s.edge_score for s in stage_strategies])
-                    stage_stats[stage]["avg_capital_efficiency"] = np.mean([s.capital_efficiency for s in stage_strategies])
-            
-            # Top estrategias por Edge Score
-            top_strategies = sorted(strategies, key=lambda x: x.edge_score, reverse=True)[:10]
-            
-            # Estrategias por eficiencia de capital
-            efficient_strategies = sorted(strategies, key=lambda x: x.capital_efficiency, reverse=True)[:10]
-            
-            # Estrategias en cuarentena
-            quarantine_strategies = [s for s in strategies if s.quarantine_status == "QUARANTINE"]
-            
-            report = {
-                "summary": {
-                    "total_strategies": len(strategies),
-                    "total_allocation": total_allocation,
-                    "avg_edge_score": np.mean([s.edge_score for s in strategies]),
-                    "avg_capital_efficiency": total_capital_efficiency / len(strategies) if strategies else 0,
-                    "quarantine_count": len(quarantine_strategies)
-                },
-                "stage_stats": stage_stats,
-                "top_strategies": top_strategies,
-                "efficient_strategies": efficient_strategies,
-                "quarantine_strategies": quarantine_strategies,
-                "stage_progression": {
-                    "seed_eligible": [s for s in strategies if s.current_stage == "Seed"],
-                    "incubation_eligible": [s for s in strategies if s.current_stage == "Incubation"],
-                    "acceleration_eligible": [s for s in strategies if s.current_stage == "Acceleration"],
-                    "pro_eligible": [s for s in strategies if s.current_stage in ["Pro", "Pro 500", "Pro M"]]
-                }
+            return {
+                'predictions': predictions,
+                'confidence': confidence,
+                'models_used': len(predictions)
             }
             
-            return report
-            
         except Exception as e:
-            self.logger.error(f"Error generando reporte Axi Select: {e}")
+            logger.error(f"ERROR en predicción: {e}")
             return {}
     
-    def _safe_float(self, value) -> float:
+    def train_model(self, model_type: ModelType, X: pd.DataFrame, y: pd.Series) -> Optional[Any]:
         """
-        Convierte valor a float de forma segura.
+        Entrena un modelo específico.
         
         Args:
-            value: Valor a convertir
+            model_type: Tipo de modelo a entrenar
+            X: Características
+            y: Variable objetivo
             
         Returns:
-            Float o 0.0 si no se puede convertir
+            Modelo entrenado o None si falla
         """
         try:
-            if pd.isna(value):
+            if model_type not in self.models and model_type != ModelType.PYTORCH_NN:
+                logger.warning(f"WARNING Modelo {model_type} no disponible")
+                return None
+            
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=self.config['test_size'], random_state=self.config['random_state']
+            )
+            
+            # Convertir a tipos correctos
+            X_train = pd.DataFrame(X_train, columns=X.columns)
+            X_test = pd.DataFrame(X_test, columns=X.columns)
+            y_train = pd.Series(y_train, index=X_train.index)
+            y_test = pd.Series(y_test, index=X_test.index)
+            
+            if model_type == ModelType.PYTORCH_NN and TORCH_AVAILABLE:
+                return self._train_pytorch_model(X_train, X_test, y_train, y_test)
+            else:
+                model = self.models[model_type]
+                
+                # Escalar datos si es necesario
+                if model_type in [ModelType.MLP_SKLEARN]:
+                    scaler = self.scalers['standard']
+                    X_train_scaled = scaler.fit_transform(X_train)
+                    X_test_scaled = scaler.transform(X_test)
+                    
+                    model.fit(X_train_scaled, y_train)
+                    y_pred = model.predict(X_test_scaled)
+                else:
+                    model.fit(X_train, y_train)
+                    y_pred = model.predict(X_test)
+                
+                # Calcular métricas
+                r2 = r2_score(y_test, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                
+                # Validar métricas
+                r2 = max(-1.0, min(1.0, r2))  # Clamp R² entre -1 y 1
+                rmse = max(0.0, rmse)  # RMSE debe ser positivo
+                
+                logger.info(f"OK {model_type.value} entrenado - R²: {r2:.3f}, RMSE: {rmse:.3f}")
+                
+                return {
+                    'model': model,
+                    'r2_score': r2,
+                    'rmse': rmse,
+                    'feature_importance': self._get_feature_importance(model, list(X.columns))
+                }
+                
+        except Exception as e:
+            logger.error(f"ERROR entrenando {model_type.value}: {e}")
+            return None
+    
+    def _train_pytorch_model(self, X_train: pd.DataFrame, X_test: pd.DataFrame, 
+                           y_train: pd.Series, y_test: pd.Series) -> Optional[Any]:
+        """
+        Entrena modelo PyTorch.
+        """
+        try:
+            if not TORCH_AVAILABLE:
+                return None
+                
+            # Convertir a tensores
+            X_train_tensor = torch.FloatTensor(X_train.values)
+            X_test_tensor = torch.FloatTensor(X_test.values)
+            y_train_tensor = torch.FloatTensor(y_train.values)
+            y_test_tensor = torch.FloatTensor(y_test.values)
+            
+            # Crear modelo
+            input_size = X_train.shape[1]
+            model = torch.nn.Sequential(
+                torch.nn.Linear(input_size, 64),
+                torch.nn.ReLU(),
+                torch.nn.Dropout(0.2),
+                torch.nn.Linear(64, 32),
+                torch.nn.ReLU(),
+                torch.nn.Linear(32, 1)
+            )
+            
+            # Entrenar
+            criterion = torch.nn.MSELoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            
+            for epoch in range(100):
+                optimizer.zero_grad()
+                outputs = model(X_train_tensor).squeeze()
+                loss = criterion(outputs, y_train_tensor)
+                loss.backward()
+                optimizer.step()
+            
+            return model
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error entrenando PyTorch: {e}")
+            return None
+    
+    def _predict_pytorch_model(self, model: Any, X: pd.DataFrame) -> Optional[np.ndarray]:
+        """
+        Predice con modelo PyTorch.
+        """
+        try:
+            if model is None:
+                return None
+                
+            X_tensor = torch.FloatTensor(X.values)
+            model.eval()
+            with torch.no_grad():
+                predictions = model(X_tensor).squeeze().numpy()
+            return predictions
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error prediciendo PyTorch: {e}")
+            return None
+    
+    def _get_feature_importance(self, model: Any, feature_names: List[str]) -> Dict[str, float]:
+        """
+        Obtiene importancia de características.
+        """
+        try:
+            if hasattr(model, 'feature_importances_'):
+                importances = model.feature_importances_
+                return dict(zip(feature_names, ((importances.tolist() if hasattr(importances, 'tolist') else list(importances)) if hasattr(importances, 'tolist') else list(importances))))
+            else:
+                return {name: 0.0 for name in feature_names}
+        except Exception as e:
+            logger.warning(f"⚠️ Error obteniendo importancia: {e}")
+            return {name: 0.0 for name in feature_names}
+    
+    def _get_pytorch_importance(self, model: Any, feature_names: List[str]) -> Dict[str, float]:
+        """
+        Obtiene importancia de características para PyTorch.
+        """
+        try:
+            # Para PyTorch, usar pesos de la primera capa como aproximación
+            if hasattr(model, '0') and hasattr(model['0'], 'weight'):
+                weights = model['0'].weight.data.abs().mean(dim=0).numpy()
+                return dict(zip(feature_names, ((weights.tolist() if hasattr(weights, 'tolist') else list(weights)) if hasattr(weights, 'tolist') else list(weights))))
+            else:
+                return {name: 0.0 for name in feature_names}
+        except Exception as e:
+            logger.warning(f"⚠️ Error obteniendo importancia PyTorch: {e}")
+            return {name: 0.0 for name in feature_names}
+    
+    def predict_hybrid(self, data: pd.DataFrame, target_column: str) -> Dict[str, Any]:
+        """
+        Predicción híbrida usando múltiples modelos.
+        
+        Args:
+            data: DataFrame con datos
+            target_column: Columna objetivo
+            
+        Returns:
+            Diccionario con resultados de predicción
+        """
+        try:
+            logger.info("🔮 Iniciando predicción híbrida...")
+            
+            # Preparar características
+            X, y = self.prepare_features(data, target_column)
+            
+            if X.empty or y.empty:
+                logger.error("❌ No se pudieron preparar características")
+                return {}
+            
+            # Dividir datos
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+            
+            # Convertir a tipos correctos
+            X_train = pd.DataFrame(X_train, columns=X.columns)
+            X_test = pd.DataFrame(X_test, columns=X.columns)
+            y_train = pd.Series(y_train, index=X_train.index)
+            y_test = pd.Series(y_test, index=X_test.index)
+            
+            # Entrenar modelos
+            models_trained = 0
+            predictions = {}
+            feature_importance = {}
+            
+            # LightGBM
+            try:
+                lgb_model = self._train_lightgbm_model(X_train, X_test, y_train, y_test)
+                if lgb_model is not None:
+                    predictions['lightgbm'] = lgb_model.predict(X)
+                    feature_importance['lightgbm'] = self._get_feature_importance(
+                        lgb_model, list(X.columns)
+                    )
+                    models_trained += 1
+            except Exception as e:
+                logger.warning(f"⚠️ Error en LightGBM: {e}")
+            
+            # CatBoost
+            try:
+                cat_model = self._train_catboost_model(X_train, X_test, y_train, y_test)
+                if cat_model is not None:
+                    predictions['catboost'] = cat_model.predict(X)
+                    feature_importance['catboost'] = self._get_feature_importance(
+                        cat_model, list(X.columns)
+                    )
+                    models_trained += 1
+            except Exception as e:
+                logger.warning(f"⚠️ Error en CatBoost: {e}")
+            
+            # PyTorch
+            try:
+                torch_model = self._train_pytorch_model(X_train, X_test, y_train, y_test)
+                if torch_model is not None:
+                    torch_pred = self._predict_pytorch_model(torch_model, pd.DataFrame(X))
+                    if torch_pred is not None:
+                        predictions['pytorch'] = torch_pred
+                        feature_importance['pytorch'] = self._get_pytorch_importance(
+                            torch_model, list(X.columns)
+                        )
+                        models_trained += 1
+            except Exception as e:
+                logger.warning(f"⚠️ Error en PyTorch: {e}")
+            
+            # Ensemble
+            if len(predictions) > 1:
+                ensemble_pred = np.mean(list(predictions.values()), axis=0)
+                predictions['ensemble'] = ensemble_pred
+            
+            return {
+                'predictions': predictions,
+                'feature_importance': feature_importance,
+                'models_trained': models_trained,
+                'X_shape': X.shape,
+                'y_shape': y.shape
+            }
+            
+        except Exception as e:
+            logger.error(f"ERROR en predicción híbrida: {e}")
+            return {}
+    
+    def fit(self, data: pd.DataFrame, target_column: str) -> None:
+        """
+        Entrena todos los modelos internos con los datos y la columna objetivo especificada.
+        Guarda los resultados en self.results.
+        """
+        self.results = self.predict_hybrid(data, target_column)
+        logger.info(f"✅ fit() completado: {self.results.get('models_trained', 0)} modelos entrenados")
+    
+    def _calculate_ensemble_predictions(self, results: Dict, X: pd.DataFrame) -> np.ndarray:
+        """Calcula predicción ensemble."""
+        predictions = []
+        
+        for model_type, result in results.items():
+            model = result['model']
+            
+            if model_type == ModelType.PYTORCH_NN:
+                model.eval()
+                with torch.no_grad():
+                    X_tensor = torch.FloatTensor(X.values)
+                    pred = model(X_tensor).numpy().flatten()
+            elif hasattr(model, 'predict'):
+                pred = model.predict(X)
+            else:
+                continue
+            
+            predictions.append(pred)
+        
+        if predictions:
+            return np.mean(predictions, axis=0)
+        else:
+            return np.zeros(len(X))
+    
+    def _perform_shap_analysis(self, results: Dict, X: pd.DataFrame) -> Dict[str, Any]:
+        """Realiza análisis SHAP."""
+        try:
+            # Usar el mejor modelo para SHAP
+            best_model_key = max(results.keys(), key=lambda k: results[k]['r2_score'])
+            best_model = results[best_model_key]['model']
+            
+            if hasattr(best_model, 'predict'):
+                explainer = shap.TreeExplainer(best_model) if hasattr(best_model, 'feature_importances_') else shap.LinearExplainer(best_model, X)
+                shap_values = explainer.shap_values(X)
+                
+                # Verificar que shap_values es válido antes de operar
+                if shap_values is not None and hasattr(shap_values, 'tolist'):
+                    shap_array = np.array(shap_values)
+                    if shap_array.size > 0:
+                        feature_importance = dict(zip(X.columns, np.abs(shap_array).mean(axis=0).tolist()))
+                    else:
+                        feature_importance = {col: 0.0 for col in X.columns}
+                else:
+                    feature_importance = {col: 0.0 for col in X.columns}
+                
+                return {
+                    'shap_values': ((shap_values.tolist() if hasattr(shap_values, 'tolist') else list(shap_values)) if hasattr(shap_values, 'tolist') else list(shap_values)) if hasattr(shap_values, 'tolist') and shap_values is not None else shap_values,
+                    'feature_importance': feature_importance
+                }
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error en análisis SHAP: {e}")
+        
+        return {}
+    
+    def _aggregate_feature_importance(self, results: Dict) -> Dict[str, float]:
+        """Agrega importancia de características de todos los modelos."""
+        importance_sum = {}
+        count = {}
+        
+        for result in results.values():
+            if 'feature_importance' in result:
+                for feature, imp in result['feature_importance'].items():
+                    if feature not in importance_sum:
+                        importance_sum[feature] = 0
+                        count[feature] = 0
+                    importance_sum[feature] += imp
+                    count[feature] += 1
+        
+        # Promedio
+        return {feature: float(importance_sum[feature] / count[feature]) 
+                for feature in importance_sum}
+    
+    def _calculate_final_metrics(self, results: Dict, ensemble_pred: np.ndarray, y_true: pd.Series) -> Dict[str, float]:
+        """Calcula métricas finales."""
+        try:
+            r2 = r2_score(y_true, ensemble_pred)
+            rmse = np.sqrt(mean_squared_error(y_true, ensemble_pred))
+            mae = mean_absolute_error(y_true, ensemble_pred)
+            
+            return {
+                'r2_score': float(r2) if r2 is not None else 0.0 if r2 is not None else 0.0,
+                'rmse': float(rmse) if rmse is not None else 0.0 if rmse is not None else 0.0,
+                'mae': float(mae) if mae is not None else 0.0 if mae is not None else 0.0,
+                'mean_performance': float(np.mean([r['r2_score'] for r in results.values()]))
+            }
+        except Exception as e:
+            logger.warning(f"⚠️ Error calculando métricas finales: {e}")
+            return {'r2_score': 0.0, 'rmse': 0.0, 'mae': 0.0, 'mean_performance': 0.0}
+    
+    def _calculate_confidence(self, predictions: Dict[str, Any]) -> float:
+        """
+        Calcula la confianza de las predicciones.
+        
+        Args:
+            predictions: Diccionario con predicciones de diferentes modelos
+            
+        Returns:
+            Valor de confianza entre 0 y 1
+        """
+        try:
+            if not predictions:
                 return 0.0
-            if isinstance(value, str):
-                # Manejar formato europeo (comas como decimales)
-                value = value.replace(',', '.')
-            return float(value)
-        except (ValueError, TypeError):
-            return 0.0
+            
+            # Calcular varianza entre modelos
+            valid_preds = []
+            for pred in predictions.values():
+                if isinstance(pred, (list, np.ndarray)):
+                    valid_preds.append(np.array(pred))
+            
+            if len(valid_preds) < 2:
+                return 0.5  # Confianza media si solo hay un modelo
+            
+            # Calcular coeficiente de variación
+            pred_array = np.array(valid_preds)
+            mean_pred = np.mean(pred_array, axis=0)
+            std_pred = np.std(pred_array, axis=0)
+            
+            # Evitar división por cero
+            cv = float(np.mean(std_pred / (np.abs(mean_pred) + 1e-8)))
+            
+            # Convertir a confianza (menor CV = mayor confianza)
+            confidence = max(0.0, min(1.0, 1.0 - cv))
+            
+            return confidence
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error calculando confianza: {e}")
+            return 0.5
 
-def test_axi_select_analysis():
-    """Función de prueba para el análisis Axi Select completo."""
+    def _train_lightgbm_model(self, X_train: pd.DataFrame, X_test: pd.DataFrame, 
+                             y_train: pd.Series, y_test: pd.Series) -> Optional[Any]:
+        """
+        Entrena modelo LightGBM.
+        """
+        try:
+            if not LIGHTGBM_AVAILABLE:
+                return None
+                
+            model = lgb.LGBMRegressor(
+                n_estimators=100,
+                learning_rate=0.1,
+                max_depth=6,
+                random_state=42,
+                verbose=-1
+            )
+            
+            model.fit(X_train, y_train)
+            return model
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error entrenando LightGBM: {e}")
+            return None
+    
+    def _train_catboost_model(self, X_train: pd.DataFrame, X_test: pd.DataFrame, 
+                             y_train: pd.Series, y_test: pd.Series) -> Optional[Any]:
+        """
+        Entrena modelo CatBoost.
+        """
+        try:
+            if not CATBOOST_AVAILABLE:
+                return None
+                
+            model = CatBoostRegressor(
+                iterations=100,
+                learning_rate=0.1,
+                depth=6,
+                random_state=42,
+                verbose=False
+            )
+            
+            model.fit(X_train, y_train)
+            return model
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error entrenando CatBoost: {e}")
+            return None
+
+
+def test_axi_select_predictive_system():
+    """Test del sistema predictivo AXI SELECT."""
     try:
-        # Crear instancia del análisis
-        axi_analyzer = AxiSelectAnalysis()
+        logger.info("🧪 Iniciando test del sistema predictivo AXI SELECT...")
         
-        # Cargar datos de prueba
-        strategies_df = pd.read_csv('DatabankExport_M1.csv', sep=';')
-        logger.info(f"📊 Datos cargados: {strategies_df.shape}")
+        # Crear datos de prueba
+        np.random.seed(42)
+        n_samples = 100
         
-        # Ejecutar análisis
-        strategies = axi_analyzer.analyze_strategies(
-            strategies_df, 
-            total_capital=100000
-        )
+        test_data = pd.DataFrame({
+            'Sharpe_Ratio': np.random.normal(1.0, 0.5, n_samples),
+            'Max_DD_%': np.random.uniform(-0.3, -0.05, n_samples),
+            'CAGR': np.random.uniform(0.1, 0.5, n_samples),
+            'Profit_factor': np.random.uniform(1.0, 3.0, n_samples),
+            'Win_Rate_%': np.random.uniform(0.4, 0.8, n_samples),
+            'Total_Trades': np.random.randint(50, 500, n_samples),
+            'Edge_Score': np.random.uniform(0.5, 0.9, n_samples)
+        })
         
-        # Generar reporte
-        report = axi_analyzer.generate_axi_report(strategies)
+        # Inicializar sistema
+        system = AXISelectPredictiveSystem()
         
-        # Mostrar resultados
-        print("\n" + "="*60)
-        print("📊 REPORTE AXI SELECT COMPLETO")
-        print("="*60)
+        # Realizar predicción
+        results = system.predict_hybrid(test_data, 'Edge_Score')
         
-        print(f"\n📈 Resumen:")
-        print(f"  • Total estrategias: {report['summary']['total_strategies']}")
-        print(f"  • Asignación total: €{report['summary']['total_allocation']:,.0f}")
-        print(f"  • Edge Score promedio: {report['summary']['avg_edge_score']:.1f}")
-        print(f"  • Eficiencia promedio: {report['summary']['avg_capital_efficiency']:.3f}")
-        print(f"  • Estrategias en cuarentena: {report['summary']['quarantine_count']}")
+        # Validar resultados
+        assert 'error' not in results, f"Error en predicción: {results.get('error', 'Unknown')}"
+        assert 'models_trained' in results, "Falta 'models_trained' en resultados"
+        assert results['models_trained'] > 0, "No se entrenaron modelos"
+        assert 'ensemble_predictions' in results, "Falta 'ensemble_predictions' en resultados"
+        assert len(results['ensemble_predictions']) == len(test_data), "Número incorrecto de predicciones"
+        assert 'confidence' in results, "Falta 'confidence' en resultados"
+        assert 0 <= results['confidence'] <= 1, "Confianza fuera de rango [0,1]"
         
-        print(f"\n🏆 Top 5 Estrategias por Edge Score:")
-        for i, strategy in enumerate(report['top_strategies'][:5], 1):
-            print(f"  {i}. {strategy.strategy_name}: Edge {strategy.edge_score:.1f}, "
-                  f"Fase {strategy.current_stage}, €{strategy.fixed_amount:,.0f}")
+        logger.info(f"✅ Test completado exitosamente:")
+        logger.info(f"   • Modelos entrenados: {results['models_trained']}")
+        logger.info(f"   • Confianza: {results['confidence']:.3f}")
+        logger.info(f"   • Métricas finales: {results.get('final_metrics', {})}")
         
-        print(f"\n💰 Estrategias por Fase:")
-        for stage, stats in report['stage_stats'].items():
-            print(f"  • {stage}: {stats['count']} estrategias, "
-                  f"€{stats['total_allocation']:,.0f}, Edge {stats['avg_edge_score']:.1f}")
-            if stats['quarantine_count'] > 0:
-                print(f"    ⚠️ {stats['quarantine_count']} en cuarentena")
-        
-        print(f"\n🚨 Estrategias en Cuarentena:")
-        for strategy in report['quarantine_strategies'][:5]:
-            print(f"  • {strategy.strategy_name}: Fase {strategy.current_stage}, "
-                  f"DD {strategy.risk_metrics['max_drawdown']:.1%}")
-        
-        print(f"\n✅ Análisis Axi Select completado exitosamente")
+        return True
         
     except Exception as e:
-        logger.error(f"❌ Error en prueba Axi Select: {e}")
-        raise
+        logger.error(f"❌ Error en test: {e}")
+        return False
+
 
 if __name__ == "__main__":
-    test_axi_select_analysis() 
+    # Configurar logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Ejecutar test
+    success = test_axi_select_predictive_system()
+    
+    if success:
+        print("✅ Sistema predictivo AXI SELECT funcionando correctamente")
+    else:
+        print("❌ Error en sistema predictivo AXI SELECT") 

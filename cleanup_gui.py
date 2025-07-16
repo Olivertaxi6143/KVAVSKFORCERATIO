@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Script para limpiar el archivo gui_enhanced_rank.py eliminando funciones duplicadas
+Script para limpiar el archivo main_window.py eliminando funciones duplicadas
 """
 
 def clean_gui_file():
-    input_file = 'src/gui_enhanced_rank.py'
-    output_file = 'src/gui_enhanced_rank_clean.py'
+    input_file = 'src/gui/main_window.py'
+    output_file = 'src/gui/main_window_clean.py'
     
     with open(input_file, 'r', encoding='utf-8') as f:
         lines = f.readlines()
