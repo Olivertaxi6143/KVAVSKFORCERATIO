@@ -284,7 +284,8 @@ class TestCorruptedDataHandling:
             
             # Verificar tipos incorrectos
             if 'CAGR' in corrupted_data.columns:
-                non_numeric = pd.to_numeric(corrupted_data['CAGR'], errors='coerce').isna().sum()
+                cagr_numeric = pd.to_numeric(corrupted_data['CAGR'], errors='coerce')
+                non_numeric = np.sum(pd.isna(cagr_numeric))
                 problems_detected += non_numeric
             
             assert problems_detected > 0
@@ -352,7 +353,7 @@ class TestCorruptedDataHandling:
             for col in ['CAGR', 'Sharpe_Ratio', 'Max_Drawdown']:
                 if col in recovered_data.columns:
                     mean_value = recovered_data[col].mean()
-                    if not pd.isna(mean_value):  # type: ignore[reportAttributeAccessIssue]
+                    if not bool(pd.isna(mean_value)):
                         recovered_data[col] = recovered_data[col].fillna(mean_value)
             
             # Verificar recuperación
