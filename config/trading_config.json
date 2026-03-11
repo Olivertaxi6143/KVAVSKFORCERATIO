@@ -1,5 +1,45 @@
 {
   "trading_style": "Day_Trading",
+  "sqx_export": {
+    "quality_criteria": {
+      "min_cagr": 0.10,
+      "min_sharpe": 0.8,
+      "max_drawdown": 0.25,
+      "min_trades": 50
+    },
+    "percentile_threshold": 0.8,
+    "ranking_column": "CAGR"
+  },
+  "market_data": {
+    "default_provider": "mql5",
+    "providers": {
+      "mql5": {
+        "enabled": true,
+        "description": "Archivos CSV exportados desde MetaTrader 4/5"
+      },
+      "mt5_live": {
+        "enabled": false,
+        "description": "Conexión en vivo via MetaTrader5 Python library (solo Windows)",
+        "default_bars": 5000
+      },
+      "yfinance": {
+        "enabled": true,
+        "description": "Datos históricos via Yahoo Finance (validación cruzada)",
+        "default_period": "1y",
+        "default_interval": "1d",
+        "auto_adjust": true
+      }
+    },
+    "timeframe_map": {
+      "M1": "1m",
+      "M5": "5m",
+      "M15": "15m",
+      "M30": "30m",
+      "H1": "1h",
+      "D1": "1d",
+      "W1": "1wk"
+    }
+  },
   "selected_kpis": {
     "Sharpe_Ratio": {
       "enabled": true,

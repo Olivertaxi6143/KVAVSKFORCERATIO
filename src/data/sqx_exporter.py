@@ -14,6 +14,7 @@ Fecha: 2025-01-27
 Versión: 1.0.0
 """
 
+import json
 import pandas as pd
 import numpy as np
 import logging
@@ -29,20 +30,69 @@ warnings.filterwarnings("ignore")
 # Configurar logging
 logger = logging.getLogger(__name__)
 
+# Ruta por defecto del archivo de configuración
+_CONFIG_PATH = Path(__file__).parents[2] / "config" / "trading_config.json"
+
+# Criterios por defecto (se usan si no existe el archivo de configuración)
+_DEFAULT_QUALITY_CRITERIA = {
+    'min_cagr': 0.10,
+    'min_sharpe': 0.8,
+    'max_drawdown': 0.25,
+    'min_trades': 50,
+}
+
+
+def _cargar_config_sqx() -> Dict[str, Any]:
+    """Carga la sección sqx_export de trading_config.json."""
+    try:
+        with open(_CONFIG_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("sqx_export", {})
+    except Exception:
+        return {}
+
+
 class SQXExporter:
     """Exportador profesional de archivos .sqx."""
-    
-    def __init__(self):
-        """Inicializar exportador .sqx."""
+
+    def __init__(self, config_path: Optional[Path] = None):
+        """
+        Inicializar exportador .sqx.
+
+        Los criterios de calidad y percentil se leen de ``trading_config.json``.
+        Se puede pasar una ruta alternativa de configuración.
+
+        Args:
+            config_path: Ruta opcional a un archivo JSON de configuración
+                         alternativo a ``config/trading_config.json``.
+        """
         self.logger = logging.getLogger(__name__)
+
+        # Cargar configuración externa
+        cfg_path = config_path or _CONFIG_PATH
+        sqx_cfg: Dict[str, Any] = {}
+        try:
+            with open(cfg_path, encoding="utf-8") as f:
+                sqx_cfg = json.load(f).get("sqx_export", {})
+        except Exception as exc:
+            self.logger.warning(
+                "No se pudo leer configuración SQX desde %s: %s — usando valores por defecto",
+                cfg_path, exc,
+            )
+
+        # Criterios de calidad (configurables)
+        criteria = sqx_cfg.get("quality_criteria", _DEFAULT_QUALITY_CRITERIA)
         self.quality_criteria = {
-            'min_cagr': 0.10,  # Mínimo 10% CAGR
-            'min_sharpe': 0.8,  # Mínimo Sharpe 0.8
-            'max_drawdown': 0.25,  # Máximo 25% drawdown
-            'min_trades': 50  # Mínimo 50 trades
+            'min_cagr': float(criteria.get('min_cagr', 0.10)),
+            'min_sharpe': float(criteria.get('min_sharpe', 0.8)),
+            'max_drawdown': float(criteria.get('max_drawdown', 0.25)),
+            'min_trades': int(criteria.get('min_trades', 50)),
         }
-        self.percentile_threshold = 0.8  # Top 20%
-        self.logger.info("📁 Exportador .sqx inicializado")
+        self.percentile_threshold: float = float(
+            sqx_cfg.get("percentile_threshold", 0.8)
+        )
+        self.ranking_column: str = sqx_cfg.get("ranking_column", "CAGR")
+        self.logger.info("📁 Exportador .sqx inicializado (config: %s)", cfg_path)
     
     def apply_quality_filters(self, strategies_data: pd.DataFrame) -> pd.DataFrame:
         """Aplicar filtros de calidad a las estrategias."""

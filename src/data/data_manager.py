@@ -52,6 +52,19 @@ except ImportError:
     memory_manager = None
     lazy_loader = None
 
+# Importar parser SQX y loaders de datos de mercado
+try:
+    from .sqx_parser import SQXParser
+    SQX_PARSER_DISPONIBLE = True
+except ImportError:
+    SQX_PARSER_DISPONIBLE = False
+
+try:
+    from .market_data import MQL5Loader, MT5Connector, YFinanceLoader
+    MARKET_DATA_DISPONIBLE = True
+except ImportError:
+    MARKET_DATA_DISPONIBLE = False
+
 # Configurar logging
 try:
     from core.logger_config import setup_logger
@@ -748,13 +761,23 @@ class DataManager:
         try:
             self.logger.info(f"Cargando estrategias desde: {folder_path}")
             
-            # Cargar archivos .sqx si existen
+            # Cargar archivos .sqx si existen (prioridad sobre CSV)
             sqx_files = list(Path(folder_path).glob("*.sqx"))
             if sqx_files:
                 self.logger.info(f"Encontrados {len(sqx_files)} archivos .sqx")
-                # Aquí se implementaría la carga de archivos .sqx
-                # Por ahora, solo registramos su existencia
-            
+                if SQX_PARSER_DISPONIBLE:
+                    parser = SQXParser()
+                    df_sqx = parser.parse_directory(folder_path)
+                    if not df_sqx.empty:
+                        self._strategies_data = df_sqx
+                        self._load_status['strategies'] = True
+                        self.logger.info(
+                            f"Estrategias .sqx cargadas: {len(df_sqx)} registros"
+                        )
+                        return True
+                else:
+                    self.logger.warning("SQXParser no disponible; ignorando archivos .sqx")
+
             # Cargar CSV de estrategias si existe
             csv_files = list(Path(folder_path).glob("*.csv"))
             if csv_files:
@@ -764,7 +787,7 @@ class DataManager:
                 self._load_status['strategies'] = True
                 self.logger.info(f"Estrategias cargadas: {len(self._strategies_data)} registros")
                 return True
-            
+
             self.logger.warning(f"No se encontraron archivos de estrategias en: {folder_path}")
             return False
                 
@@ -772,31 +795,220 @@ class DataManager:
             self.logger.error(f"Error cargando estrategias: {e}")
             return False
     
-    def load_market_data(self, file_path: str) -> bool:
+    def load_market_data(
+        self,
+        file_path: str,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
+    ) -> bool:
         """
-        Carga datos de mercado.
-        
+        Carga datos de mercado OHLCV.
+
+        Detecta automáticamente si el archivo es un historial de MetaTrader
+        (MT4/MT5) o un CSV genérico, y aplica el loader apropiado.
+
         Args:
-            file_path: Ruta al archivo de mercado
-            
+            file_path: Ruta al archivo de mercado (CSV de MQL4/MQL5 o genérico)
+            symbol: Nombre del símbolo (opcional; se infiere del nombre del archivo)
+            timeframe: Timeframe (opcional; se infiere del nombre del archivo)
+
         Returns:
             True si la carga fue exitosa
         """
         try:
             self.logger.info(f"Cargando datos de mercado desde: {file_path}")
-            
+
+            # Intentar con MQL5Loader (detecta MT4/MT5 automáticamente)
+            if MARKET_DATA_DISPONIBLE:
+                loader = MQL5Loader(symbol=symbol, timeframe=timeframe)
+                df_mercado = loader.load(file_path)
+                if not df_mercado.empty:
+                    self._market_data = df_mercado
+                    self._load_status['market'] = True
+                    self.logger.info(
+                        f"Datos de mercado cargados via MQL5Loader: "
+                        f"{len(self._market_data)} barras"
+                    )
+                    return True
+
+            # Fallback al pipeline genérico
             self._market_data = self.load_and_prepare_data_pipeline(file_path)
-            
+
             if self._market_data is not None and not self._market_data.empty:
                 self._load_status['market'] = True
-                self.logger.info(f"Datos de mercado cargados: {len(self._market_data)} registros")
+                self.logger.info(
+                    f"Datos de mercado cargados: {len(self._market_data)} registros"
+                )
                 return True
             else:
                 self.logger.error("No se pudieron cargar datos de mercado")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Error cargando datos de mercado: {e}")
+            return False
+
+    def load_market_data_mt5(
+        self,
+        symbol: str,
+        timeframe: str,
+        bars: int = 5000,
+        login: Optional[int] = None,
+        server: Optional[str] = None,
+        password: Optional[str] = None,
+    ) -> bool:
+        """
+        Carga datos de mercado en vivo desde el terminal MetaTrader 5.
+
+        Requiere MetaTrader5 instalado y el terminal corriendo en Windows.
+
+        Args:
+            symbol: Símbolo a descargar (ej. "EURUSD")
+            timeframe: Timeframe en formato SQX (ej. "M15", "H1", "D1")
+            bars: Número de barras a descargar
+            login: Número de cuenta MT5 (opcional)
+            server: Servidor del broker (opcional)
+            password: Contraseña de cuenta (opcional)
+
+        Returns:
+            True si la carga fue exitosa
+        """
+        if not MARKET_DATA_DISPONIBLE:
+            self.logger.error(
+                "market_data no disponible. Verificar instalación del módulo."
+            )
+            return False
+
+        try:
+            conector = MT5Connector(login=login, server=server, password=password)
+            df_mercado = conector.fetch(symbol, timeframe, bars)
+
+            if not df_mercado.empty:
+                self._market_data = df_mercado
+                self._load_status['market'] = True
+                self.logger.info(
+                    f"Datos MT5 cargados: {len(df_mercado)} barras de {symbol} {timeframe}"
+                )
+                return True
+            else:
+                self.logger.error(
+                    f"Sin datos MT5 para {symbol} {timeframe}"
+                )
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Error cargando datos MT5: {e}")
+            return False
+
+    def load_market_data_yfinance(
+        self,
+        symbol: str,
+        period: str = "1y",
+        interval: str = "1d",
+        timeframe_sqx: Optional[str] = None,
+    ) -> bool:
+        """
+        Carga datos de mercado históricos desde Yahoo Finance (yfinance).
+
+        Útil como fuente alternativa para validación cruzada de estrategias.
+
+        Args:
+            symbol: Ticker de Yahoo Finance (ej. "EURUSD=X", "SPY", "GC=F")
+            period: Período de descarga (ej. "1y", "2y", "max")
+            interval: Intervalo de barras (ej. "1d", "1h")
+            timeframe_sqx: Timeframe en formato SQX (alternativo a ``interval``)
+
+        Returns:
+            True si la carga fue exitosa
+        """
+        if not MARKET_DATA_DISPONIBLE:
+            self.logger.error("market_data no disponible")
+            return False
+
+        try:
+            loader = YFinanceLoader()
+            df_mercado = loader.fetch(
+                symbol, period=period, interval=interval, timeframe_sqx=timeframe_sqx
+            )
+
+            if not df_mercado.empty:
+                self._market_data = df_mercado
+                self._load_status['market'] = True
+                self.logger.info(
+                    f"Datos yfinance cargados: {len(df_mercado)} barras de {symbol}"
+                )
+                return True
+            else:
+                self.logger.error(f"Sin datos yfinance para {symbol}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Error cargando datos yfinance: {e}")
+            return False
+
+    def load_sqx_file(self, file_path: str) -> bool:
+        """
+        Carga un único archivo .sqx de StrategyQuant directamente.
+
+        Args:
+            file_path: Ruta al archivo .sqx
+
+        Returns:
+            True si la carga fue exitosa
+        """
+        if not SQX_PARSER_DISPONIBLE:
+            self.logger.error("SQXParser no disponible")
+            return False
+
+        try:
+            parser = SQXParser()
+            df = parser.parse_file(file_path)
+            if not df.empty:
+                self._strategies_data = df
+                self._load_status['strategies'] = True
+                self.logger.info(
+                    f"Archivo .sqx cargado: {len(df)} estrategias desde {file_path}"
+                )
+                return True
+            else:
+                self.logger.error(f"Sin estrategias válidas en: {file_path}")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error cargando archivo .sqx: {e}")
+            return False
+
+    def load_databank_csv(self, file_path: str) -> bool:
+        """
+        Carga un CSV de Databank Export de StrategyQuant.
+
+        Equivalente a ``load_strategies_data`` para un único CSV con formato
+        estándar de StrategyQuant (columnas en inglés).
+
+        Args:
+            file_path: Ruta al CSV de Databank Export
+
+        Returns:
+            True si la carga fue exitosa
+        """
+        if not SQX_PARSER_DISPONIBLE:
+            # Fallback al pipeline genérico
+            return self.load_strategies_data(str(Path(file_path).parent))
+
+        try:
+            parser = SQXParser()
+            df = parser.parse_databank_csv(file_path)
+            if not df.empty:
+                self._strategies_data = df
+                self._load_status['strategies'] = True
+                self.logger.info(
+                    f"Databank CSV cargado: {len(df)} estrategias desde {file_path}"
+                )
+                return True
+            else:
+                self.logger.error(f"Sin datos válidos en Databank CSV: {file_path}")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error cargando Databank CSV: {e}")
             return False
     
     def load_kpis_data(self, file_path: str) -> bool:
